@@ -1,0 +1,212 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ChowPoint Design System - Budget-first food discovery */
+
+@layer base {
+  :root {
+    /* Core brand colors - Warm green (trust/affordable) + Orange (hunger/action) */
+    --background: 40 20% 98%;
+    --foreground: 30 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 30 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 10% 15%;
+
+    /* Primary - Warm Forest Green */
+    --primary: 142 50% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Light sage */
+    --secondary: 140 25% 94%;
+    --secondary-foreground: 142 50% 30%;
+
+    /* Muted - Soft grey */
+    --muted: 40 15% 95%;
+    --muted-foreground: 30 10% 45%;
+
+    /* Accent - Warm Orange (appetite/CTA) */
+    --accent: 28 90% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & inputs */
+    --border: 40 15% 90%;
+    --input: 40 15% 90%;
+    --ring: 142 50% 38%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar - Clean & minimal */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 30 10% 40%;
+    --sidebar-primary: 142 50% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 140 25% 96%;
+    --sidebar-accent-foreground: 142 50% 30%;
+    --sidebar-border: 40 15% 92%;
+    --sidebar-ring: 142 50% 38%;
+
+    /* ChowPoint Custom Tokens */
+    --price: 142 55% 35%;
+    --price-badge: 142 50% 92%;
+    --distance: 28 80% 50%;
+    --category-pill: 40 20% 97%;
+    --category-pill-active: 142 50% 38%;
+    --budget-slider: 142 50% 38%;
+    --food-card-shadow: 30 20% 85%;
+    --star: 45 93% 47%;
+  }
+
+  .dark {
+    --background: 30 15% 10%;
+    --foreground: 40 20% 95%;
+
+    --card: 30 15% 14%;
+    --card-foreground: 40 20% 95%;
+
+    --popover: 30 15% 14%;
+    --popover-foreground: 40 20% 95%;
+
+    --primary: 142 50% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 15% 20%;
+    --secondary-foreground: 142 45% 70%;
+
+    --muted: 30 15% 18%;
+    --muted-foreground: 40 15% 60%;
+
+    --accent: 28 85% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 15% 22%;
+    --input: 30 15% 22%;
+    --ring: 142 50% 50%;
+
+    --sidebar-background: 30 15% 12%;
+    --sidebar-foreground: 40 15% 70%;
+    --sidebar-primary: 142 50% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 15% 18%;
+    --sidebar-accent-foreground: 142 45% 70%;
+    --sidebar-border: 30 15% 20%;
+    --sidebar-ring: 142 50% 50%;
+
+    --price: 142 55% 55%;
+    --price-badge: 142 40% 20%;
+    --distance: 28 75% 55%;
+    --category-pill: 30 15% 18%;
+    --category-pill-active: 142 50% 45%;
+    --budget-slider: 142 50% 50%;
+    --food-card-shadow: 30 20% 8%;
+    --star: 45 93% 50%;
+  }
+}
+
+/* Safe area for mobile bottom navigation */
+@layer utilities {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Food Card Styles */
+  .food-card {
+    @apply bg-card rounded-xl overflow-hidden transition-all duration-300;
+    box-shadow: 0 2px 12px -2px hsl(var(--food-card-shadow) / 0.4);
+  }
+  
+  .food-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 28px -8px hsl(var(--food-card-shadow) / 0.5);
+  }
+
+  /* Price Badge */
+  .price-badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold;
+    background: hsl(var(--price-badge));
+    color: hsl(var(--price));
+  }
+
+  /* Category Pill */
+  .category-pill {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer;
+    background: hsl(var(--category-pill));
+    color: hsl(var(--muted-foreground));
+  }
+  
+  .category-pill:hover {
+    background: hsl(var(--secondary));
+  }
+  
+  .category-pill.active {
+    background: hsl(var(--category-pill-active));
+    color: hsl(var(--primary-foreground));
+  }
+
+  /* Budget Button */
+  .budget-btn {
+    @apply px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2;
+    border-color: hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+  
+  .budget-btn:hover {
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+  
+  .budget-btn.active {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+}
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
