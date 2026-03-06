@@ -1,4 +1,4 @@
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Bot, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -12,10 +12,10 @@ export function SearchBar({ value, onChange, onFilterClick }: SearchBarProps) {
   return (
     <div className="flex gap-3 w-full max-w-2xl">
       <div className="relative flex-1">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <Bot className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <Input
           type="text"
-          placeholder="Search food or vendor..."
+          placeholder="Ask Neo Synapse about your health..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="pl-12 h-12 rounded-xl bg-card border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
