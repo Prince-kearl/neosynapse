@@ -1,4 +1,4 @@
-import { ShoppingBag, Clock, CheckCircle, Loader2, Package } from "lucide-react";
+import { Calendar, Clock, CheckCircle, Loader2, Stethoscope } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -20,9 +20,9 @@ const statusColors: Record<OrderStatus, string> = {
 const statusLabels: Record<OrderStatus, string> = {
   pending: "Pending",
   confirmed: "Confirmed",
-  preparing: "Preparing",
-  ready: "Ready for pickup",
-  delivered: "Delivered",
+  preparing: "In Progress",
+  ready: "Ready",
+  delivered: "Completed",
   cancelled: "Cancelled",
 };
 
@@ -73,11 +73,11 @@ const Orders = () => {
     return (
       <div className="flex-1 min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-6">
-          <ShoppingBag className="w-10 h-10 text-muted-foreground" />
+          <Calendar className="w-10 h-10 text-muted-foreground" />
         </div>
-        <h1 className="font-display text-2xl font-bold mb-2">Sign in to view orders</h1>
+        <h1 className="font-display text-2xl font-bold mb-2">Sign in to view appointments</h1>
         <p className="text-muted-foreground mb-6">
-          Track your orders and order history by signing in
+          Track your consultations and medical appointments
         </p>
         <Button onClick={() => navigate("/auth?redirect=/orders")}>
           Sign In
@@ -86,11 +86,11 @@ const Orders = () => {
     );
   }
 
-  const OrderCard = ({ order }: { order: Order & { vendor: { name: string } } }) => (
+  const AppointmentCard = ({ order }: { order: Order & { vendor: { name: string } } }) => (
     <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <p className="font-medium">{order.vendor?.name || "Unknown Vendor"}</p>
+          <p className="font-medium">{order.vendor?.name || "Medical Consultation"}</p>
           <p className="text-xs text-muted-foreground">
             {new Date(order.created_at).toLocaleDateString("en-GB", {
               day: "numeric",
@@ -107,11 +107,11 @@ const Orders = () => {
       </div>
       
       <div className="flex items-center gap-2 text-sm">
-        <Package className="w-4 h-4 text-muted-foreground" />
-        <span>{order.order_items?.length || 0} item(s)</span>
+        <Stethoscope className="w-4 h-4 text-muted-foreground" />
+        <span>{order.order_items?.length || 0} service(s)</span>
         <span className="text-muted-foreground">•</span>
         <span className="font-semibold text-primary">
-          GHS {Number(order.total_amount).toFixed(2)}
+          Consultation
         </span>
       </div>
 
@@ -127,10 +127,10 @@ const Orders = () => {
         {/* Header */}
         <div className="mb-6">
           <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
-            Your Orders
+            Appointments
           </h1>
           <p className="text-muted-foreground">
-            Track and manage your food orders
+            Track and manage your medical consultations
           </p>
         </div>
 
@@ -139,11 +139,11 @@ const Orders = () => {
           <TabsList className="bg-muted w-full sm:w-auto">
             <TabsTrigger value="active" className="flex-1 sm:flex-none gap-2">
               <Clock className="w-4 h-4" />
-              Active ({activeOrders.length})
+              Upcoming ({activeOrders.length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="flex-1 sm:flex-none gap-2">
               <CheckCircle className="w-4 h-4" />
-              Completed ({completedOrders.length})
+              Past ({completedOrders.length})
             </TabsTrigger>
           </TabsList>
 
@@ -155,22 +155,22 @@ const Orders = () => {
             ) : activeOrders.length > 0 ? (
               <div className="space-y-4">
                 {activeOrders.map((order) => (
-                  <OrderCard key={order.id} order={order} />
+                  <AppointmentCard key={order.id} order={order} />
                 ))}
               </div>
             ) : (
               <div className="bg-card rounded-2xl p-8 lg:p-12 shadow-food-card text-center">
                 <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-accent/10 flex items-center justify-center">
-                  <ShoppingBag className="w-10 h-10 text-accent" />
+                  <Calendar className="w-10 h-10 text-accent" />
                 </div>
                 <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-                  No Active Orders
+                  No Upcoming Appointments
                 </h2>
                 <p className="text-muted-foreground max-w-md mx-auto mb-4">
-                  Your active orders will appear here. Start exploring delicious meals!
+                  Book a consultation with a doctor or specialist to get started.
                 </p>
                 <Button onClick={() => navigate("/")} variant="outline">
-                  Browse Meals
+                  Find a Doctor
                 </Button>
               </div>
             )}
@@ -184,7 +184,7 @@ const Orders = () => {
             ) : completedOrders.length > 0 ? (
               <div className="space-y-4">
                 {completedOrders.map((order) => (
-                  <OrderCard key={order.id} order={order} />
+                  <AppointmentCard key={order.id} order={order} />
                 ))}
               </div>
             ) : (
@@ -193,10 +193,10 @@ const Orders = () => {
                   <CheckCircle className="w-10 h-10 text-primary" />
                 </div>
                 <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-                  No Order History Yet
+                  No Past Appointments
                 </h2>
                 <p className="text-muted-foreground max-w-md mx-auto">
-                  Your completed orders will appear here.
+                  Your consultation history will appear here.
                 </p>
               </div>
             )}
