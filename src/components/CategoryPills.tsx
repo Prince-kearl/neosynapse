@@ -1,20 +1,26 @@
 import { cn } from "@/lib/utils";
+import {
+  Stethoscope,
+  Bot,
+  CalendarCheck,
+  Video,
+  FileText,
+  Hospital,
+} from "lucide-react";
 
 interface Category {
   id: string;
   name: string;
-  emoji: string;
+  icon: React.ElementType;
 }
 
 const categories: Category[] = [
-  { id: "waakye", name: "Waakye", emoji: "🫘" },
-  { id: "rice", name: "Rice Meals", emoji: "🍚" },
-  { id: "chop-bar", name: "Chop Bar", emoji: "🍗" },
-  { id: "fast-food", name: "Fast Food", emoji: "🍔" },
-  { id: "healthy", name: "Healthy", emoji: "🥗" },
-  { id: "breakfast", name: "Breakfast", emoji: "☕" },
-  { id: "seafood", name: "Seafood", emoji: "🐟" },
-  { id: "snacks", name: "Snacks", emoji: "🍪" },
+  { id: "symptom-checker", name: "Symptom Checker", icon: Stethoscope },
+  { id: "ai-assistant", name: "AI Health Assistant", icon: Bot },
+  { id: "consultation", name: "Book Consultation", icon: CalendarCheck },
+  { id: "telemedicine", name: "Telemedicine", icon: Video },
+  { id: "reports", name: "Medical Reports", icon: FileText },
+  { id: "hospitals", name: "Nearby Hospitals", icon: Hospital },
 ];
 
 interface CategoryPillsProps {
@@ -24,10 +30,11 @@ interface CategoryPillsProps {
 
 export function CategoryPills({ selectedCategory, onSelectCategory }: CategoryPillsProps) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-3">
       {categories.map((category) => {
         const isActive = selectedCategory === category.id;
-        
+        const Icon = category.icon;
+
         return (
           <button
             key={category.id}
@@ -36,13 +43,19 @@ export function CategoryPills({ selectedCategory, onSelectCategory }: CategoryPi
               "flex items-center gap-3 px-4 py-3 rounded-xl bg-card border transition-all duration-200",
               "hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
               isActive
-                ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
+                ? "border-primary/50 bg-primary/10 ring-1 ring-primary/20 glow-green"
                 : "border-border hover:border-muted-foreground/30"
             )}
           >
-            <span className="text-2xl" role="img" aria-label={category.name}>
-              {category.emoji}
-            </span>
+            <div className={cn(
+              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+              isActive ? "bg-primary/20" : "bg-muted"
+            )}>
+              <Icon className={cn(
+                "w-4 h-4",
+                isActive ? "text-primary" : "text-muted-foreground"
+              )} />
+            </div>
             <span className={cn(
               "text-sm font-medium truncate",
               isActive ? "text-primary" : "text-foreground"

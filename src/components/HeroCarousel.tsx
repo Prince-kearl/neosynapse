@@ -10,10 +10,9 @@ import {
   type CarouselApi,
 } from "@/components/ui/carousel";
 
-// Import food images
-import foodJollof from "@/assets/food-jollof.jpg";
-import foodWaakye from "@/assets/food-waakye.jpg";
-import foodBanku from "@/assets/food-banku.jpg";
+import heroHealth from "@/assets/hero-health-assistant.jpg";
+import heroTele from "@/assets/hero-telemedicine.jpg";
+import heroReports from "@/assets/hero-medical-reports.jpg";
 
 interface PromoSlide {
   id: string;
@@ -26,24 +25,24 @@ interface PromoSlide {
 const promoSlides: PromoSlide[] = [
   {
     id: "1",
-    title: "Our Best Seller!",
-    subtitle: "Loved by thousands, now it's your turn!",
-    image: foodJollof,
-    bgColor: "bg-primary",
+    title: "AI Health Assistant",
+    subtitle: "Ask health questions & get reliable guidance anytime.",
+    image: heroHealth,
+    bgColor: "from-primary/90 to-primary",
   },
   {
     id: "2",
-    title: "Fresh & Local",
-    subtitle: "Authentic Ghanaian flavors delivered hot!",
-    image: foodWaakye,
-    bgColor: "bg-orange-500",
+    title: "Telemedicine",
+    subtitle: "Connect with certified doctors from the comfort of home.",
+    image: heroTele,
+    bgColor: "from-secondary to-accent",
   },
   {
     id: "3",
-    title: "Special Combo",
-    subtitle: "Get more for less with our daily deals!",
-    image: foodBanku,
-    bgColor: "bg-amber-600",
+    title: "Medical Reports",
+    subtitle: "Track your health data and get AI-powered insights.",
+    image: heroReports,
+    bgColor: "from-accent to-primary/80",
   },
 ];
 
@@ -55,16 +54,14 @@ export function HeroCarousel() {
 
   useEffect(() => {
     if (!api) return;
-
     setCount(api.scrollSnapList().length);
     setCurrent(api.selectedScrollSnap());
-
     api.on("select", () => {
       setCurrent(api.selectedScrollSnap());
     });
   }, [api]);
 
-  const firstName = user?.email?.split("@")[0] || "Friend";
+  const firstName = user?.email?.split("@")[0] || "User";
 
   return (
     <section className="space-y-4">
@@ -72,68 +69,53 @@ export function HeroCarousel() {
       <div>
         <p className="text-muted-foreground text-sm">Hello {firstName}</p>
         <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground">
-          What meal Do You Want?
+          How May I Help You?
         </h1>
       </div>
 
       {/* Carousel */}
       <Carousel
         setApi={setApi}
-        opts={{
-          align: "start",
-          loop: true,
-        }}
+        opts={{ align: "start", loop: true }}
         plugins={[
-          Autoplay({
-            delay: 4000,
-            stopOnInteraction: false,
-            stopOnMouseEnter: true,
-          }),
+          Autoplay({ delay: 4000, stopOnInteraction: false, stopOnMouseEnter: true }),
         ]}
         className="w-full"
       >
         <CarouselContent className="-ml-2 md:-ml-4">
           {promoSlides.map((slide) => (
             <CarouselItem key={slide.id} className="pl-2 md:pl-4">
-              <div
-                className={`${slide.bgColor} rounded-2xl overflow-hidden relative h-40 lg:h-48`}
-              >
+              <div className="bg-card rounded-2xl overflow-hidden relative h-40 lg:h-48">
                 <div className="flex h-full">
-                  {/* Image with gradient fade */}
+                  {/* Image */}
                   <div className="w-1/2 relative">
                     <img
                       src={slide.image}
                       alt={slide.title}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
-                    {/* Gradient overlay for smooth blend */}
-                    <div 
-                      className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-current"
-                      style={{ 
-                        background: `linear-gradient(to right, transparent 30%, ${
-                          slide.bgColor === 'bg-primary' ? 'hsl(142, 50%, 38%)' :
-                          slide.bgColor === 'bg-orange-500' ? 'hsl(25, 95%, 53%)' :
-                          'hsl(32, 95%, 44%)'
-                        } 100%)` 
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background: `linear-gradient(to right, transparent 20%, hsl(215, 25%, 15%) 100%)`,
                       }}
                     />
                   </div>
 
                   {/* Content */}
-                  <div className="w-1/2 p-4 lg:p-6 flex flex-col justify-center text-white">
-                    <h3 className="font-display text-lg lg:text-xl font-bold mb-1">
+                  <div className="w-1/2 p-4 lg:p-6 flex flex-col justify-center">
+                    <h3 className="font-display text-lg lg:text-xl font-bold mb-1 text-primary">
                       {slide.title}
                     </h3>
-                    <p className="text-white/90 text-sm lg:text-base mb-3 line-clamp-2">
+                    <p className="text-muted-foreground text-sm lg:text-base mb-3 line-clamp-2">
                       {slide.subtitle}
                     </p>
                     <Button
                       asChild
                       size="sm"
-                      variant="secondary"
-                      className="w-fit bg-white text-foreground hover:bg-white/90 font-semibold"
+                      className="w-fit bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full"
                     >
-                      <Link to="/explore">Order now</Link>
+                      <Link to="/explore">Ask Now</Link>
                     </Button>
                   </div>
                 </div>

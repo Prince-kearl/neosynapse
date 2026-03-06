@@ -2,34 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ChowPoint Design System - Budget-first food discovery */
+/* Neo Synapse Design System - AI Medical Dashboard */
 
 @layer base {
   :root {
-    /* Core brand colors - Warm green (trust/affordable) + Orange (hunger/action) */
-    --background: 40 20% 98%;
-    --foreground: 30 10% 15%;
+    /* Dark medical theme */
+    --background: 215 30% 10%;
+    --foreground: 0 0% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 30 10% 15%;
+    --card: 215 25% 15%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 30 10% 15%;
+    --popover: 215 25% 15%;
+    --popover-foreground: 0 0% 98%;
 
-    /* Primary - Warm Forest Green */
-    --primary: 142 50% 38%;
+    /* Primary - Medical Green */
+    --primary: 142 71% 45%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Light sage */
-    --secondary: 140 25% 94%;
-    --secondary-foreground: 142 50% 30%;
+    /* Secondary - Deep Teal */
+    --secondary: 180 98% 16%;
+    --secondary-foreground: 142 71% 70%;
 
-    /* Muted - Soft grey */
-    --muted: 40 15% 95%;
-    --muted-foreground: 30 10% 45%;
+    /* Muted */
+    --muted: 215 25% 18%;
+    --muted-foreground: 240 5% 65%;
 
-    /* Accent - Warm Orange (appetite/CTA) */
-    --accent: 28 90% 55%;
+    /* Accent - Teal glow */
+    --accent: 160 60% 40%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive */
@@ -37,79 +37,73 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borders & inputs */
-    --border: 40 15% 90%;
-    --input: 40 15% 90%;
-    --ring: 142 50% 38%;
+    --border: 215 20% 22%;
+    --input: 215 20% 22%;
+    --ring: 142 71% 45%;
 
     --radius: 0.75rem;
 
-    /* Sidebar - Clean & minimal */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 30 10% 40%;
-    --sidebar-primary: 142 50% 38%;
+    /* Sidebar */
+    --sidebar-background: 215 28% 12%;
+    --sidebar-foreground: 240 5% 65%;
+    --sidebar-primary: 142 71% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 140 25% 96%;
-    --sidebar-accent-foreground: 142 50% 30%;
-    --sidebar-border: 40 15% 92%;
-    --sidebar-ring: 142 50% 38%;
+    --sidebar-accent: 215 25% 18%;
+    --sidebar-accent-foreground: 142 71% 70%;
+    --sidebar-border: 215 20% 20%;
+    --sidebar-ring: 142 71% 45%;
 
-    /* ChowPoint Custom Tokens */
-    --price: 142 55% 35%;
-    --price-badge: 142 50% 92%;
-    --distance: 28 80% 50%;
-    --category-pill: 40 20% 97%;
-    --category-pill-active: 142 50% 38%;
-    --budget-slider: 142 50% 38%;
-    --food-card-shadow: 30 20% 85%;
-    --star: 45 93% 47%;
+    /* Neo Synapse Custom Tokens */
+    --price: 142 55% 50%;
+    --price-badge: 142 50% 20%;
+    --distance: 160 60% 50%;
+    --category-pill: 215 25% 18%;
+    --category-pill-active: 142 71% 45%;
+    --budget-slider: 142 71% 45%;
+    --food-card-shadow: 215 30% 5%;
+    --star: 142 71% 45%;
+
+    /* Medical glow */
+    --glow-primary: 0 0% 0% / 0;
   }
 
   .dark {
-    --background: 30 15% 10%;
-    --foreground: 40 20% 95%;
-
-    --card: 30 15% 14%;
-    --card-foreground: 40 20% 95%;
-
-    --popover: 30 15% 14%;
-    --popover-foreground: 40 20% 95%;
-
-    --primary: 142 50% 50%;
+    /* Same as root - already dark theme */
+    --background: 215 30% 10%;
+    --foreground: 0 0% 98%;
+    --card: 215 25% 15%;
+    --card-foreground: 0 0% 98%;
+    --popover: 215 25% 15%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 142 71% 45%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 30 15% 20%;
-    --secondary-foreground: 142 45% 70%;
-
-    --muted: 30 15% 18%;
-    --muted-foreground: 40 15% 60%;
-
-    --accent: 28 85% 55%;
+    --secondary: 180 98% 16%;
+    --secondary-foreground: 142 71% 70%;
+    --muted: 215 25% 18%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 160 60% 40%;
     --accent-foreground: 0 0% 100%;
-
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 30 15% 22%;
-    --input: 30 15% 22%;
-    --ring: 142 50% 50%;
-
-    --sidebar-background: 30 15% 12%;
-    --sidebar-foreground: 40 15% 70%;
-    --sidebar-primary: 142 50% 50%;
+    --border: 215 20% 22%;
+    --input: 215 20% 22%;
+    --ring: 142 71% 45%;
+    --sidebar-background: 215 28% 12%;
+    --sidebar-foreground: 240 5% 65%;
+    --sidebar-primary: 142 71% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 30 15% 18%;
-    --sidebar-accent-foreground: 142 45% 70%;
-    --sidebar-border: 30 15% 20%;
-    --sidebar-ring: 142 50% 50%;
-
-    --price: 142 55% 55%;
-    --price-badge: 142 40% 20%;
-    --distance: 28 75% 55%;
-    --category-pill: 30 15% 18%;
-    --category-pill-active: 142 50% 45%;
-    --budget-slider: 142 50% 50%;
-    --food-card-shadow: 30 20% 8%;
-    --star: 45 93% 50%;
+    --sidebar-accent: 215 25% 18%;
+    --sidebar-accent-foreground: 142 71% 70%;
+    --sidebar-border: 215 20% 20%;
+    --sidebar-ring: 142 71% 45%;
+    --price: 142 55% 50%;
+    --price-badge: 142 50% 20%;
+    --distance: 160 60% 50%;
+    --category-pill: 215 25% 18%;
+    --category-pill-active: 142 71% 45%;
+    --budget-slider: 142 71% 45%;
+    --food-card-shadow: 215 30% 5%;
+    --star: 142 71% 45%;
   }
 }
 
@@ -137,25 +131,25 @@
 }
 
 @layer components {
-  /* Food Card Styles */
+  /* Service Card Styles (formerly food-card) */
   .food-card {
-    @apply bg-card rounded-xl overflow-hidden transition-all duration-300;
-    box-shadow: 0 2px 12px -2px hsl(var(--food-card-shadow) / 0.4);
+    @apply bg-card rounded-2xl overflow-hidden transition-all duration-300;
+    box-shadow: 0 2px 12px -2px hsl(var(--food-card-shadow) / 0.6);
   }
   
   .food-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 12px 28px -8px hsl(var(--food-card-shadow) / 0.5);
+    box-shadow: 0 12px 28px -8px hsl(var(--food-card-shadow) / 0.8), 0 0 20px -5px hsl(var(--primary) / 0.15);
   }
 
-  /* Price Badge */
+  /* Price Badge → Status Badge */
   .price-badge {
     @apply inline-flex items-center px-2.5 py-1 rounded-full text-sm font-bold;
     background: hsl(var(--price-badge));
     color: hsl(var(--price));
   }
 
-  /* Category Pill */
+  /* Category Pill → Service Pill */
   .category-pill {
     @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer;
     background: hsl(var(--category-pill));
@@ -164,14 +158,16 @@
   
   .category-pill:hover {
     background: hsl(var(--secondary));
+    box-shadow: 0 0 12px -3px hsl(var(--primary) / 0.3);
   }
   
   .category-pill.active {
     background: hsl(var(--category-pill-active));
     color: hsl(var(--primary-foreground));
+    box-shadow: 0 0 16px -3px hsl(var(--primary) / 0.5);
   }
 
-  /* Budget Button */
+  /* Budget Button → Profile Button */
   .budget-btn {
     @apply px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 border-2;
     border-color: hsl(var(--border));
@@ -181,12 +177,19 @@
   .budget-btn:hover {
     border-color: hsl(var(--primary));
     color: hsl(var(--primary));
+    box-shadow: 0 0 12px -3px hsl(var(--primary) / 0.3);
   }
   
   .budget-btn.active {
     background: hsl(var(--primary));
     border-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
+    box-shadow: 0 0 16px -3px hsl(var(--primary) / 0.5);
+  }
+
+  /* Medical glow effect */
+  .glow-green {
+    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.4);
   }
 }
 

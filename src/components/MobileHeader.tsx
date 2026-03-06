@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { LocationSelector } from "./LocationSelector";
-import { DeliveryToggle } from "./DeliveryToggle";
 import { MobileSearchBar } from "./MobileSearchBar";
 import { FilterChips } from "./FilterChips";
-import { CartSheet } from "./CartSheet";
+import { Bell, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 interface MobileHeaderProps {
   searchQuery?: string;
@@ -29,19 +30,23 @@ export function MobileHeader({
 
   return (
     <header className="sticky top-0 z-50 bg-background lg:hidden">
-      {/* Top Row - Location, Toggle, Cart */}
+      {/* Top Row - Location, Notification, Profile */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-        {/* Location Selector */}
         <LocationSelector />
 
-        {/* Right Side - Toggle + Cart */}
         <div className="flex items-center gap-2">
-          <DeliveryToggle />
-          <CartSheet />
+          <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full">
+            <Bell className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full bg-primary/10" asChild>
+            <Link to="/profile">
+              <User className="w-4 h-4 text-primary" />
+            </Link>
+          </Button>
         </div>
       </div>
 
-      {/* Search Bar & Filters - Only on Home */}
+      {/* Search Bar & Filters */}
       {showSearchAndFilters && (
         <div className="px-4 py-3 space-y-3 bg-card border-b border-border">
           <MobileSearchBar 
