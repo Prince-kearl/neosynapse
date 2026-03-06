@@ -2,19 +2,20 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   User, 
-  Tag, 
   Settings, 
   Info, 
   HelpCircle,
   ChevronRight,
-  Heart,
+  Bookmark,
   LogOut,
-  Wallet,
+  Activity,
   MapPin,
   CreditCard,
   Bell,
   Shield,
-  Utensils
+  Stethoscope,
+  HeartPulse,
+  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,56 +23,43 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useFavorites } from "@/hooks/useFavorites";
-import { BudgetEditDialog } from "@/components/profile/BudgetEditDialog";
-import { DietPreferencesDialog } from "@/components/profile/DietPreferencesDialog";
 
-const DIET_LABELS: Record<string, string> = {
-  "vegetarian": "Vegetarian",
-  "vegan": "Vegan",
-  "halal": "Halal",
-  "gluten-free": "Gluten Free",
-  "dairy-free": "Dairy Free",
-  "nut-free": "Nut Free",
-  "spicy": "Loves Spicy",
-  "low-carb": "Low Carb",
+const HEALTH_PREF_LABELS: Record<string, string> = {
+  "allergies": "Allergies",
+  "chronic": "Chronic Conditions",
+  "medication": "Current Medication",
+  "diabetes": "Diabetes",
+  "hypertension": "Hypertension",
+  "asthma": "Asthma",
+  "heart-disease": "Heart Disease",
+  "mental-health": "Mental Health",
 };
 
 const accountMenuItems = [
-  { icon: MapPin, label: "Saved Addresses", description: "Manage delivery locations" },
-  { icon: CreditCard, label: "Payment Methods", description: "Add or remove payment options" },
-  { icon: Bell, label: "Notifications", description: "Manage your alerts" },
-  { icon: Shield, label: "Privacy & Security", description: "Account protection settings" },
+  { icon: MapPin, label: "Saved Locations", description: "Home, office & hospital addresses" },
+  { icon: CreditCard, label: "Payment & Insurance", description: "Insurance cards & payment methods" },
+  { icon: Bell, label: "Notifications", description: "Appointment & health alerts" },
+  { icon: Shield, label: "Privacy & Security", description: "Medical data protection settings" },
 ];
 
 const otherMenuItems = [
-  { icon: Tag, label: "Promo codes", url: null },
+  { icon: FileText, label: "Medical Records", url: null },
   { icon: Settings, label: "Settings", url: "/settings" },
-  { icon: Info, label: "About", url: null },
+  { icon: Info, label: "About Neo Synapse", url: null },
   { icon: HelpCircle, label: "Help & Support", url: "/help" },
 ];
 
 const Profile = () => {
   const navigate = useNavigate();
   const { user, signOut, isLoading: authLoading } = useAuth();
-  const { preferences, saveBudget, saveDietPreferences } = useUserPreferences();
+  const { preferences } = useUserPreferences();
   const { favoriteIds } = useFavorites();
-  
-  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false);
-  const [dietDialogOpen, setDietDialogOpen] = useState(false);
 
   const displayName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || "Guest User";
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
-  };
-
-  const formatDietPreferences = (prefs: string[]) => {
-    if (prefs.length === 0) return "No restrictions set";
-    if (prefs.length <= 2) {
-      return prefs.map(p => DIET_LABELS[p] || p).join(", ");
-    }
-    return `${prefs.length} preferences set`;
   };
 
   return (
@@ -89,7 +77,7 @@ const Profile = () => {
               </h1>
               {!user ? (
                 <p className="text-muted-foreground text-sm">
-                  Sign in to save your preferences
+                  Sign in to access your health dashboard
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm">
@@ -108,10 +96,10 @@ const Profile = () => {
           )}
         </div>
 
-        {/* Favourites Section */}
+        {/* Saved Items Section */}
         <div>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">
-            Favourites
+            Saved
           </h2>
           <button
             onClick={() => navigate("/saved")}
@@ -120,42 +108,42 @@ const Profile = () => {
             <div className="flex-1">
               <p className="font-medium text-foreground text-left">
                 {favoriteIds.length > 0 
-                  ? `${favoriteIds.length} saved meal${favoriteIds.length > 1 ? 's' : ''}`
-                  : "No favourites added"
+                  ? `${favoriteIds.length} saved item${favoriteIds.length > 1 ? 's' : ''}`
+                  : "No saved items"
                 }
               </p>
               <p className="text-sm text-muted-foreground text-left">
                 {favoriteIds.length > 0 
-                  ? "Tap to view your saved meals"
-                  : "Save all your favourites in one place using the heart icon"
+                  ? "Tap to view your saved doctors & articles"
+                  : "Bookmark doctors, articles and hospitals for quick access"
                 }
               </p>
             </div>
             <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
-                <Heart className="w-6 h-6 text-destructive" />
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                <Bookmark className="w-6 h-6 text-primary" />
               </div>
             </div>
           </button>
         </div>
 
-        {/* Your Preferences Section */}
+        {/* Health Profile Section */}
         <div className="bg-card rounded-2xl p-5 shadow-food-card">
           <h2 className="font-display text-lg font-semibold text-foreground mb-4">
-            Your Preferences
+            Health Profile
           </h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Wallet className="w-5 h-5 text-primary" />
+                  <HeartPulse className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Default Budget</p>
-                  <p className="text-sm text-muted-foreground">GHS {preferences.defaultBudget} max per meal</p>
+                  <p className="font-medium text-foreground">Vital Stats</p>
+                  <p className="text-sm text-muted-foreground">Blood type, height, weight</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setBudgetDialogOpen(true)}>
+              <Button variant="outline" size="sm">
                 Edit
               </Button>
             </div>
@@ -163,16 +151,16 @@ const Profile = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Utensils className="w-5 h-5 text-primary" />
+                  <Stethoscope className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Diet Preferences</p>
+                  <p className="font-medium text-foreground">Medical History</p>
                   <p className="text-sm text-muted-foreground">
-                    {formatDietPreferences(preferences.dietPreferences)}
+                    Conditions, allergies & medications
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setDietDialogOpen(true)}>
+              <Button variant="outline" size="sm">
                 Edit
               </Button>
             </div>
@@ -232,14 +220,14 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Become a Vendor CTA */}
+        {/* Healthcare Provider CTA */}
         <div className="bg-primary/10 rounded-2xl p-5 flex items-center gap-4">
           <div className="flex-1">
             <p className="font-display font-semibold text-foreground">
-              Become a vendor
+              Are you a healthcare provider?
             </p>
             <p className="text-sm text-muted-foreground">
-              Sell your food on ChowPoint
+              Join Neo Synapse as a medical professional
             </p>
           </div>
           <Button size="sm" className="bg-primary hover:bg-primary/90">
@@ -262,23 +250,9 @@ const Profile = () => {
 
         {/* App Version */}
         <p className="text-center text-xs text-muted-foreground pb-4">
-          ChowPoint v1.0.0 • Made with ❤️ in Ghana
+          Neo Synapse v1.0.0 • AI-Powered Medical Assistance
         </p>
       </div>
-
-      {/* Edit Dialogs */}
-      <BudgetEditDialog
-        open={budgetDialogOpen}
-        onOpenChange={setBudgetDialogOpen}
-        currentBudget={preferences.defaultBudget}
-        onSave={saveBudget}
-      />
-      <DietPreferencesDialog
-        open={dietDialogOpen}
-        onOpenChange={setDietDialogOpen}
-        currentPreferences={preferences.dietPreferences}
-        onSave={saveDietPreferences}
-      />
     </div>
   );
 };

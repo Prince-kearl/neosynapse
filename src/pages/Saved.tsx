@@ -1,4 +1,4 @@
-import { Heart, Utensils, Loader2 } from "lucide-react";
+import { Bookmark, Stethoscope, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -29,10 +29,10 @@ const Saved = () => {
         {/* Header */}
         <div className="mb-6">
           <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
-            Saved Meals
+            Saved Items
           </h1>
           <p className="text-muted-foreground">
-            Your favorite meals all in one place
+            Your bookmarked doctors, articles & resources
           </p>
         </div>
 
@@ -43,7 +43,6 @@ const Saved = () => {
         ) : favoriteMeals.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
             {favoriteMeals.map((meal, index) => {
-              // Calculate distance if location is available
               let distanceDisplay = "—";
               if (location?.latitude && location?.longitude && meal.vendor?.latitude && meal.vendor?.longitude) {
                 const distance = calculateDistance(
@@ -64,7 +63,7 @@ const Saved = () => {
                   <FoodCard
                     id={meal.id}
                     name={meal.name}
-                    vendor={meal.vendor?.name || "Unknown Vendor"}
+                    vendor={meal.vendor?.name || "Unknown"}
                     price={Number(meal.price)}
                     originalPrice={meal.original_price ? Number(meal.original_price) : undefined}
                     distance={distanceDisplay}
@@ -84,20 +83,20 @@ const Saved = () => {
             {/* Empty State */}
             <div className="bg-card rounded-2xl p-8 lg:p-12 shadow-food-card text-center">
               <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-accent/10 flex items-center justify-center">
-                <Heart className="w-10 h-10 text-accent" />
+                <Bookmark className="w-10 h-10 text-accent" />
               </div>
               <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-                No Saved Meals Yet
+                No Saved Items Yet
               </h2>
               <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                Tap the heart icon on any meal to save it here for quick access later. Build your personal collection of favorites!
+                Bookmark doctors, health articles, and medical resources for quick access later.
               </p>
               <Button 
                 onClick={() => navigate("/")}
                 className="bg-primary hover:bg-primary/90 gap-2"
               >
-                <Utensils className="w-4 h-4" />
-                Explore Meals
+                <Stethoscope className="w-4 h-4" />
+                Explore Services
               </Button>
             </div>
 
@@ -107,7 +106,7 @@ const Saved = () => {
                 💡 Pro Tip
               </h3>
               <p className="text-sm text-muted-foreground">
-                Save meals you love to quickly reorder them later. Your saved meals sync across all your devices when you're logged in.
+                Save doctors and health resources to quickly access them later. Your saved items sync across all your devices when you're logged in.
               </p>
             </div>
           </>

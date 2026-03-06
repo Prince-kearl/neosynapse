@@ -8,7 +8,9 @@ import {
   Shield,
   Eye,
   Trash2,
-  BellRing
+  BellRing,
+  FileText,
+  HeartPulse
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -27,7 +29,7 @@ const Settings = () => {
       if (granted) {
         toast({
           title: "Notifications enabled",
-          description: "You'll receive order status updates even when the app is in the background.",
+          description: "You'll receive health alerts and appointment reminders.",
         });
       } else if (permission === "denied") {
         toast({
@@ -89,7 +91,7 @@ const Settings = () => {
                       ? "Not supported in this browser" 
                       : permission === "denied"
                       ? "Blocked - enable in browser settings"
-                      : "Get notified when your order status changes"}
+                      : "Get health alerts and appointment reminders"}
                   </p>
                 </div>
               </div>
@@ -105,7 +107,7 @@ const Settings = () => {
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">In-App Notifications</p>
-                  <p className="text-sm text-muted-foreground">Toast alerts for order updates</p>
+                  <p className="text-sm text-muted-foreground">Alerts for appointments & results</p>
                 </div>
               </div>
               <Switch defaultChecked disabled />
@@ -116,10 +118,40 @@ const Settings = () => {
                 <Smartphone className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">SMS Notifications</p>
-                  <p className="text-sm text-muted-foreground">Important order updates only</p>
+                  <p className="text-sm text-muted-foreground">Critical health alerts only</p>
                 </div>
               </div>
               <Switch />
+            </div>
+          </div>
+        </section>
+
+        {/* Health Data */}
+        <section>
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3">
+            Health Data
+          </h2>
+          <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <HeartPulse className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Health Data Sync</p>
+                  <p className="text-sm text-muted-foreground">Sync vitals from wearable devices</p>
+                </div>
+              </div>
+              <Switch />
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Export Medical Records</p>
+                  <p className="text-sm text-muted-foreground">Download your health data</p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm">Export</Button>
             </div>
           </div>
         </section>
@@ -135,7 +167,7 @@ const Settings = () => {
                 <Eye className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">Profile Visibility</p>
-                  <p className="text-sm text-muted-foreground">Show activity to vendors</p>
+                  <p className="text-sm text-muted-foreground">Share profile with healthcare providers</p>
                 </div>
               </div>
               <Switch defaultChecked />
@@ -145,8 +177,8 @@ const Settings = () => {
               <div className="flex items-center gap-3">
                 <Shield className="w-5 h-5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">Data Collection</p>
-                  <p className="text-sm text-muted-foreground">Analytics & improvements</p>
+                  <p className="font-medium">Anonymous Analytics</p>
+                  <p className="text-sm text-muted-foreground">Help improve Neo Synapse</p>
                 </div>
               </div>
               <Switch defaultChecked />
@@ -181,7 +213,7 @@ const Settings = () => {
                 <Trash2 className="w-5 h-5 text-destructive" />
                 <div>
                   <p className="font-medium text-destructive">Delete Account</p>
-                  <p className="text-sm text-muted-foreground">Permanently remove your data</p>
+                  <p className="text-sm text-muted-foreground">Permanently remove all your health data</p>
                 </div>
               </div>
               <Button variant="destructive" size="sm">Delete</Button>
