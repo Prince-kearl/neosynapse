@@ -1,22 +1,22 @@
-import { useState } from "react";
-import {
-  Video, VideoOff, Mic, MicOff, Phone, PhoneOff,
-  MessageSquare, FileText, Users, Clock, Shield, Loader2
-} from "lucide-react";
+import { useState, useCallback } from "react";
+import { Video, Phone, PhoneOff, Clock, Shield, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/integrations/supabase/client";
+import { useWebRTC } from "@/hooks/useWebRTC";
+import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
+import { CallControls } from "@/components/telemedicine/CallControls";
+import { DoctorCard } from "@/components/telemedicine/DoctorCard";
+import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
 
 type ConsultationState = "lobby" | "waiting" | "active" | "ended";
 
 const mockDoctors = [
-  { id: "1", name: "Dr. Ama Mensah", specialty: "General Practice", rating: 4.8, available: true, image: null },
-  { id: "2", name: "Dr. Kwame Asante", specialty: "Internal Medicine", rating: 4.9, available: true, image: null },
-  { id: "3", name: "Dr. Efua Owusu", specialty: "Pediatrics", rating: 4.7, available: false, image: null },
-  { id: "4", name: "Dr. Kofi Boateng", specialty: "Cardiology", rating: 4.9, available: true, image: null },
+  { id: "1", name: "Dr. Ama Mensah", specialty: "General Practice", rating: 4.8, available: true },
+  { id: "2", name: "Dr. Kwame Asante", specialty: "Internal Medicine", rating: 4.9, available: true },
+  { id: "3", name: "Dr. Efua Owusu", specialty: "Pediatrics", rating: 4.7, available: false },
+  { id: "4", name: "Dr. Kofi Boateng", specialty: "Cardiology", rating: 4.9, available: true },
 ];
 
 const Telemedicine = () => {
@@ -27,6 +27,68 @@ const Telemedicine = () => {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [consentRecording, setConsentRecording] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
+
+  const {
+    connectionState,
+    localStream,
+    remoteStream,
+    startCall,
+    endCall,
+    toggleVideo,
+    toggleAudio,
+  } = useWebRTC({
+    roomId,
+    userId: user?.id || "",
+    onConnectionStateChange: (s) => {
+      if (s === "connected") setState("active");
+      if (s === "failed" || s === "disconnected") setState("ended");
+    },
+  });
+
+  const handleStartConsultation = useCallback(async () => {
+    if (!user || !selectedDoctor) return;
+    setState("waiting");
+
+    // Create room in database
+    const { data, error } = await supabase.from("consultation_rooms").insert({
+      created_by: user.id,
+      doctor_id: selectedDoctor,
+      consent_recording: consentRecording,
+      status: "waiting",
+    }).select("id").single();
+
+    if (error || !data) {
+      console.error("Failed to create room:", error);
+      setState("lobby");
+      return;
+    }
+
+    setRoomId(data.id);
+
+    // Start WebRTC call
+    await startCall(videoEnabled, audioEnabled);
+
+    // Simulate doctor joining after 3s (demo mode)
+    setTimeout(() => setState("active"), 3000);
+  }, [user, selectedDoctor, consentRecording, videoEnabled, audioEnabled, startCall]);
+
+  const handleEndCall = useCallback(async () => {
+    await endCall();
+    setState("ended");
+  }, [endCall]);
+
+  const handleToggleVideo = useCallback(() => {
+    const next = !videoEnabled;
+    setVideoEnabled(next);
+    toggleVideo(next);
+  }, [videoEnabled, toggleVideo]);
+
+  const handleToggleAudio = useCallback(() => {
+    const next = !audioEnabled;
+    setAudioEnabled(next);
+    toggleAudio(next);
+  }, [audioEnabled, toggleAudio]);
 
   if (!user) {
     return (
@@ -41,80 +103,32 @@ const Telemedicine = () => {
     );
   }
 
+  const selectedDoctorData = mockDoctors.find((d) => d.id === selectedDoctor);
+
+  // Active call view
   if (state === "active") {
     return (
       <div className="flex-1 min-h-screen bg-background flex flex-col">
-        {/* Video Area */}
-        <div className="flex-1 relative bg-card rounded-2xl m-4 overflow-hidden">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center space-y-3">
-              <div className="w-24 h-24 mx-auto rounded-full bg-primary/20 flex items-center justify-center">
-                <Users className="w-12 h-12 text-primary" />
-              </div>
-              <p className="font-display font-semibold text-lg">
-                {mockDoctors.find((d) => d.id === selectedDoctor)?.name}
-              </p>
-              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                Connected
-              </Badge>
-              {consentRecording && (
-                <div className="flex items-center gap-2 justify-center text-xs text-destructive">
-                  <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-                  Recording with consent
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Self View */}
-          <div className="absolute bottom-4 right-4 w-32 h-24 bg-muted rounded-xl flex items-center justify-center border border-border">
-            {videoEnabled ? (
-              <p className="text-xs text-muted-foreground">Your camera</p>
-            ) : (
-              <VideoOff className="w-6 h-6 text-muted-foreground" />
-            )}
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="p-4">
-          <div className="max-w-md mx-auto flex items-center justify-center gap-4">
-            <Button
-              variant={audioEnabled ? "outline" : "destructive"}
-              size="icon"
-              className="rounded-full w-12 h-12"
-              onClick={() => setAudioEnabled(!audioEnabled)}
-            >
-              {audioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-            </Button>
-            <Button
-              variant={videoEnabled ? "outline" : "destructive"}
-              size="icon"
-              className="rounded-full w-12 h-12"
-              onClick={() => setVideoEnabled(!videoEnabled)}
-            >
-              {videoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-            </Button>
-            <Button
-              variant="destructive"
-              size="icon"
-              className="rounded-full w-14 h-14"
-              onClick={() => setState("ended")}
-            >
-              <PhoneOff className="w-6 h-6" />
-            </Button>
-            <Button variant="outline" size="icon" className="rounded-full w-12 h-12">
-              <MessageSquare className="w-5 h-5" />
-            </Button>
-            <Button variant="outline" size="icon" className="rounded-full w-12 h-12">
-              <FileText className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
+        <VideoDisplay
+          localStream={localStream}
+          remoteStream={remoteStream}
+          videoEnabled={videoEnabled}
+          connectionState={connectionState}
+          doctorName={selectedDoctorData?.name || "Doctor"}
+          consentRecording={consentRecording}
+        />
+        <CallControls
+          audioEnabled={audioEnabled}
+          videoEnabled={videoEnabled}
+          onToggleAudio={handleToggleAudio}
+          onToggleVideo={handleToggleVideo}
+          onEndCall={handleEndCall}
+        />
       </div>
     );
   }
 
+  // Waiting view
   if (state === "waiting") {
     return (
       <div className="flex-1 min-h-screen bg-background flex items-center justify-center">
@@ -122,14 +136,20 @@ const Telemedicine = () => {
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
           <h2 className="font-display text-xl font-bold">Connecting to Doctor</h2>
           <p className="text-muted-foreground text-sm max-w-sm">
-            Waiting for {mockDoctors.find((d) => d.id === selectedDoctor)?.name} to join...
+            Waiting for {selectedDoctorData?.name} to join...
           </p>
-          <Button variant="outline" onClick={() => setState("lobby")}>Cancel</Button>
+          <p className="text-xs text-muted-foreground">
+            Your camera and microphone are being prepared
+          </p>
+          <Button variant="outline" onClick={() => { endCall(); setState("lobby"); }}>
+            Cancel
+          </Button>
         </div>
       </div>
     );
   }
 
+  // Ended view
   if (state === "ended") {
     return (
       <div className="flex-1 min-h-screen bg-background flex items-center justify-center">
@@ -139,12 +159,12 @@ const Telemedicine = () => {
           </div>
           <h2 className="font-display text-xl font-bold">Consultation Ended</h2>
           <p className="text-muted-foreground text-sm">
-            Your consultation has ended. {consentRecording 
+            {consentRecording
               ? "A recording and AI-generated report will be available in your Medical Reports shortly."
               : "No recording was made."}
           </p>
           <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { setState("lobby"); setSelectedDoctor(null); }}>
+            <Button variant="outline" onClick={() => { setState("lobby"); setSelectedDoctor(null); setRoomId(null); }}>
               Back to Lobby
             </Button>
             <Button onClick={() => navigate("/")}>Go Home</Button>
@@ -154,13 +174,13 @@ const Telemedicine = () => {
     );
   }
 
-  // Lobby
+  // Lobby view
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Telemedicine</h1>
-          <p className="text-muted-foreground">Connect with healthcare professionals via video consultation</p>
+          <p className="text-muted-foreground">Connect with healthcare professionals via live video consultation</p>
         </div>
 
         {/* Available Doctors */}
@@ -168,95 +188,33 @@ const Telemedicine = () => {
           <h2 className="font-display text-lg font-semibold mb-3">Available Doctors</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {mockDoctors.map((doc) => (
-              <button
+              <DoctorCard
                 key={doc.id}
-                onClick={() => doc.available && setSelectedDoctor(doc.id)}
-                disabled={!doc.available}
-                className={`bg-card rounded-2xl p-4 shadow-food-card text-left transition-all ${
-                  selectedDoctor === doc.id
-                    ? "ring-2 ring-primary glow-green"
-                    : doc.available
-                    ? "hover:border-primary/50 border border-transparent"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Users className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{doc.name}</p>
-                    <p className="text-sm text-muted-foreground">{doc.specialty}</p>
-                  </div>
-                  <Badge className={doc.available 
-                    ? "bg-green-500/10 text-green-500 border-green-500/20" 
-                    : "bg-muted text-muted-foreground"
-                  }>
-                    {doc.available ? "Available" : "Busy"}
-                  </Badge>
-                </div>
-              </button>
+                doctor={doc}
+                selected={selectedDoctor === doc.id}
+                onSelect={() => doc.available && setSelectedDoctor(doc.id)}
+              />
             ))}
           </div>
         </div>
 
         {selectedDoctor && (
           <>
-            {/* Pre-consultation Settings */}
-            <div className="bg-card rounded-2xl p-5 shadow-food-card space-y-4">
-              <h3 className="font-display font-semibold">Pre-Consultation Settings</h3>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Video className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm">Camera</span>
-                </div>
-                <Switch checked={videoEnabled} onCheckedChange={setVideoEnabled} />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Mic className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm">Microphone</span>
-                </div>
-                <Switch checked={audioEnabled} onCheckedChange={setAudioEnabled} />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Shield className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <span className="text-sm block">Consent to Record</span>
-                    <span className="text-xs text-muted-foreground">
-                      Allow recording for AI report generation
-                    </span>
-                  </div>
-                </div>
-                <Switch checked={consentRecording} onCheckedChange={setConsentRecording} />
-              </div>
-            </div>
-
-            {consentRecording && (
-              <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
-                <div className="flex items-start gap-3">
-                  <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Auto-Documentation Enabled</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Neo Synapse will record, transcribe, and generate an AI medical report from this consultation. 
-                      The doctor will review and approve it before it's added to your records.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            <PreConsultationSettings
+              videoEnabled={videoEnabled}
+              audioEnabled={audioEnabled}
+              consentRecording={consentRecording}
+              onVideoChange={setVideoEnabled}
+              onAudioChange={setAudioEnabled}
+              onConsentChange={setConsentRecording}
+            />
 
             <Button
               className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
-              onClick={() => setState("waiting")}
+              onClick={handleStartConsultation}
             >
               <Video className="w-5 h-5 mr-2" />
-              Start Consultation
+              Start Live Consultation
             </Button>
           </>
         )}
@@ -265,13 +223,13 @@ const Telemedicine = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
             <Clock className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm font-medium">Quick Connect</p>
-            <p className="text-xs text-muted-foreground">Average wait: 5 min</p>
+            <p className="text-sm font-medium">Live Video</p>
+            <p className="text-xs text-muted-foreground">Real-time WebRTC calls</p>
           </div>
           <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
             <Shield className="w-8 h-8 text-primary mx-auto mb-2" />
             <p className="text-sm font-medium">End-to-End Encrypted</p>
-            <p className="text-xs text-muted-foreground">HIPAA compliant</p>
+            <p className="text-xs text-muted-foreground">Peer-to-peer connection</p>
           </div>
           <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
             <FileText className="w-8 h-8 text-primary mx-auto mb-2" />

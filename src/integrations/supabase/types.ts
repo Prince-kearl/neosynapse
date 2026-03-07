@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      consultation_rooms: {
+        Row: {
+          answer: Json | null
+          consent_recording: boolean
+          created_at: string
+          created_by: string
+          doctor_id: string
+          id: string
+          offer: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          answer?: Json | null
+          consent_recording?: boolean
+          created_at?: string
+          created_by: string
+          doctor_id: string
+          id?: string
+          offer?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          answer?: Json | null
+          consent_recording?: boolean
+          created_at?: string
+          created_by?: string
+          doctor_id?: string
+          id?: string
+          offer?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       favorites: {
         Row: {
           created_at: string
@@ -39,6 +75,38 @@ export type Database = {
             columns: ["meal_id"]
             isOneToOne: false
             referencedRelation: "meals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ice_candidates: {
+        Row: {
+          candidate: Json
+          created_at: string
+          id: string
+          room_id: string
+          sender: string
+        }
+        Insert: {
+          candidate: Json
+          created_at?: string
+          id?: string
+          room_id: string
+          sender: string
+        }
+        Update: {
+          candidate?: Json
+          created_at?: string
+          id?: string
+          room_id?: string
+          sender?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ice_candidates_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "consultation_rooms"
             referencedColumns: ["id"]
           },
         ]
