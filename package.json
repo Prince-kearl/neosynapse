@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@elevenlabs/react": "^0.14.1",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/poppins": "^5.2.7",
     "@hookform/resolvers": "^3.10.0",
@@ -58,6 +59,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
     "recharts": "^2.15.4",
