@@ -297,7 +297,9 @@ export const medicalReportService = {
   }) =>
     supabase.from("medical_reports").insert(data as any),
 
-  // TODO: Add UPDATE policy for report corrections
+  /** Professional: update report (RLS enforced — encounter professional only) */
+  update: (id: string, data: { report_json: Record<string, unknown> }) =>
+    supabase.from("medical_reports").update(data as any).eq("id", id),
 };
 
 // ─── Audit Logs ─────────────────────────────────────────────────
