@@ -210,6 +210,18 @@ export default function AdminInvitations() {
                     <Button variant="ghost" size="sm" onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
                       <Copy className="w-4 h-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => resendInvite.mutate(inv)}
+                      disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
+                      title="Resend invitation email"
+                    >
+                      {resendInvite.isPending && resendInvite.variables?.id === inv.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RotateCw className="w-4 h-4 mr-1" />}
+                      Resend
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => revokeInvite.mutate(inv.id)}>
                       <XCircle className="w-4 h-4 mr-1" /> Revoke
                     </Button>
