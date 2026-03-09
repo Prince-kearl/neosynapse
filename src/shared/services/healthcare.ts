@@ -73,8 +73,8 @@ export const professionalProfileService = {
   get: (userId: string) =>
     supabase.from("professional_profiles").select("*").eq("user_id", userId).maybeSingle(),
 
-  upsert: (userId: string, data: Partial<Omit<ProfessionalProfile, "id" | "user_id" | "created_at" | "updated_at">>) =>
-    supabase.from("professional_profiles").upsert({ user_id: userId, ...data }, { onConflict: "user_id" }),
+  upsert: (userId: string, data: Record<string, unknown>) =>
+    supabase.from("professional_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
   // TODO: Admin needs SELECT all + UPDATE verification_status — requires admin RLS policy
 };
