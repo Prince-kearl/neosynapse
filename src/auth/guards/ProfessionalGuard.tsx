@@ -9,7 +9,7 @@ interface ProfessionalGuardProps {
 
 export function ProfessionalGuard({ children }: ProfessionalGuardProps) {
   const { user, isLoading: authLoading } = useAuth();
-  const { role, isLoading: roleLoading } = useUserRole();
+  const { isProfessional, isLoading: roleLoading } = useUserRole();
   const location = useLocation();
 
   if (authLoading || roleLoading) {
@@ -24,15 +24,8 @@ export function ProfessionalGuard({ children }: ProfessionalGuardProps) {
     return <Navigate to="/auth/sign-in" state={{ from: location }} replace />;
   }
 
-  if (role !== "professional") {
-    // Redirect unauthorized users
-    if (role === "patient") {
-      return <Navigate to="/patient/dashboard" replace />;
-    }
-    if (role === "admin") {
-      return <Navigate to="/admin/dashboard" replace />;
-    }
-    // Unknown role
+  if (!isProfessional) {
+    // Redirect unauthorized users to sign-in
     return <Navigate to="/auth/sign-in" replace />;
   }
 
