@@ -1,15 +1,53 @@
-import { FileText, Clock, Eye, Loader2 } from "lucide-react";
+import { FileText, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-// TODO: Fetch real transcripts from database
-const mockTranscripts = [
-  { id: "1", patientName: "Ama Mensah", date: "2026-03-08T14:00:00Z", duration: "15 min", status: "ready" },
-  { id: "2", patientName: "Kofi Asante", date: "2026-03-07T10:00:00Z", duration: "22 min", status: "processing" },
-  { id: "3", patientName: "Efua Owusu", date: "2026-03-05T09:00:00Z", duration: "18 min", status: "ready" },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProfessionalTranscripts() {
+  const { user } = useAuth();
+
+  // Fetch transcripts via encounters assigned to this professional
+  const { data: transcripts = [], isLoading } = useQuery({
+    queryKey: ["pro-transcripts", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transcripts")
+        .select("*, encounters!inner(professional_id, patient_id, encounter_type, created_at)")
+        .eq("encounters.professional_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch patient names
+  const patientIds = [...new Set(
+    transcripts.map((t: any) => t.encounters?.patient_id).filter(Boolean)
+  )];
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["pro-transcript-profiles", patientIds],
+    queryFn: async () => {
+      if (patientIds.length === 0) return [];
+      const { data } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name")
+        .in("user_id", patientIds);
+      return data || [];
+    },
+    enabled: patientIds.length > 0,
+  });
+
+  const getPatientName = (id: string) => {
+    const p = profiles.find((pr) => pr.user_id === id);
+    return p?.full_name || p?.display_name || "Patient";
+  };
+
+  const hasContent = (json: any) => json && Object.keys(json).length > 0;
+
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
@@ -18,42 +56,53 @@ export default function ProfessionalTranscripts() {
           <p className="text-muted-foreground">Review AI-generated consultation transcripts</p>
         </div>
 
-        <div className="space-y-4">
-          {mockTranscripts.map((transcript) => (
-            <div key={transcript.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{transcript.patientName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(transcript.date).toLocaleDateString("en-GB", { 
-                        day: "numeric", month: "short", year: "numeric" 
-                      })} • {transcript.duration}
-                    </p>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : transcripts.length > 0 ? (
+          <div className="space-y-3">
+            {transcripts.map((transcript: any) => {
+              const enc = transcript.encounters;
+              const ready = hasContent(transcript.transcript_json);
+              return (
+                <div key={transcript.id} className="bg-card rounded-2xl p-4 border border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{getPatientName(enc?.patient_id)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(transcript.created_at).toLocaleDateString("en-GB", {
+                            day: "numeric", month: "short", year: "numeric",
+                          })} • {enc?.encounter_type || "consultation"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className={
+                        ready ? "border-emerald-500/50 text-emerald-500" : "border-yellow-500/50 text-yellow-500"
+                      }>
+                        {ready ? "ready" : "processing"}
+                      </Badge>
+                      <Button variant="outline" size="sm" disabled={!ready}>
+                        <Eye className="w-4 h-4 mr-1" /> Review
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline" className={
-                    transcript.status === "ready" ? "border-green-500/50 text-green-500" : "border-yellow-500/50 text-yellow-500"
-                  }>
-                    {transcript.status}
-                  </Badge>
-                  <Button variant="outline" size="sm" disabled={transcript.status !== "ready"}>
-                    <Eye className="w-4 h-4 mr-1" /> Review
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {mockTranscripts.length === 0 && (
-          <div className="bg-card rounded-2xl p-8 shadow-food-card text-center">
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl p-8 text-center border border-border">
             <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">No transcripts available</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Transcripts are generated after recorded consultations.
+            </p>
           </div>
         )}
       </div>

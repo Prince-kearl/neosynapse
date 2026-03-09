@@ -1,22 +1,74 @@
 import { Users, Search, Loader2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-
-// TODO: Fetch real assigned patients from encounters/appointments
-const mockPatients = [
-  { id: "1", name: "Ama Mensah", age: 45, lastVisit: "2026-03-01", conditions: ["Hypertension", "Diabetes"] },
-  { id: "2", name: "Kofi Asante", age: 32, lastVisit: "2026-02-28", conditions: ["Asthma"] },
-  { id: "3", name: "Efua Owusu", age: 28, lastVisit: "2026-02-25", conditions: ["Pregnancy monitoring"] },
-  { id: "4", name: "Kwame Boateng", age: 55, lastVisit: "2026-02-20", conditions: ["Heart disease", "Hypertension"] },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProfessionalPatients() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
 
-  const filteredPatients = mockPatients.filter(p => 
+  // Fetch distinct patients from encounters assigned to this professional
+  const { data: patients = [], isLoading } = useQuery({
+    queryKey: ["pro-patients", user?.id],
+    queryFn: async () => {
+      // Get distinct patient IDs from encounters
+      const { data: encounters, error } = await supabase
+        .from("encounters")
+        .select("patient_id, encounter_type, status, created_at")
+        .eq("professional_id", user!.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!encounters || encounters.length === 0) return [];
+
+      // Group by patient_id to get unique patients with their last encounter
+      const patientMap = new Map<string, {
+        patient_id: string;
+        lastEncounter: string;
+        encounterCount: number;
+        lastType: string;
+      }>();
+
+      encounters.forEach((enc) => {
+        if (!patientMap.has(enc.patient_id)) {
+          patientMap.set(enc.patient_id, {
+            patient_id: enc.patient_id,
+            lastEncounter: enc.created_at,
+            encounterCount: 1,
+            lastType: enc.encounter_type,
+          });
+        } else {
+          const existing = patientMap.get(enc.patient_id)!;
+          existing.encounterCount += 1;
+        }
+      });
+
+      // Fetch profile info for these patients
+      const patientIds = Array.from(patientMap.keys());
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name, avatar_url")
+        .in("user_id", patientIds);
+
+      return Array.from(patientMap.values()).map((p) => {
+        const prof = profiles?.find((pr) => pr.user_id === p.patient_id);
+        return {
+          ...p,
+          name: prof?.full_name || prof?.display_name || "Unknown Patient",
+          avatar_url: prof?.avatar_url,
+        };
+      });
+    },
+    enabled: !!user,
+  });
+
+  const filteredPatients = patients.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -25,7 +77,7 @@ export default function ProfessionalPatients() {
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">My Patients</h1>
-          <p className="text-muted-foreground">View and manage your assigned patients</p>
+          <p className="text-muted-foreground">Patients assigned to you through encounters</p>
         </div>
 
         {/* Search */}
@@ -40,40 +92,46 @@ export default function ProfessionalPatients() {
         </div>
 
         {/* Patient List */}
-        <div className="space-y-4">
-          {filteredPatients.map((patient) => (
-            <button
-              key={patient.id}
-              onClick={() => navigate(`/professional/patients/${patient.id}`)}
-              className="w-full bg-card rounded-2xl p-4 shadow-food-card border border-border text-left hover:border-primary/50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg">
-                    {patient.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-medium text-lg">{patient.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {patient.age} years • Last visit: {new Date(patient.lastVisit).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                    </p>
-                    <div className="flex gap-2 mt-1">
-                      {patient.conditions.slice(0, 2).map((c) => (
-                        <span key={c} className="text-xs bg-muted px-2 py-0.5 rounded-full">{c}</span>
-                      ))}
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredPatients.length > 0 ? (
+          <div className="space-y-3">
+            {filteredPatients.map((patient) => (
+              <div
+                key={patient.patient_id}
+                className="bg-card rounded-2xl p-4 border border-border hover:border-primary/50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg">
+                      {patient.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-lg">{patient.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {patient.encounterCount} encounter{patient.encounterCount !== 1 ? "s" : ""} • Last: {new Date(patient.lastEncounter).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </p>
+                      <Badge variant="outline" className="mt-1 text-xs">{patient.lastType}</Badge>
                     </div>
                   </div>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/professional/encounters`)}>
+                    <ChevronRight className="w-5 h-5" />
+                  </Button>
                 </div>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </div>
-            </button>
-          ))}
-        </div>
-
-        {filteredPatients.length === 0 && (
-          <div className="bg-card rounded-2xl p-8 shadow-food-card text-center">
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl p-8 text-center border border-border">
             <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No patients found</p>
+            <p className="text-muted-foreground">
+              {search ? "No patients matching your search" : "No patients assigned yet"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Patients will appear here once encounters are created.
+            </p>
           </div>
         )}
       </div>
