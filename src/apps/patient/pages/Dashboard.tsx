@@ -1,13 +1,14 @@
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { 
   Bot, Stethoscope, CalendarCheck, Video, FileText, 
-  Hospital, ChevronRight, Activity, Shield 
+  Hospital, ChevronRight, Activity, Shield, AlertCircle, Loader2 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-
-// Import hero images
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import heroHealthAssistant from "@/assets/hero-health-assistant.jpg";
 
 const quickActions = [
@@ -24,6 +25,89 @@ export default function PatientDashboard() {
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
 
+  // Fetch upcoming appointments
+  const { data: appointments = [], isLoading: appointmentsLoading } = useQuery({
+    queryKey: ["patient-dashboard-appointments", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", user.id)
+        .in("status", ["pending", "confirmed"])
+        .order("scheduled_at", { ascending: true })
+        .limit(3);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch recent medical reports
+  const { data: reports = [], isLoading: reportsLoading } = useQuery({
+    queryKey: ["patient-dashboard-reports", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("medical_reports")
+        .select("*")
+        .eq("patient_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(2);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch recent triage sessions
+  const { data: triageSessions = [] } = useQuery({
+    queryKey: ["patient-dashboard-triage", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("triage_sessions")
+        .select("*")
+        .eq("patient_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch patient profile for completion
+  const { data: patientProfile } = useQuery({
+    queryKey: ["patient-profile-completion", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase
+        .from("patient_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // Calculate profile completion
+  const calculateProfileCompletion = () => {
+    if (!patientProfile) return 20;
+    let score = 20; // Base for having account
+    if (patientProfile.date_of_birth) score += 15;
+    if (patientProfile.gender) score += 10;
+    if (patientProfile.phone) score += 15;
+    if (patientProfile.emergency_contact_name) score += 15;
+    if (patientProfile.emergency_contact_phone) score += 10;
+    if (patientProfile.insurance_info) score += 15;
+    return Math.min(score, 100);
+  };
+
+  const profileCompletion = calculateProfileCompletion();
+  const latestTriage = triageSessions[0];
+
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-7xl space-y-6 lg:space-y-8">
@@ -34,6 +118,22 @@ export default function PatientDashboard() {
           </h1>
           <p className="text-muted-foreground mt-1">How are you feeling today?</p>
         </div>
+
+        {/* Urgent Triage Alert */}
+        {latestTriage && (latestTriage.urgency_level === "urgent" || latestTriage.urgency_level === "emergency") && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-sm text-destructive">Recent Symptom Check: {latestTriage.urgency_level?.toUpperCase()}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Based on your recent symptom assessment, we recommend consulting a healthcare professional.
+              </p>
+              <Button size="sm" className="mt-2" onClick={() => navigate("/patient/telemedicine")}>
+                Book Consultation
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* AI Assistant Hero Card */}
         <div 
@@ -77,14 +177,16 @@ export default function PatientDashboard() {
                 <p className="text-sm text-muted-foreground">Better recommendations with more info</p>
               </div>
             </div>
-            <span className="text-primary font-semibold">65%</span>
+            <span className="text-primary font-semibold">{profileCompletion}%</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2">
-            <div className="bg-primary h-2 rounded-full" style={{ width: "65%" }} />
+            <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${profileCompletion}%` }} />
           </div>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/patient/profile")}>
-            Complete Profile
-          </Button>
+          {profileCompletion < 100 && (
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/patient/profile")}>
+              Complete Profile
+            </Button>
+          )}
         </div>
 
         {/* Quick Actions */}
@@ -116,14 +218,77 @@ export default function PatientDashboard() {
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
-          <div className="text-center py-8">
-            <CalendarCheck className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No upcoming appointments</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/patient/telemedicine")}>
-              Book Consultation
-            </Button>
-          </div>
+          {appointmentsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : appointments.length > 0 ? (
+            <div className="space-y-3">
+              {appointments.map((apt) => (
+                <div key={apt.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <CalendarCheck className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{apt.appointment_type}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {apt.scheduled_at 
+                          ? new Date(apt.scheduled_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+                          : "Time TBD"
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="capitalize">{apt.status}</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <CalendarCheck className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">No upcoming appointments</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/patient/telemedicine")}>
+                Book Consultation
+              </Button>
+            </div>
+          )}
         </section>
+
+        {/* Recent Reports */}
+        {reports.length > 0 && (
+          <section className="bg-card rounded-2xl p-5 shadow-food-card border border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-lg font-semibold">Recent Reports</h2>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/patient/reports")}>
+                View All
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {reports.map((report) => {
+                const reportData = report.report_json as Record<string, unknown> | null;
+                const title = (reportData?.title as string) || `${report.report_type} Report`;
+                return (
+                  <div key={report.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(report.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => navigate("/patient/reports")}>View</Button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* AI Safety Messaging */}
         <div className="bg-muted/50 rounded-2xl p-4 flex items-start gap-3">
