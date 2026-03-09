@@ -289,7 +289,7 @@ export const auditLogService = {
     entity_id?: string;
     metadata?: Record<string, unknown>;
   }) =>
-    supabase.from("audit_logs").insert(data),
+    supabase.from("audit_logs").insert(data as any),
 
   // TODO: Admin needs SELECT all audit logs — requires RLS policy:
   //   CREATE POLICY "Admins can view all audit logs" ON audit_logs
