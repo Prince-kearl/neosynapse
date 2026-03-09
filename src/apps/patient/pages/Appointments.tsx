@@ -1,4 +1,4 @@
-import { Calendar, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Calendar, Clock, CheckCircle, Loader2, Video, Building2, Plus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -60,48 +60,80 @@ export default function PatientAppointments() {
     );
   }
 
-  const AppointmentCard = ({ appointment }: { appointment: Appointment }) => (
-    <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="font-medium">{appointment.appointment_type}</p>
-          <p className="text-xs text-muted-foreground">
-            {appointment.scheduled_at 
-              ? new Date(appointment.scheduled_at).toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "Not scheduled yet"
-            }
-          </p>
+  const AppointmentCard = ({ appointment }: { appointment: Appointment }) => {
+    const isTelemedicine = appointment.appointment_type === "telemedicine";
+    const isUpcoming = appointment.status === "pending" || appointment.status === "confirmed";
+    
+    return (
+      <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              isTelemedicine ? "bg-primary/10" : "bg-secondary"
+            }`}>
+              {isTelemedicine ? (
+                <Video className="w-5 h-5 text-primary" />
+              ) : (
+                <Building2 className="w-5 h-5 text-secondary-foreground" />
+              )}
+            </div>
+            <div>
+              <p className="font-medium capitalize">{appointment.appointment_type.replace("_", " ")}</p>
+              <p className="text-xs text-muted-foreground">
+                {appointment.scheduled_at 
+                  ? new Date(appointment.scheduled_at).toLocaleDateString("en-GB", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "Time to be confirmed"
+                }
+              </p>
+            </div>
+          </div>
+          <Badge className={statusColors[appointment.status] || statusColors.pending}>
+            {statusLabels[appointment.status] || appointment.status}
+          </Badge>
         </div>
-        <Badge className={statusColors[appointment.status] || statusColors.pending}>
-          {statusLabels[appointment.status] || appointment.status}
-        </Badge>
+        
+        {appointment.reason_for_visit && (
+          <p className="text-sm text-muted-foreground">
+            {appointment.reason_for_visit}
+          </p>
+        )}
+
+        {isUpcoming && isTelemedicine && (
+          <div className="flex gap-2 pt-2">
+            <Button size="sm" className="flex-1" onClick={() => navigate("/patient/telemedicine")}>
+              <Video className="w-4 h-4 mr-1" />
+              Join Call
+            </Button>
+            <Button size="sm" variant="outline">Reschedule</Button>
+          </div>
+        )}
       </div>
-      
-      {appointment.reason_for_visit && (
-        <p className="text-sm text-muted-foreground">
-          {appointment.reason_for_visit}
-        </p>
-      )}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
-            My Appointments
-          </h1>
-          <p className="text-muted-foreground">
-            Track and manage your medical appointments
-          </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
+              My Appointments
+            </h1>
+            <p className="text-muted-foreground">
+              Track and manage your medical appointments
+            </p>
+          </div>
+          <Button onClick={() => navigate("/patient/telemedicine")} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Book New
+          </Button>
         </div>
 
         {/* Tabs */}

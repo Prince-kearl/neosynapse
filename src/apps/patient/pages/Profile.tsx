@@ -1,12 +1,20 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   User, Settings, ChevronRight, LogOut, HeartPulse, 
-  Stethoscope, Shield, Bell, MapPin, CreditCard, FileText
+  Stethoscope, Shield, Bell, MapPin, CreditCard, Loader2, Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const accountMenuItems = [
   { icon: MapPin, label: "Saved Locations", description: "Home & hospital addresses" },
@@ -17,10 +25,88 @@ const accountMenuItems = [
 
 export default function PatientProfile() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, signOut, isLoading: authLoading } = useAuth();
   const { profile } = useUserRole();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split('@')[0] || "Patient";
+
+  // Fetch patient profile
+  const { data: patientProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ["patient-profile", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("patient_profiles")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  // Form state
+  const [formData, setFormData] = useState({
+    date_of_birth: "",
+    gender: "",
+    phone: "",
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
+    preferred_language: "en",
+  });
+
+  // Update form when data loads
+  const initializeForm = () => {
+    if (patientProfile) {
+      setFormData({
+        date_of_birth: patientProfile.date_of_birth || "",
+        gender: patientProfile.gender || "",
+        phone: patientProfile.phone || "",
+        emergency_contact_name: patientProfile.emergency_contact_name || "",
+        emergency_contact_phone: patientProfile.emergency_contact_phone || "",
+        preferred_language: patientProfile.preferred_language || "en",
+      });
+    }
+    setEditDialogOpen(true);
+  };
+
+  // Save patient profile
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      if (!user) throw new Error("Not authenticated");
+      
+      const profileData = {
+        user_id: user.id,
+        ...data,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (patientProfile) {
+        const { error } = await supabase
+          .from("patient_profiles")
+          .update(profileData)
+          .eq("user_id", user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("patient_profiles")
+          .insert(profileData);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["patient-profile-completion"] });
+      toast({ title: "Profile updated", description: "Your health profile has been saved." });
+      setEditDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -60,46 +146,158 @@ export default function PatientProfile() {
         {/* Health Profile Section */}
         <div className="bg-card rounded-2xl p-5 shadow-food-card">
           <h2 className="font-display text-lg font-semibold text-foreground mb-4">Health Profile</h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <HeartPulse className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Personal Details</p>
-                  <p className="text-sm text-muted-foreground">Date of birth, gender, contact</p>
-                </div>
-              </div>
-              <Button variant="outline" size="sm">Edit</Button>
+          
+          {profileLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Stethoscope className="w-5 h-5 text-primary" />
+          ) : (
+            <div className="space-y-4">
+              {/* Personal Details */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <HeartPulse className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Personal Details</p>
+                    <p className="text-sm text-muted-foreground">
+                      {patientProfile?.date_of_birth 
+                        ? `DOB: ${new Date(patientProfile.date_of_birth).toLocaleDateString()}`
+                        : "Date of birth, gender, contact"
+                      }
+                      {patientProfile?.gender && ` • ${patientProfile.gender}`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">Medical History</p>
-                  <p className="text-sm text-muted-foreground">Conditions, allergies & medications</p>
-                </div>
+                <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={initializeForm}>Edit</Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Edit Personal Details</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="dob">Date of Birth</Label>
+                        <Input
+                          id="dob"
+                          type="date"
+                          value={formData.date_of_birth}
+                          onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="gender">Gender</Label>
+                        <Select value={formData.gender} onValueChange={(v) => setFormData({ ...formData, gender: v })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone Number</Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          placeholder="+233 XX XXX XXXX"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
+                      <Separator />
+                      <p className="text-sm font-medium">Emergency Contact</p>
+                      <div className="space-y-2">
+                        <Label htmlFor="emergency_name">Contact Name</Label>
+                        <Input
+                          id="emergency_name"
+                          placeholder="Emergency contact name"
+                          value={formData.emergency_contact_name}
+                          onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="emergency_phone">Contact Phone</Label>
+                        <Input
+                          id="emergency_phone"
+                          type="tel"
+                          placeholder="+233 XX XXX XXXX"
+                          value={formData.emergency_contact_phone}
+                          onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="language">Preferred Language</Label>
+                        <Select value={formData.preferred_language} onValueChange={(v) => setFormData({ ...formData, preferred_language: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="en">English</SelectItem>
+                            <SelectItem value="tw">Twi</SelectItem>
+                            <SelectItem value="ga">Ga</SelectItem>
+                            <SelectItem value="ee">Ewe</SelectItem>
+                            <SelectItem value="ha">Hausa</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={() => saveMutation.mutate(formData)}
+                        disabled={saveMutation.isPending}
+                      >
+                        {saveMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4 mr-2" />
+                        )}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
-              <Button variant="outline" size="sm">Edit</Button>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-primary" />
+              
+              <Separator />
+              
+              {/* Medical History */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Stethoscope className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Medical History</p>
+                    <p className="text-sm text-muted-foreground">Conditions, allergies & medications</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">Consent Settings</p>
-                  <p className="text-sm text-muted-foreground">Data sharing & recording preferences</p>
-                </div>
+                <Button variant="outline" size="sm">Edit</Button>
               </div>
-              <Button variant="outline" size="sm">Manage</Button>
+              
+              <Separator />
+              
+              {/* Consent Settings */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Consent Settings</p>
+                    <p className="text-sm text-muted-foreground">Data sharing & recording preferences</p>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm">Manage</Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Account Menu Items */}
