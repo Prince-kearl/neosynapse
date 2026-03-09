@@ -4,69 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAssignedPatients } from "@/shared/hooks/useHealthcare";
 
 export default function ProfessionalPatients() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [search, setSearch] = useState("");
-
-  // Fetch distinct patients from encounters assigned to this professional
-  const { data: patients = [], isLoading } = useQuery({
-    queryKey: ["pro-patients", user?.id],
-    queryFn: async () => {
-      // Get distinct patient IDs from encounters
-      const { data: encounters, error } = await supabase
-        .from("encounters")
-        .select("patient_id, encounter_type, status, created_at")
-        .eq("professional_id", user!.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      if (!encounters || encounters.length === 0) return [];
-
-      // Group by patient_id to get unique patients with their last encounter
-      const patientMap = new Map<string, {
-        patient_id: string;
-        lastEncounter: string;
-        encounterCount: number;
-        lastType: string;
-      }>();
-
-      encounters.forEach((enc) => {
-        if (!patientMap.has(enc.patient_id)) {
-          patientMap.set(enc.patient_id, {
-            patient_id: enc.patient_id,
-            lastEncounter: enc.created_at,
-            encounterCount: 1,
-            lastType: enc.encounter_type,
-          });
-        } else {
-          const existing = patientMap.get(enc.patient_id)!;
-          existing.encounterCount += 1;
-        }
-      });
-
-      // Fetch profile info for these patients
-      const patientIds = Array.from(patientMap.keys());
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, full_name, avatar_url")
-        .in("user_id", patientIds);
-
-      return Array.from(patientMap.values()).map((p) => {
-        const prof = profiles?.find((pr) => pr.user_id === p.patient_id);
-        return {
-          ...p,
-          name: prof?.full_name || prof?.display_name || "Unknown Patient",
-          avatar_url: prof?.avatar_url,
-        };
-      });
-    },
-    enabled: !!user,
-  });
+  const { data: patients = [], isLoading } = useAssignedPatients();
 
   const filteredPatients = patients.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
@@ -80,7 +23,6 @@ export default function ProfessionalPatients() {
           <p className="text-muted-foreground">Patients assigned to you through encounters</p>
         </div>
 
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -91,7 +33,6 @@ export default function ProfessionalPatients() {
           />
         </div>
 
-        {/* Patient List */}
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />

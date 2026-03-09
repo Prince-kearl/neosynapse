@@ -1,50 +1,13 @@
 import { FileText, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useProfessionalTranscripts, useProfileNames } from "@/shared/hooks/useHealthcare";
 
 export default function ProfessionalTranscripts() {
-  const { user } = useAuth();
+  const { data: transcripts = [], isLoading } = useProfessionalTranscripts();
 
-  // Fetch transcripts via encounters assigned to this professional
-  const { data: transcripts = [], isLoading } = useQuery({
-    queryKey: ["pro-transcripts", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transcripts")
-        .select("*, encounters!inner(professional_id, patient_id, encounter_type, created_at)")
-        .eq("encounters.professional_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  // Fetch patient names
-  const patientIds = [...new Set(
-    transcripts.map((t: any) => t.encounters?.patient_id).filter(Boolean)
-  )];
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["pro-transcript-profiles", patientIds],
-    queryFn: async () => {
-      if (patientIds.length === 0) return [];
-      const { data } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, full_name")
-        .in("user_id", patientIds);
-      return data || [];
-    },
-    enabled: patientIds.length > 0,
-  });
-
-  const getPatientName = (id: string) => {
-    const p = profiles.find((pr) => pr.user_id === id);
-    return p?.full_name || p?.display_name || "Patient";
-  };
+  const patientIds = transcripts.map((t: any) => t.encounters?.patient_id).filter(Boolean);
+  const { data: nameMap = {} } = useProfileNames(patientIds);
 
   const hasContent = (json: any) => json && Object.keys(json).length > 0;
 
@@ -64,6 +27,7 @@ export default function ProfessionalTranscripts() {
           <div className="space-y-3">
             {transcripts.map((transcript: any) => {
               const enc = transcript.encounters;
+              const patientName = enc?.patient_id ? (nameMap[enc.patient_id] || "Patient") : "Patient";
               const ready = hasContent(transcript.transcript_json);
               return (
                 <div key={transcript.id} className="bg-card rounded-2xl p-4 border border-border">
@@ -73,7 +37,7 @@ export default function ProfessionalTranscripts() {
                         <FileText className="w-6 h-6 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium">{getPatientName(enc?.patient_id)}</p>
+                        <p className="font-medium">{patientName}</p>
                         <p className="text-sm text-muted-foreground">
                           {new Date(transcript.created_at).toLocaleDateString("en-GB", {
                             day: "numeric", month: "short", year: "numeric",

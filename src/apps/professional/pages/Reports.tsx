@@ -1,50 +1,10 @@
 import { FileCheck, Download, Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useProfessionalReports } from "@/shared/hooks/useHealthcare";
 
 export default function ProfessionalReports() {
-  const { user } = useAuth();
-
-  // Fetch medical reports linked to encounters for this professional
-  const { data: reports = [], isLoading } = useQuery({
-    queryKey: ["pro-reports", user?.id],
-    queryFn: async () => {
-      // Get encounters for this professional first
-      const { data: encounters, error: encError } = await supabase
-        .from("encounters")
-        .select("id, patient_id")
-        .eq("professional_id", user!.id);
-      if (encError) throw encError;
-      if (!encounters || encounters.length === 0) return [];
-
-      const encounterIds = encounters.map((e) => e.id);
-      const { data, error } = await supabase
-        .from("medical_reports")
-        .select("*")
-        .in("encounter_id", encounterIds)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (error) throw error;
-
-      // Enrich with patient names
-      const patientIds = [...new Set((data || []).map((r) => r.patient_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, full_name")
-        .in("user_id", patientIds);
-
-      return (data || []).map((report) => ({
-        ...report,
-        patientName: profiles?.find((p) => p.user_id === report.patient_id)?.full_name
-          || profiles?.find((p) => p.user_id === report.patient_id)?.display_name
-          || "Patient",
-      }));
-    },
-    enabled: !!user,
-  });
+  const { data: reports = [], isLoading } = useProfessionalReports();
 
   return (
     <div className="flex-1 min-h-screen bg-background">
