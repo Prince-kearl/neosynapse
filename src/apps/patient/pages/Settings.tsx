@@ -8,7 +8,21 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
+// Push notifications hook (inline stub - legacy moved to src/legacy/)
+function usePushNotifications() {
+  return {
+    isSupported: 'Notification' in window,
+    isEnabled: false,
+    permission: (typeof Notification !== 'undefined' ? Notification.permission : 'default') as NotificationPermission,
+    requestPermission: async () => {
+      if ('Notification' in window) {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+      }
+      return false;
+    },
+  };
+}
 import { toast } from "@/hooks/use-toast";
 
 export default function PatientSettings() {
