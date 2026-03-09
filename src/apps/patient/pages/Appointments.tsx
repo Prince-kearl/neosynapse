@@ -121,13 +121,19 @@ export default function PatientAppointments() {
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
-            My Appointments
-          </h1>
-          <p className="text-muted-foreground">
-            Track and manage your medical appointments
-          </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
+              My Appointments
+            </h1>
+            <p className="text-muted-foreground">
+              Track and manage your medical appointments
+            </p>
+          </div>
+          <Button onClick={() => navigate("/patient/telemedicine")} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Book New
+          </Button>
         </div>
 
         {/* Tabs */}
