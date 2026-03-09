@@ -220,7 +220,9 @@ export const consentService = {
   }) =>
     supabase.from("consents").insert(data),
 
-  // TODO: Add UPDATE policy for revoking consent (patient only)
+  /** Patient: revoke consent (RLS enforced — patient only) */
+  revoke: (id: string) =>
+    supabase.from("consents").update({ granted: false }).eq("id", id),
 };
 
 // ─── Transcripts ────────────────────────────────────────────────
