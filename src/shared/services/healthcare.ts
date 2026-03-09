@@ -84,7 +84,13 @@ export const professionalProfileService = {
   upsert: (userId: string, data: Record<string, unknown>) =>
     supabase.from("professional_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
-  // TODO: Admin needs SELECT all + UPDATE verification_status — requires admin RLS policy
+  /** Admin: get all professional profiles (RLS enforced) */
+  getAll: () =>
+    supabase.from("professional_profiles").select("*").order("created_at", { ascending: false }),
+
+  /** Admin: update verification status */
+  updateVerification: (userId: string, status: string) =>
+    supabase.from("professional_profiles").update({ verification_status: status }).eq("user_id", userId),
 };
 
 // ─── Facilities ─────────────────────────────────────────────────
