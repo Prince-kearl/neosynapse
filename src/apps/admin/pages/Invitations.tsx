@@ -248,7 +248,23 @@ export default function AdminInvitations() {
                       <p className="text-sm text-muted-foreground capitalize">{inv.role}</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className={statusStyles[inv.status] || ""}>{inv.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusStyles[inv.status] || ""}>{inv.status}</Badge>
+                    {inv.status === "expired" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => resendInvite.mutate(inv)}
+                        disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
+                        title="Resend expired invitation"
+                      >
+                        {resendInvite.isPending && resendInvite.variables?.id === inv.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <RotateCw className="w-4 h-4 mr-1" />}
+                        Resend
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
