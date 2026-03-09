@@ -7,6 +7,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   profileService,
   patientProfileService,
@@ -44,7 +45,7 @@ export function usePatientProfile() {
     queryKey: ["patient-profile", user?.id],
     queryFn: async () => {
       const { data, error } = await patientProfileService.get(user!.id);
-      if (error) throw error;
+      if (error && (error as any).code !== "PGRST116") throw error;
       return data;
     },
     enabled: !!user,
@@ -95,12 +96,64 @@ export function useMyAppointments() {
   });
 }
 
+/** Patient dashboard: upcoming appointments (limited) */
+export function useUpcomingAppointments(limit = 3) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["upcoming-appointments", user?.id, limit],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("*")
+        .eq("patient_id", user!.id)
+        .in("status", ["pending", "confirmed"])
+        .order("scheduled_at", { ascending: true })
+        .limit(limit);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useMyEncounters() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["my-encounters", user?.id],
+    queryFn: async () => {
+      const { data, error } = await encounterService.getForPatient(user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+}
+
 export function useMyTriageSessions() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["my-triage-sessions", user?.id],
     queryFn: async () => {
       const { data, error } = await triageService.getForPatient(user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+}
+
+/** Patient dashboard: recent triage (limited) */
+export function useRecentTriage(limit = 1) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["recent-triage", user?.id, limit],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("triage_sessions")
+        .select("*")
+        .eq("patient_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
       if (error) throw error;
       return data || [];
     },
@@ -127,6 +180,25 @@ export function useMyReports() {
     queryKey: ["my-reports", user?.id],
     queryFn: async () => {
       const { data, error } = await medicalReportService.getForPatient(user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+}
+
+/** Patient dashboard: recent reports (limited) */
+export function useRecentReports(limit = 2) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["recent-reports", user?.id, limit],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("medical_reports")
+        .select("*")
+        .eq("patient_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
       if (error) throw error;
       return data || [];
     },
@@ -188,14 +260,140 @@ export function useProfessionalNotes() {
   });
 }
 
+/** Professional: telemedicine encounters (pending/in_progress) */
+export function useProfessionalTelemedicine() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pro-tele-waiting", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("encounters")
+        .select("*")
+        .eq("professional_id", user!.id)
+        .eq("encounter_type", "telemedicine")
+        .in("status", ["pending", "in_progress"])
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+    refetchInterval: 10000,
+  });
+}
+
+/** Professional: assigned patients derived from encounters */
+export function useAssignedPatients() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pro-patients", user?.id],
+    queryFn: async () => {
+      const { data: encounters, error } = await supabase
+        .from("encounters")
+        .select("patient_id, encounter_type, status, created_at")
+        .eq("professional_id", user!.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!encounters || encounters.length === 0) return [];
+
+      const patientMap = new Map<string, {
+        patient_id: string;
+        lastEncounter: string;
+        encounterCount: number;
+        lastType: string;
+      }>();
+
+      encounters.forEach((enc) => {
+        if (!patientMap.has(enc.patient_id)) {
+          patientMap.set(enc.patient_id, {
+            patient_id: enc.patient_id,
+            lastEncounter: enc.created_at,
+            encounterCount: 1,
+            lastType: enc.encounter_type,
+          });
+        } else {
+          patientMap.get(enc.patient_id)!.encounterCount += 1;
+        }
+      });
+
+      const patientIds = Array.from(patientMap.keys());
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name, avatar_url")
+        .in("user_id", patientIds);
+
+      return Array.from(patientMap.values()).map((p) => {
+        const prof = profiles?.find((pr) => pr.user_id === p.patient_id);
+        return {
+          ...p,
+          name: prof?.full_name || prof?.display_name || "Unknown Patient",
+          avatar_url: prof?.avatar_url || null,
+        };
+      });
+    },
+    enabled: !!user,
+  });
+}
+
+/** Professional: medical reports for their encounters */
+export function useProfessionalReports() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pro-reports", user?.id],
+    queryFn: async () => {
+      const { data: encounters, error: encError } = await supabase
+        .from("encounters")
+        .select("id, patient_id")
+        .eq("professional_id", user!.id);
+      if (encError) throw encError;
+      if (!encounters || encounters.length === 0) return [];
+
+      const encounterIds = encounters.map((e) => e.id);
+      const { data, error } = await supabase
+        .from("medical_reports")
+        .select("*")
+        .in("encounter_id", encounterIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+
+      const patientIds = [...new Set((data || []).map((r) => r.patient_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name")
+        .in("user_id", patientIds);
+
+      return (data || []).map((report) => ({
+        ...report,
+        patientName:
+          profiles?.find((p) => p.user_id === report.patient_id)?.full_name ||
+          profiles?.find((p) => p.user_id === report.patient_id)?.display_name ||
+          "Patient",
+      }));
+    },
+    enabled: !!user,
+  });
+}
+
 // ─── Admin Data Hooks ───────────────────────────────────────────
-// TODO: These require admin-level RLS policies (SELECT all) to function properly
+
+export function useAllProfiles() {
+  return useQuery({
+    queryKey: ["all-profiles"],
+    queryFn: async () => {
+      const { data, error } = await profileService.getAllProfiles();
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
 
 export function useAuditLogs() {
   return useQuery({
     queryKey: ["audit-logs"],
     queryFn: async () => {
-      const { data, error } = await auditLogService.getOwn();
+      const { data, error } = await auditLogService.getAll();
       if (error) throw error;
       return data || [];
     },

@@ -3,9 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import type { MedicalReport } from "@/shared/types/healthcare";
+import { useMyReports } from "@/shared/hooks/useHealthcare";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -16,23 +14,7 @@ const statusConfig: Record<string, string> = {
 export default function PatientReports() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-
-  const { data: reports = [], isLoading } = useQuery({
-    queryKey: ["patient-reports", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      
-      const { data, error } = await supabase
-        .from("medical_reports")
-        .select("*")
-        .eq("patient_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as MedicalReport[];
-    },
-    enabled: !!user,
-  });
+  const { data: reports = [], isLoading } = useMyReports();
 
   if (authLoading) {
     return (
@@ -63,14 +45,13 @@ export default function PatientReports() {
           <p className="text-muted-foreground">Your clinical documentation and health records</p>
         </div>
 
-        {/* Reports List */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : reports.length > 0 ? (
           <div className="space-y-4">
-            {reports.map((report) => {
+            {reports.map((report: any) => {
               const reportData = report.report_json as Record<string, unknown> | null;
               const title = (reportData?.title as string) || `${report.report_type} Report`;
               const doctor = (reportData?.doctor as string) || "Healthcare Provider";
@@ -133,7 +114,6 @@ export default function PatientReports() {
           </div>
         )}
 
-        {/* Info */}
         <div className="bg-secondary/30 rounded-2xl p-5 border border-border">
           <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
             💡 How Reports are Generated

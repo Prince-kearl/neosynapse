@@ -1,11 +1,10 @@
 import { Calendar, Clock, CheckCircle, Loader2, Video, Building2, Plus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useMyAppointments } from "@/shared/hooks/useHealthcare";
 import type { Appointment } from "@/shared/types/healthcare";
 
 const statusColors: Record<string, string> = {
@@ -25,30 +24,14 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function PatientAppointments() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { data: appointments = [], isLoading } = useMyAppointments();
 
-  const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["patient-appointments", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("patient_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as Appointment[];
-    },
-    enabled: !!user,
-  });
-
-  const upcomingAppointments = appointments.filter(a => 
+  const upcomingAppointments = appointments.filter((a: any) => 
     ["pending", "confirmed"].includes(a.status)
   );
-  const pastAppointments = appointments.filter(a => 
+  const pastAppointments = appointments.filter((a: any) => 
     ["completed", "cancelled", "in_progress"].includes(a.status)
   );
 
@@ -120,7 +103,6 @@ export default function PatientAppointments() {
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
@@ -136,7 +118,6 @@ export default function PatientAppointments() {
           </Button>
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="upcoming" className="mb-6">
           <TabsList className="bg-muted w-full sm:w-auto">
             <TabsTrigger value="upcoming" className="flex-1 sm:flex-none gap-2">
@@ -156,7 +137,7 @@ export default function PatientAppointments() {
               </div>
             ) : upcomingAppointments.length > 0 ? (
               <div className="space-y-4">
-                {upcomingAppointments.map((appointment) => (
+                {upcomingAppointments.map((appointment: any) => (
                   <AppointmentCard key={appointment.id} appointment={appointment} />
                 ))}
               </div>
@@ -185,7 +166,7 @@ export default function PatientAppointments() {
               </div>
             ) : pastAppointments.length > 0 ? (
               <div className="space-y-4">
-                {pastAppointments.map((appointment) => (
+                {pastAppointments.map((appointment: any) => (
                   <AppointmentCard key={appointment.id} appointment={appointment} />
                 ))}
               </div>
