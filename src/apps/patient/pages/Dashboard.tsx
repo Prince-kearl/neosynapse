@@ -7,8 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  useUpcomingAppointments,
+  useRecentReports,
+  useRecentTriage,
+  usePatientProfile,
+} from "@/shared/hooks/useHealthcare";
 import heroHealthAssistant from "@/assets/hero-health-assistant.jpg";
 
 const quickActions = [
@@ -25,77 +29,14 @@ export default function PatientDashboard() {
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
 
-  // Fetch upcoming appointments
-  const { data: appointments = [], isLoading: appointmentsLoading } = useQuery({
-    queryKey: ["patient-dashboard-appointments", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("patient_id", user.id)
-        .in("status", ["pending", "confirmed"])
-        .order("scheduled_at", { ascending: true })
-        .limit(3);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
+  const { data: appointments = [], isLoading: appointmentsLoading } = useUpcomingAppointments(3);
+  const { data: reports = [] } = useRecentReports(2);
+  const { data: triageSessions = [] } = useRecentTriage(1);
+  const { data: patientProfile } = usePatientProfile();
 
-  // Fetch recent medical reports
-  const { data: reports = [], isLoading: reportsLoading } = useQuery({
-    queryKey: ["patient-dashboard-reports", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("medical_reports")
-        .select("*")
-        .eq("patient_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(2);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  // Fetch recent triage sessions
-  const { data: triageSessions = [] } = useQuery({
-    queryKey: ["patient-dashboard-triage", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("triage_sessions")
-        .select("*")
-        .eq("patient_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user,
-  });
-
-  // Fetch patient profile for completion
-  const { data: patientProfile } = useQuery({
-    queryKey: ["patient-profile-completion", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data } = await supabase
-        .from("patient_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  // Calculate profile completion
   const calculateProfileCompletion = () => {
     if (!patientProfile) return 20;
-    let score = 20; // Base for having account
+    let score = 20;
     if (patientProfile.date_of_birth) score += 15;
     if (patientProfile.gender) score += 10;
     if (patientProfile.phone) score += 15;
@@ -106,7 +47,7 @@ export default function PatientDashboard() {
   };
 
   const profileCompletion = calculateProfileCompletion();
-  const latestTriage = triageSessions[0];
+  const latestTriage = triageSessions[0] as any;
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -224,7 +165,7 @@ export default function PatientDashboard() {
             </div>
           ) : appointments.length > 0 ? (
             <div className="space-y-3">
-              {appointments.map((apt) => (
+              {appointments.map((apt: any) => (
                 <div key={apt.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -266,7 +207,7 @@ export default function PatientDashboard() {
               </Button>
             </div>
             <div className="space-y-3">
-              {reports.map((report) => {
+              {reports.map((report: any) => {
                 const reportData = report.report_json as Record<string, unknown> | null;
                 const title = (reportData?.title as string) || `${report.report_type} Report`;
                 return (

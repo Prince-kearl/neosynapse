@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePatientProfile } from "@/shared/hooks/useHealthcare";
+import { patientProfileService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 
 const accountMenuItems = [
@@ -32,23 +33,8 @@ export default function PatientProfile() {
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split('@')[0] || "Patient";
 
-  // Fetch patient profile
-  const { data: patientProfile, isLoading: profileLoading } = useQuery({
-    queryKey: ["patient-profile", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data, error } = await supabase
-        .from("patient_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      if (error && error.code !== "PGRST116") throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  const { data: patientProfile, isLoading: profileLoading } = usePatientProfile();
 
-  // Form state
   const [formData, setFormData] = useState({
     date_of_birth: "",
     gender: "",
@@ -58,7 +44,6 @@ export default function PatientProfile() {
     preferred_language: "en",
   });
 
-  // Update form when data loads
   const initializeForm = () => {
     if (patientProfile) {
       setFormData({
@@ -73,33 +58,17 @@ export default function PatientProfile() {
     setEditDialogOpen(true);
   };
 
-  // Save patient profile
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!user) throw new Error("Not authenticated");
-      
-      const profileData = {
-        user_id: user.id,
+      const { error } = await patientProfileService.upsert(user.id, {
         ...data,
         updated_at: new Date().toISOString(),
-      };
-
-      if (patientProfile) {
-        const { error } = await supabase
-          .from("patient_profiles")
-          .update(profileData)
-          .eq("user_id", user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("patient_profiles")
-          .insert(profileData);
-        if (error) throw error;
-      }
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
-      queryClient.invalidateQueries({ queryKey: ["patient-profile-completion"] });
       toast({ title: "Profile updated", description: "Your health profile has been saved." });
       setEditDialogOpen(false);
     },
@@ -153,7 +122,6 @@ export default function PatientProfile() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Personal Details */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -267,7 +235,6 @@ export default function PatientProfile() {
               
               <Separator />
               
-              {/* Medical History */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -283,7 +250,6 @@ export default function PatientProfile() {
               
               <Separator />
               
-              {/* Consent Settings */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -319,7 +285,6 @@ export default function PatientProfile() {
           ))}
         </div>
 
-        {/* Settings & Help */}
         <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
           <button 
             onClick={() => navigate("/patient/settings")}
@@ -333,7 +298,6 @@ export default function PatientProfile() {
           </button>
         </div>
 
-        {/* Healthcare Professional Notice */}
         <div className="bg-muted/50 rounded-2xl p-5">
           <p className="font-medium text-sm text-foreground mb-1">Are you a healthcare provider?</p>
           <p className="text-xs text-muted-foreground">
@@ -342,7 +306,6 @@ export default function PatientProfile() {
           </p>
         </div>
 
-        {/* Log Out Button */}
         <Button 
           variant="outline" 
           className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 gap-2"
@@ -353,7 +316,6 @@ export default function PatientProfile() {
           Log Out
         </Button>
 
-        {/* App Version */}
         <p className="text-center text-xs text-muted-foreground pb-4">
           Neo Synapse v1.0.0 • Patient Portal
         </p>
