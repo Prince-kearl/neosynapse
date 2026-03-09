@@ -9,7 +9,7 @@ interface PatientGuardProps {
 
 export function PatientGuard({ children }: PatientGuardProps) {
   const { user, isLoading: authLoading } = useAuth();
-  const { role, isLoading: roleLoading } = useUserRole();
+  const { isPatient, isLoading: roleLoading } = useUserRole();
   const location = useLocation();
 
   if (authLoading || roleLoading) {
@@ -24,14 +24,8 @@ export function PatientGuard({ children }: PatientGuardProps) {
     return <Navigate to="/auth/sign-in" state={{ from: location }} replace />;
   }
 
-  if (role && role !== "patient") {
-    // Redirect other roles to their dashboards
-    if (role === "professional") {
-      return <Navigate to="/professional/dashboard" replace />;
-    }
-    if (role === "admin") {
-      return <Navigate to="/admin/dashboard" replace />;
-    }
+  if (!isPatient) {
+    return <Navigate to="/auth/sign-in" replace />;
   }
 
   return <>{children}</>;
