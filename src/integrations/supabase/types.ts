@@ -14,6 +14,141 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          appointment_type: string
+          created_at: string
+          facility_id: string | null
+          id: string
+          patient_id: string
+          professional_id: string | null
+          reason_for_visit: string | null
+          scheduled_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_type?: string
+          created_at?: string
+          facility_id?: string | null
+          id?: string
+          patient_id: string
+          professional_id?: string | null
+          reason_for_visit?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_type?: string
+          created_at?: string
+          facility_id?: string | null
+          id?: string
+          patient_id?: string
+          professional_id?: string | null
+          reason_for_visit?: string | null
+          scheduled_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          metadata: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
+      clinical_notes: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          draft_json: Json | null
+          encounter_id: string
+          final_json: Json | null
+          id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          draft_json?: Json | null
+          encounter_id: string
+          final_json?: Json | null
+          id?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          draft_json?: Json | null
+          encounter_id?: string
+          final_json?: Json | null
+          id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      consents: {
+        Row: {
+          consent_type: string
+          created_at: string
+          encounter_id: string | null
+          granted: boolean
+          id: string
+          patient_id: string
+          version: string | null
+        }
+        Insert: {
+          consent_type: string
+          created_at?: string
+          encounter_id?: string | null
+          granted?: boolean
+          id?: string
+          patient_id: string
+          version?: string | null
+        }
+        Update: {
+          consent_type?: string
+          created_at?: string
+          encounter_id?: string | null
+          granted?: boolean
+          id?: string
+          patient_id?: string
+          version?: string | null
+        }
+        Relationships: []
+      }
       consultation_rooms: {
         Row: {
           answer: Json | null
@@ -46,6 +181,75 @@ export type Database = {
           id?: string
           offer?: Json | null
           status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      encounters: {
+        Row: {
+          appointment_id: string | null
+          created_at: string
+          encounter_type: string
+          ended_at: string | null
+          id: string
+          patient_id: string
+          professional_id: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          created_at?: string
+          encounter_type?: string
+          ended_at?: string | null
+          id?: string
+          patient_id: string
+          professional_id?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          created_at?: string
+          encounter_type?: string
+          ended_at?: string | null
+          id?: string
+          patient_id?: string
+          professional_id?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      facilities: {
+        Row: {
+          contact_phone: string | null
+          created_at: string
+          facility_type: string | null
+          id: string
+          location: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          contact_phone?: string | null
+          created_at?: string
+          facility_type?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          contact_phone?: string | null
+          created_at?: string
+          facility_type?: string | null
+          id?: string
+          location?: string | null
+          name?: string
           updated_at?: string
         }
         Relationships: []
@@ -111,6 +315,42 @@ export type Database = {
           },
         ]
       }
+      invitations: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          facility_id: string | null
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          status: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at?: string
+          facility_id?: string | null
+          id?: string
+          invited_by?: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          status?: string
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          facility_id?: string | null
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: string
+          token?: string
+        }
+        Relationships: []
+      }
       meals: {
         Row: {
           created_at: string
@@ -160,6 +400,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      medical_reports: {
+        Row: {
+          created_at: string
+          encounter_id: string | null
+          id: string
+          patient_id: string
+          report_json: Json | null
+          report_type: string
+        }
+        Insert: {
+          created_at?: string
+          encounter_id?: string | null
+          id?: string
+          patient_id: string
+          report_json?: Json | null
+          report_type: string
+        }
+        Update: {
+          created_at?: string
+          encounter_id?: string | null
+          id?: string
+          patient_id?: string
+          report_json?: Json | null
+          report_type?: string
+        }
+        Relationships: []
       }
       order_items: {
         Row: {
@@ -250,6 +517,84 @@ export type Database = {
           },
         ]
       }
+      patient_profiles: {
+        Row: {
+          created_at: string
+          date_of_birth: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          gender: string | null
+          id: string
+          insurance_info: Json | null
+          phone: string | null
+          preferred_language: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          gender?: string | null
+          id?: string
+          insurance_info?: Json | null
+          phone?: string | null
+          preferred_language?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          gender?: string | null
+          id?: string
+          insurance_info?: Json | null
+          phone?: string | null
+          preferred_language?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      professional_profiles: {
+        Row: {
+          created_at: string
+          facility_id: string | null
+          id: string
+          license_number: string | null
+          profession_type: string | null
+          specialty: string | null
+          updated_at: string
+          user_id: string
+          verification_status: string
+        }
+        Insert: {
+          created_at?: string
+          facility_id?: string | null
+          id?: string
+          license_number?: string | null
+          profession_type?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id: string
+          verification_status?: string
+        }
+        Update: {
+          created_at?: string
+          facility_id?: string | null
+          id?: string
+          license_number?: string | null
+          profession_type?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id?: string
+          verification_status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -257,7 +602,10 @@ export type Database = {
           default_budget: number | null
           diet_preferences: string[] | null
           display_name: string | null
+          full_name: string | null
           id: string
+          role: Database["public"]["Enums"]["user_role"]
+          status: string
           updated_at: string
           user_id: string
         }
@@ -267,7 +615,10 @@ export type Database = {
           default_budget?: number | null
           diet_preferences?: string[] | null
           display_name?: string | null
+          full_name?: string | null
           id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: string
           updated_at?: string
           user_id: string
         }
@@ -277,7 +628,10 @@ export type Database = {
           default_budget?: number | null
           diet_preferences?: string[] | null
           display_name?: string | null
+          full_name?: string | null
           id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -327,6 +681,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      transcripts: {
+        Row: {
+          created_at: string
+          encounter_id: string
+          id: string
+          speaker_map: Json | null
+          transcript_json: Json | null
+        }
+        Insert: {
+          created_at?: string
+          encounter_id: string
+          id?: string
+          speaker_map?: Json | null
+          transcript_json?: Json | null
+        }
+        Update: {
+          created_at?: string
+          encounter_id?: string
+          id?: string
+          speaker_map?: Json | null
+          transcript_json?: Json | null
+        }
+        Relationships: []
+      }
+      triage_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          inputs_json: Json | null
+          patient_id: string
+          result_json: Json | null
+          urgency_level: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inputs_json?: Json | null
+          patient_id: string
+          result_json?: Json | null
+          urgency_level?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inputs_json?: Json | null
+          patient_id?: string
+          result_json?: Json | null
+          urgency_level?: string | null
+        }
+        Relationships: []
       }
       vendor_follows: {
         Row: {
@@ -413,7 +818,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: { Args: { user_uuid: string }; Returns: string }
     }
     Enums: {
       order_status:
@@ -423,6 +828,7 @@ export type Database = {
         | "ready"
         | "delivered"
         | "cancelled"
+      user_role: "patient" | "professional" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -558,6 +964,7 @@ export const Constants = {
         "delivered",
         "cancelled",
       ],
+      user_role: ["patient", "professional", "admin"],
     },
   },
 } as const
