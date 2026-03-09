@@ -70,7 +70,9 @@ export const patientProfileService = {
   upsert: (userId: string, data: Record<string, unknown>) =>
     supabase.from("patient_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
-  // TODO: Professional needs SELECT for assigned patients — requires RLS policy via encounters join
+  /** Professional: get patient profile for assigned patient (RLS enforced) */
+  getForAssignedPatient: (patientUserId: string) =>
+    supabase.from("patient_profiles").select("*").eq("user_id", patientUserId).maybeSingle(),
 };
 
 // ─── Professional Profiles ──────────────────────────────────────
