@@ -269,7 +269,7 @@ export const medicalReportService = {
     report_type: string;
     report_json: Record<string, unknown>;
   }) =>
-    supabase.from("medical_reports").insert(data),
+    supabase.from("medical_reports").insert(data as any),
 
   // TODO: Add UPDATE policy for report corrections
 };
