@@ -1,4 +1,4 @@
-import { Mail, Plus, Send, RotateCw, XCircle, Loader2 } from "lucide-react";
+import { Mail, Plus, Send, RotateCw, XCircle, Loader2, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const statusStyles: Record<string, string> = {
   pending: "border-yellow-500/50 text-yellow-500",
+  sent: "border-blue-500/50 text-blue-500",
   accepted: "border-emerald-500/50 text-emerald-500",
   revoked: "border-destructive/50 text-destructive",
   expired: "border-muted-foreground/50 text-muted-foreground",
@@ -43,23 +44,41 @@ export default function AdminInvitations() {
 
   const createInvite = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("invitations").insert({
-        email,
-        role: role as any,
-        invited_by: user!.id,
-        facility_id: facilityId || null,
+      const { data, error } = await supabase.functions.invoke("send-invitation", {
+        body: {
+          email,
+          role,
+          invited_by: user!.id,
+          facility_id: facilityId || null,
+        },
       });
+
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      return data as { success: boolean; email_sent: boolean; email_error: string | null; invite_link: string };
     },
-    onSuccess: () => {
-      toast({ title: "Invitation sent", description: `Invite sent to ${email}` });
+    onSuccess: (data) => {
+      if (data.email_sent) {
+        toast({ title: "Invitation sent", description: `Invite email delivered to ${email}` });
+      } else {
+        toast({
+          title: "Invitation created (email not sent)",
+          description: data.email_error || "Email delivery is not configured. Copy the invite link manually.",
+          variant: "destructive",
+        });
+        // Copy invite link to clipboard for manual sharing
+        if (data.invite_link) {
+          navigator.clipboard.writeText(data.invite_link).catch(() => {});
+        }
+      }
       setEmail("");
       setFacilityId("");
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
     },
     onError: (e: any) => {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+      toast({ title: "Error creating invitation", description: e.message, variant: "destructive" });
     },
   });
 
@@ -74,8 +93,15 @@ export default function AdminInvitations() {
     },
   });
 
-  const pending = invitations.filter((i: any) => i.status === "pending");
-  const other = invitations.filter((i: any) => i.status !== "pending");
+  const copyInviteLink = (token: string) => {
+    const link = `${window.location.origin}/auth/invite-accept?token=${token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      toast({ title: "Link copied", description: "Invite link copied to clipboard" });
+    });
+  };
+
+  const actionable = invitations.filter((i: any) => i.status === "pending" || i.status === "sent");
+  const history = invitations.filter((i: any) => i.status !== "pending" && i.status !== "sent");
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -124,26 +150,35 @@ export default function AdminInvitations() {
           </div>
         )}
 
-        {/* Pending */}
-        {pending.length > 0 && (
+        {/* Active invitations (pending + sent) */}
+        {actionable.length > 0 && (
           <section>
-            <h2 className="font-display text-base font-semibold text-yellow-400 mb-3">Pending ({pending.length})</h2>
+            <h2 className="font-display text-base font-semibold text-yellow-400 mb-3">Active ({actionable.length})</h2>
             <div className="space-y-3">
-              {pending.map((inv: any) => (
+              {actionable.map((inv: any) => (
                 <div key={inv.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center">
-                      <Mail className="w-6 h-6 text-yellow-500" />
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      inv.status === "sent" ? "bg-blue-500/10" : "bg-yellow-500/10"
+                    }`}>
+                      {inv.status === "sent" 
+                        ? <CheckCircle2 className="w-6 h-6 text-blue-500" />
+                        : <AlertTriangle className="w-6 h-6 text-yellow-500" />
+                      }
                     </div>
                     <div>
                       <p className="font-medium">{inv.email}</p>
                       <p className="text-sm text-muted-foreground">
                         <span className="capitalize">{inv.role}</span> • Expires {new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                        {inv.status === "pending" && <span className="text-yellow-500 ml-2">• Email not delivered</span>}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={statusStyles.pending}>pending</Badge>
+                    <Badge variant="outline" className={statusStyles[inv.status] || statusStyles.pending}>{inv.status}</Badge>
+                    <Button variant="ghost" size="sm" onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
+                      <Copy className="w-4 h-4" />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => revokeInvite.mutate(inv.id)}>
                       <XCircle className="w-4 h-4 mr-1" /> Revoke
                     </Button>
@@ -154,12 +189,12 @@ export default function AdminInvitations() {
           </section>
         )}
 
-        {/* Other */}
-        {other.length > 0 && (
+        {/* History */}
+        {history.length > 0 && (
           <section>
-            <h2 className="font-display text-base font-semibold text-muted-foreground mb-3">History ({other.length})</h2>
+            <h2 className="font-display text-base font-semibold text-muted-foreground mb-3">History ({history.length})</h2>
             <div className="space-y-3">
-              {other.map((inv: any) => (
+              {history.map((inv: any) => (
                 <div key={inv.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between opacity-70">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
