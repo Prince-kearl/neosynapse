@@ -61,8 +61,8 @@ export const patientProfileService = {
   get: (userId: string) =>
     supabase.from("patient_profiles").select("*").eq("user_id", userId).maybeSingle(),
 
-  upsert: (userId: string, data: Partial<Omit<PatientProfile, "id" | "user_id" | "created_at" | "updated_at">>) =>
-    supabase.from("patient_profiles").upsert({ user_id: userId, ...data }, { onConflict: "user_id" }),
+  upsert: (userId: string, data: Record<string, unknown>) =>
+    supabase.from("patient_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
   // TODO: Professional needs SELECT for assigned patients — requires RLS policy via encounters join
 };
