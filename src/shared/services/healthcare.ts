@@ -52,7 +52,13 @@ export const profileService = {
   update: (userId: string, data: Partial<Pick<Profile, "display_name" | "full_name" | "avatar_url">>) =>
     supabase.from("profiles").update(data).eq("user_id", userId),
 
-  // TODO: Admin needs a getAllProfiles() — requires RLS policy: admin SELECT all
+  /** Admin: get all profiles (RLS enforced — only admins see all) */
+  getAllProfiles: () =>
+    supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+
+  /** Admin: toggle user status */
+  updateStatus: (userId: string, status: string) =>
+    supabase.from("profiles").update({ status }).eq("user_id", userId),
 };
 
 // ─── Patient Profiles ───────────────────────────────────────────
