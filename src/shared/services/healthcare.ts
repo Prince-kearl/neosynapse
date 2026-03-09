@@ -201,7 +201,9 @@ export const triageService = {
   }) =>
     supabase.from("triage_sessions").insert(data as any),
 
-  // TODO: Professional needs SELECT for assigned patients — requires RLS via encounters
+  /** Professional: get triage sessions for assigned patient (RLS enforced) */
+  getForAssignedPatient: (patientId: string) =>
+    supabase.from("triage_sessions").select("*").eq("patient_id", patientId).order("created_at", { ascending: false }),
 };
 
 // ─── Consents ───────────────────────────────────────────────────
