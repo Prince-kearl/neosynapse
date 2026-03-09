@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
 
     // 5. Log audit event
     await supabaseAdmin.from("audit_logs").insert({
-      actor_id: user.id,
+      actor_id: userId,
       action: emailSent ? "invitation_sent" : "invitation_created_no_email",
       entity_type: "invitation",
       entity_id: invitation.id,
