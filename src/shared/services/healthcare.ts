@@ -177,7 +177,7 @@ export const triageService = {
     result_json?: Record<string, unknown>;
     urgency_level?: string;
   }) =>
-    supabase.from("triage_sessions").insert(data),
+    supabase.from("triage_sessions").insert(data as any),
 
   // TODO: Professional needs SELECT for assigned patients — requires RLS via encounters
 };
