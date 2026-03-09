@@ -218,7 +218,7 @@ export const transcriptService = {
     transcript_json: Record<string, unknown>;
     speaker_map?: Record<string, unknown>;
   }) =>
-    supabase.from("transcripts").insert(data),
+    supabase.from("transcripts").insert(data as any),
 };
 
 // ─── Clinical Notes ─────────────────────────────────────────────
