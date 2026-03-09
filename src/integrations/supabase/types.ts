@@ -819,6 +819,17 @@ export type Database = {
     }
     Functions: {
       get_user_role: { Args: { user_uuid: string }; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
+      is_patient: { Args: never; Returns: boolean }
+      is_professional: { Args: never; Returns: boolean }
+      professional_has_encounter_access: {
+        Args: { p_encounter_id: string }
+        Returns: boolean
+      }
+      professional_has_patient_access: {
+        Args: { p_patient_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       order_status:
