@@ -60,12 +60,11 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { data: isAdmin } = await supabaseAdmin.rpc("is_admin");
-    // Fallback: check profile role with service role client
+    // Check if caller is admin
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (profile?.role !== "admin") {
