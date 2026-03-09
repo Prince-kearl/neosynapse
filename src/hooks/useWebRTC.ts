@@ -34,7 +34,6 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
       return stream;
     } catch (err) {
       console.error("Failed to get media devices:", err);
-      // Fallback: try audio only
       if (video) {
         try {
           const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio });
@@ -86,24 +85,10 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     return pc;
   }, [roomId, userId, onRemoteStream, updateState]);
 
-  const startCall = useCallback(async (video: boolean, audio: boolean) => {
+  /** Subscribe to realtime signaling events for a given room */
+  const subscribeToRoom = useCallback((pc: RTCPeerConnection) => {
     if (!roomId) return;
-    updateState("connecting");
 
-    const stream = await getMediaStream(video, audio);
-    const pc = createPeerConnection(stream);
-
-    // Create offer
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    // Store offer in room
-    await supabase.from("consultation_rooms").update({
-      offer: { type: offer.type, sdp: offer.sdp } as any,
-      status: "waiting",
-    }).eq("id", roomId);
-
-    // Listen for answer via realtime
     const channel = supabase
       .channel(`room-${roomId}`)
       .on("postgres_changes", {
@@ -113,8 +98,13 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
         filter: `id=eq.${roomId}`,
       }, async (payload) => {
         const data = payload.new as any;
+        // Caller: receive answer
         if (data.answer && pc.signalingState === "have-local-offer") {
           await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+        // Callee: receive offer (for late-join scenarios)
+        if (data.offer && pc.signalingState === "stable" && !pc.remoteDescription) {
+          // This case is handled in joinCall directly
         }
       })
       .on("postgres_changes", {
@@ -135,7 +125,86 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
       .subscribe();
 
     channelRef.current = channel;
-  }, [roomId, userId, getMediaStream, createPeerConnection, updateState]);
+  }, [roomId, userId]);
+
+  /** Patient/caller: create offer and wait for answer */
+  const startCall = useCallback(async (video: boolean, audio: boolean) => {
+    if (!roomId) return;
+    updateState("connecting");
+
+    const stream = await getMediaStream(video, audio);
+    const pc = createPeerConnection(stream);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await supabase.from("consultation_rooms").update({
+      offer: { type: offer.type, sdp: offer.sdp } as any,
+      status: "waiting",
+    }).eq("id", roomId);
+
+    subscribeToRoom(pc);
+  }, [roomId, getMediaStream, createPeerConnection, updateState, subscribeToRoom]);
+
+  /** Professional/callee: read offer, create answer, subscribe to ICE */
+  const joinCall = useCallback(async (video: boolean, audio: boolean) => {
+    if (!roomId) return;
+    updateState("connecting");
+
+    // 1. Get media
+    const stream = await getMediaStream(video, audio);
+    const pc = createPeerConnection(stream);
+
+    // 2. Read the existing offer from the room
+    const { data: room, error } = await supabase
+      .from("consultation_rooms")
+      .select("offer, status")
+      .eq("id", roomId)
+      .single();
+
+    if (error || !room?.offer) {
+      console.error("No offer found for room:", error);
+      updateState("failed");
+      return;
+    }
+
+    // 3. Set remote description (the caller's offer)
+    const offer = room.offer as any;
+    await pc.setRemoteDescription(new RTCSessionDescription({
+      type: offer.type,
+      sdp: offer.sdp,
+    }));
+
+    // 4. Create answer
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // 5. Store answer in room
+    await supabase.from("consultation_rooms").update({
+      answer: { type: answer.type, sdp: answer.sdp } as any,
+      status: "active",
+    }).eq("id", roomId);
+
+    // 6. Add any existing ICE candidates that arrived before we subscribed
+    const { data: existingCandidates } = await supabase
+      .from("ice_candidates")
+      .select("*")
+      .eq("room_id", roomId)
+      .neq("sender", userId);
+
+    if (existingCandidates) {
+      for (const c of existingCandidates) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c.candidate as any));
+        } catch (err) {
+          console.error("Error adding existing ICE candidate:", err);
+        }
+      }
+    }
+
+    // 7. Subscribe to future signaling events
+    subscribeToRoom(pc);
+  }, [roomId, userId, getMediaStream, createPeerConnection, updateState, subscribeToRoom]);
 
   const toggleVideo = useCallback((enabled: boolean) => {
     localStream?.getVideoTracks().forEach(track => { track.enabled = enabled; });
@@ -174,6 +243,7 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     localStream,
     remoteStream,
     startCall,
+    joinCall,
     endCall,
     toggleVideo,
     toggleAudio,
