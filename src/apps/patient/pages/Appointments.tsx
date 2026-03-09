@@ -1,4 +1,4 @@
-import { Calendar, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Calendar, Clock, CheckCircle, Loader2, Video, Building2, Plus } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
