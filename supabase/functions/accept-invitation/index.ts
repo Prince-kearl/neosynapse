@@ -105,7 +105,12 @@ Deno.serve(async (req) => {
         }, { onConflict: "user_id" });
     }
 
-    // 5. Mark invitation as accepted
+    // 5. Insert role into user_roles table
+    await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: userId, role: invitation.role }, { onConflict: "user_id,role" });
+
+    // 6. Mark invitation as accepted
     await supabaseAdmin
       .from("invitations")
       .update({ status: "accepted" })
