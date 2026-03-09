@@ -9,7 +9,7 @@ interface AdminGuardProps {
 
 export function AdminGuard({ children }: AdminGuardProps) {
   const { user, isLoading: authLoading } = useAuth();
-  const { role, isLoading: roleLoading } = useUserRole();
+  const { isAdmin, isLoading: roleLoading } = useUserRole();
   const location = useLocation();
 
   if (authLoading || roleLoading) {
@@ -24,15 +24,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
     return <Navigate to="/auth/sign-in" state={{ from: location }} replace />;
   }
 
-  if (role !== "admin") {
-    // Redirect unauthorized users
-    if (role === "patient") {
-      return <Navigate to="/patient/dashboard" replace />;
-    }
-    if (role === "professional") {
-      return <Navigate to="/professional/dashboard" replace />;
-    }
-    // Unknown role
+  if (!isAdmin) {
     return <Navigate to="/auth/sign-in" replace />;
   }
 
