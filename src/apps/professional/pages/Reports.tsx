@@ -1,15 +1,51 @@
-import { FileCheck, Download, Eye, Clock } from "lucide-react";
+import { FileCheck, Download, Eye, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-// TODO: Fetch real reports from database
-const mockReports = [
-  { id: "1", patientName: "Ama Mensah", type: "Consultation Summary", date: "2026-03-08T14:00:00Z", status: "approved" },
-  { id: "2", patientName: "Kofi Asante", type: "Lab Order", date: "2026-03-07T10:00:00Z", status: "pending" },
-  { id: "3", patientName: "Efua Owusu", type: "Prescription", date: "2026-03-05T09:00:00Z", status: "approved" },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ProfessionalReports() {
+  const { user } = useAuth();
+
+  // Fetch medical reports linked to encounters for this professional
+  const { data: reports = [], isLoading } = useQuery({
+    queryKey: ["pro-reports", user?.id],
+    queryFn: async () => {
+      // Get encounters for this professional first
+      const { data: encounters, error: encError } = await supabase
+        .from("encounters")
+        .select("id, patient_id")
+        .eq("professional_id", user!.id);
+      if (encError) throw encError;
+      if (!encounters || encounters.length === 0) return [];
+
+      const encounterIds = encounters.map((e) => e.id);
+      const { data, error } = await supabase
+        .from("medical_reports")
+        .select("*")
+        .in("encounter_id", encounterIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+
+      // Enrich with patient names
+      const patientIds = [...new Set((data || []).map((r) => r.patient_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name")
+        .in("user_id", patientIds);
+
+      return (data || []).map((report) => ({
+        ...report,
+        patientName: profiles?.find((p) => p.user_id === report.patient_id)?.full_name
+          || profiles?.find((p) => p.user_id === report.patient_id)?.display_name
+          || "Patient",
+      }));
+    },
+    enabled: !!user,
+  });
+
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
@@ -18,40 +54,52 @@ export default function ProfessionalReports() {
           <p className="text-muted-foreground">Finalized clinical documents and reports</p>
         </div>
 
-        <div className="space-y-4">
-          {mockReports.map((report) => (
-            <div key={report.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <FileCheck className="w-6 h-6 text-primary" />
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : reports.length > 0 ? (
+          <div className="space-y-3">
+            {reports.map((report: any) => (
+              <div key={report.id} className="bg-card rounded-2xl p-4 border border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <FileCheck className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{report.patientName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {report.report_type} • {new Date(report.created_at).toLocaleDateString("en-GB", {
+                          day: "numeric", month: "short",
+                        })}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{report.patientName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {report.type} • {new Date(report.date).toLocaleDateString("en-GB", { 
-                        day: "numeric", month: "short"
-                      })}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="border-emerald-500/50 text-emerald-500">
+                      approved
+                    </Badge>
+                    <Button variant="ghost" size="sm">
+                      <Eye className="w-4 h-4 mr-1" /> View
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      <Download className="w-4 h-4 mr-1" /> Export
+                    </Button>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline" className={
-                    report.status === "approved" ? "border-green-500/50 text-green-500" : "border-yellow-500/50 text-yellow-500"
-                  }>
-                    {report.status}
-                  </Badge>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="w-4 h-4 mr-1" /> View
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Download className="w-4 h-4 mr-1" /> Export
-                  </Button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl p-8 text-center border border-border">
+            <FileCheck className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground">No reports yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Reports are generated after encounters are completed and notes finalized.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
