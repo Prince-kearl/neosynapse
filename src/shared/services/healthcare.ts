@@ -102,9 +102,17 @@ export const facilityService = {
   getById: (id: string) =>
     supabase.from("facilities").select("*").eq("id", id).single(),
 
-  // TODO: Admin needs INSERT/UPDATE/DELETE — requires RLS policies:
-  //   CREATE POLICY "Admins can manage facilities" ON facilities
-  //   FOR ALL USING (public.get_user_role(auth.uid()) = 'admin');
+  /** Admin: create facility (RLS enforced) */
+  create: (data: { name: string; facility_type?: string; location?: string; contact_phone?: string }) =>
+    supabase.from("facilities").insert(data),
+
+  /** Admin: update facility */
+  update: (id: string, data: Record<string, unknown>) =>
+    supabase.from("facilities").update(data).eq("id", id),
+
+  /** Admin: delete facility */
+  remove: (id: string) =>
+    supabase.from("facilities").delete().eq("id", id),
 };
 
 // ─── Invitations ────────────────────────────────────────────────
