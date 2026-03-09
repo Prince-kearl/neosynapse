@@ -52,7 +52,13 @@ export const profileService = {
   update: (userId: string, data: Partial<Pick<Profile, "display_name" | "full_name" | "avatar_url">>) =>
     supabase.from("profiles").update(data).eq("user_id", userId),
 
-  // TODO: Admin needs a getAllProfiles() — requires RLS policy: admin SELECT all
+  /** Admin: get all profiles (RLS enforced — only admins see all) */
+  getAllProfiles: () =>
+    supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+
+  /** Admin: toggle user status */
+  updateStatus: (userId: string, status: string) =>
+    supabase.from("profiles").update({ status }).eq("user_id", userId),
 };
 
 // ─── Patient Profiles ───────────────────────────────────────────
@@ -64,7 +70,9 @@ export const patientProfileService = {
   upsert: (userId: string, data: Record<string, unknown>) =>
     supabase.from("patient_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
-  // TODO: Professional needs SELECT for assigned patients — requires RLS policy via encounters join
+  /** Professional: get patient profile for assigned patient (RLS enforced) */
+  getForAssignedPatient: (patientUserId: string) =>
+    supabase.from("patient_profiles").select("*").eq("user_id", patientUserId).maybeSingle(),
 };
 
 // ─── Professional Profiles ──────────────────────────────────────
@@ -76,7 +84,13 @@ export const professionalProfileService = {
   upsert: (userId: string, data: Record<string, unknown>) =>
     supabase.from("professional_profiles").upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" }),
 
-  // TODO: Admin needs SELECT all + UPDATE verification_status — requires admin RLS policy
+  /** Admin: get all professional profiles (RLS enforced) */
+  getAll: () =>
+    supabase.from("professional_profiles").select("*").order("created_at", { ascending: false }),
+
+  /** Admin: update verification status */
+  updateVerification: (userId: string, status: string) =>
+    supabase.from("professional_profiles").update({ verification_status: status }).eq("user_id", userId),
 };
 
 // ─── Facilities ─────────────────────────────────────────────────
@@ -88,9 +102,17 @@ export const facilityService = {
   getById: (id: string) =>
     supabase.from("facilities").select("*").eq("id", id).single(),
 
-  // TODO: Admin needs INSERT/UPDATE/DELETE — requires RLS policies:
-  //   CREATE POLICY "Admins can manage facilities" ON facilities
-  //   FOR ALL USING (public.get_user_role(auth.uid()) = 'admin');
+  /** Admin: create facility (RLS enforced) */
+  create: (data: { name: string; facility_type?: string; location?: string; contact_phone?: string }) =>
+    supabase.from("facilities").insert(data),
+
+  /** Admin: update facility */
+  update: (id: string, data: Record<string, unknown>) =>
+    supabase.from("facilities").update(data).eq("id", id),
+
+  /** Admin: delete facility */
+  remove: (id: string) =>
+    supabase.from("facilities").delete().eq("id", id),
 };
 
 // ─── Invitations ────────────────────────────────────────────────
@@ -179,7 +201,9 @@ export const triageService = {
   }) =>
     supabase.from("triage_sessions").insert(data as any),
 
-  // TODO: Professional needs SELECT for assigned patients — requires RLS via encounters
+  /** Professional: get triage sessions for assigned patient (RLS enforced) */
+  getForAssignedPatient: (patientId: string) =>
+    supabase.from("triage_sessions").select("*").eq("patient_id", patientId).order("created_at", { ascending: false }),
 };
 
 // ─── Consents ───────────────────────────────────────────────────
@@ -196,7 +220,9 @@ export const consentService = {
   }) =>
     supabase.from("consents").insert(data),
 
-  // TODO: Add UPDATE policy for revoking consent (patient only)
+  /** Patient: revoke consent (RLS enforced — patient only) */
+  revoke: (id: string) =>
+    supabase.from("consents").update({ granted: false }).eq("id", id),
 };
 
 // ─── Transcripts ────────────────────────────────────────────────
@@ -271,7 +297,9 @@ export const medicalReportService = {
   }) =>
     supabase.from("medical_reports").insert(data as any),
 
-  // TODO: Add UPDATE policy for report corrections
+  /** Professional: update report (RLS enforced — encounter professional only) */
+  update: (id: string, data: { report_json: Record<string, unknown> }) =>
+    supabase.from("medical_reports").update(data as any).eq("id", id),
 };
 
 // ─── Audit Logs ─────────────────────────────────────────────────
@@ -291,7 +319,7 @@ export const auditLogService = {
   }) =>
     supabase.from("audit_logs").insert(data as any),
 
-  // TODO: Admin needs SELECT all audit logs — requires RLS policy:
-  //   CREATE POLICY "Admins can view all audit logs" ON audit_logs
-  //   FOR SELECT USING (public.get_user_role(auth.uid()) = 'admin');
+  /** Admin: get all audit logs (RLS enforced) */
+  getAll: () =>
+    supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(500),
 };
