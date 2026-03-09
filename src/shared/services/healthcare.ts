@@ -319,7 +319,7 @@ export const auditLogService = {
   }) =>
     supabase.from("audit_logs").insert(data as any),
 
-  // TODO: Admin needs SELECT all audit logs — requires RLS policy:
-  //   CREATE POLICY "Admins can view all audit logs" ON audit_logs
-  //   FOR SELECT USING (public.get_user_role(auth.uid()) = 'admin');
+  /** Admin: get all audit logs (RLS enforced) */
+  getAll: () =>
+    supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(500),
 };
