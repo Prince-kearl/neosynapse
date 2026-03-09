@@ -111,9 +111,12 @@ Deno.serve(async (req) => {
 
     // 2. Build the invite link
     // In production, replace with your actual app domain
-    const appUrl = Deno.env.get("APP_URL") || Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".lovable.app") || "https://your-app.lovable.app";
-    // Use the origin from the request referer/origin header as fallback
-    const origin = req.headers.get("origin") || appUrl;
+    // APP_URL must be set as a Supabase secret (e.g. https://your-domain.com)
+    const appUrl = Deno.env.get("APP_URL");
+    if (!appUrl) {
+      console.warn("APP_URL secret not set — invitation links will use request origin as fallback");
+    }
+    const origin = req.headers.get("origin") || appUrl || "https://localhost:3000";
     const inviteLink = `${origin}/auth/invite-accept?token=${invitation.token}`;
 
     // 3. Send the email
