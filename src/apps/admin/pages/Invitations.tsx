@@ -1,56 +1,81 @@
-import { Mail, Plus, Send, XCircle, Loader2 } from "lucide-react";
+import { Mail, Plus, Send, RotateCw, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const statusStyles: Record<string, string> = {
+  pending: "border-yellow-500/50 text-yellow-500",
+  accepted: "border-emerald-500/50 text-emerald-500",
+  revoked: "border-destructive/50 text-destructive",
+  expired: "border-muted-foreground/50 text-muted-foreground",
+};
+
 export default function AdminInvitations() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("professional");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [facilityId, setFacilityId] = useState<string>("");
 
-  const { data: invitations = [], refetch } = useQuery({
+  const { data: invitations = [], isLoading } = useQuery({
     queryKey: ["admin-invitations"],
     queryFn: async () => {
       const { data, error } = await supabase.from("invitations").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
-  const handleCreateInvitation = async () => {
-    if (!email || !user) return;
-    setIsSubmitting(true);
-    try {
+  const { data: facilities = [] } = useQuery({
+    queryKey: ["admin-facilities-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("facilities").select("id, name").order("name");
+      return data || [];
+    },
+  });
+
+  const createInvite = useMutation({
+    mutationFn: async () => {
       const { error } = await supabase.from("invitations").insert({
         email,
         role: role as any,
-        invited_by: user.id,
+        invited_by: user!.id,
+        facility_id: facilityId || null,
       });
       if (error) throw error;
+    },
+    onSuccess: () => {
       toast({ title: "Invitation sent", description: `Invite sent to ${email}` });
       setEmail("");
+      setFacilityId("");
       setShowForm(false);
-      refetch();
-    } catch (e: any) {
+      queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
+    },
+    onError: (e: any) => {
       toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    },
+  });
 
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-500/10 text-yellow-500",
-    accepted: "bg-green-500/10 text-green-500",
-    revoked: "bg-destructive/10 text-destructive",
-  };
+  const revokeInvite = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("invitations").update({ status: "revoked" }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
+      toast({ title: "Invitation revoked" });
+    },
+  });
+
+  const pending = invitations.filter((i: any) => i.status === "pending");
+  const other = invitations.filter((i: any) => i.status !== "pending");
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -65,11 +90,17 @@ export default function AdminInvitations() {
           </Button>
         </div>
 
+        {/* Create Form */}
         {showForm && (
-          <div className="bg-card rounded-2xl p-5 shadow-food-card border border-border space-y-4">
+          <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
             <h3 className="font-semibold">Create Invitation</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input placeholder="email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 rounded-xl" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <Input
+                placeholder="email@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12 rounded-xl"
+              />
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -77,35 +108,82 @@ export default function AdminInvitations() {
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={handleCreateInvitation} disabled={isSubmitting || !email} className="h-12">
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" /> Send Invite</>}
+              <Select value={facilityId} onValueChange={setFacilityId}>
+                <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Facility (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No facility</SelectItem>
+                  {facilities.map((f: any) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={() => createInvite.mutate()} disabled={createInvite.isPending || !email} className="h-12">
+                {createInvite.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" /> Send Invite</>}
               </Button>
             </div>
           </div>
         )}
 
-        <div className="space-y-3">
-          {invitations.map((inv: any) => (
-            <div key={inv.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center"><Mail className="w-6 h-6 text-primary" /></div>
-                <div>
-                  <p className="font-medium">{inv.email}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Role: <span className="capitalize">{inv.role}</span> • Expires: {new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                  </p>
+        {/* Pending */}
+        {pending.length > 0 && (
+          <section>
+            <h2 className="font-display text-base font-semibold text-yellow-400 mb-3">Pending ({pending.length})</h2>
+            <div className="space-y-3">
+              {pending.map((inv: any) => (
+                <div key={inv.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center">
+                      <Mail className="w-6 h-6 text-yellow-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{inv.email}</p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="capitalize">{inv.role}</span> • Expires {new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusStyles.pending}>pending</Badge>
+                    <Button variant="ghost" size="sm" onClick={() => revokeInvite.mutate(inv.id)}>
+                      <XCircle className="w-4 h-4 mr-1" /> Revoke
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <Badge className={statusColors[inv.status] || statusColors.pending}>{inv.status}</Badge>
+              ))}
             </div>
-          ))}
-          {invitations.length === 0 && (
-            <div className="bg-card rounded-2xl p-8 shadow-food-card text-center">
-              <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">No invitations yet</p>
+          </section>
+        )}
+
+        {/* Other */}
+        {other.length > 0 && (
+          <section>
+            <h2 className="font-display text-base font-semibold text-muted-foreground mb-3">History ({other.length})</h2>
+            <div className="space-y-3">
+              {other.map((inv: any) => (
+                <div key={inv.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between opacity-70">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                      <Mail className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{inv.email}</p>
+                      <p className="text-sm text-muted-foreground capitalize">{inv.role}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className={statusStyles[inv.status] || ""}>{inv.status}</Badge>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+          </section>
+        )}
+
+        {invitations.length === 0 && !isLoading && (
+          <div className="bg-card rounded-2xl p-8 text-center border border-border">
+            <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground">No invitations yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Click "New Invitation" to invite professionals or admins.</p>
+          </div>
+        )}
       </div>
     </div>
   );
