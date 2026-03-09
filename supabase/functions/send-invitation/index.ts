@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   try {
     // Authenticate the caller
     const authHeader = req.headers.get("authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -44,26 +44,27 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify caller is admin
+    // Verify caller JWT
     const supabaseUser = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { authorization: authHeader } } }
     );
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) {
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const userId = claimsData.claims.sub;
 
-    const { data: isAdmin } = await supabaseAdmin.rpc("is_admin");
-    // Fallback: check profile role with service role client
+    // Check if caller is admin
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (profile?.role !== "admin") {
@@ -88,7 +89,7 @@ Deno.serve(async (req) => {
       .insert({
         email,
         role,
-        invited_by: invited_by || user.id,
+        invited_by: invited_by || userId,
         facility_id: facility_id || null,
       })
       .select()
@@ -184,7 +185,7 @@ Deno.serve(async (req) => {
 
     // 5. Log audit event
     await supabaseAdmin.from("audit_logs").insert({
-      actor_id: user.id,
+      actor_id: userId,
       action: emailSent ? "invitation_sent" : "invitation_created_no_email",
       entity_type: "invitation",
       entity_id: invitation.id,
