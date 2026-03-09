@@ -82,6 +82,37 @@ export default function AdminInvitations() {
     },
   });
 
+  const resendInvite = useMutation({
+    mutationFn: async (inv: { id: string; email: string; role: string; facility_id: string | null }) => {
+      const { data, error } = await supabase.functions.invoke("send-invitation", {
+        body: {
+          email: inv.email,
+          role: inv.role,
+          invited_by: user!.id,
+          facility_id: inv.facility_id,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      // Update the original invitation status if email was sent
+      if (data?.email_sent) {
+        await supabase.from("invitations").update({ status: "sent" }).eq("id", inv.id);
+      }
+      return data as { email_sent: boolean; email_error: string | null };
+    },
+    onSuccess: (data, inv) => {
+      if (data.email_sent) {
+        toast({ title: "Invitation resent", description: `Email delivered to ${inv.email}` });
+      } else {
+        toast({ title: "Resend failed", description: data.email_error || "Email delivery failed", variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error resending", description: e.message, variant: "destructive" });
+    },
+  });
+
   const revokeInvite = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("invitations").update({ status: "revoked" }).eq("id", id);
@@ -178,6 +209,18 @@ export default function AdminInvitations() {
                     <Badge variant="outline" className={statusStyles[inv.status] || statusStyles.pending}>{inv.status}</Badge>
                     <Button variant="ghost" size="sm" onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
                       <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => resendInvite.mutate(inv)}
+                      disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
+                      title="Resend invitation email"
+                    >
+                      {resendInvite.isPending && resendInvite.variables?.id === inv.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RotateCw className="w-4 h-4 mr-1" />}
+                      Resend
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => revokeInvite.mutate(inv.id)}>
                       <XCircle className="w-4 h-4 mr-1" /> Revoke
