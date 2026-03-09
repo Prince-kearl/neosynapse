@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       .insert({
         email,
         role,
-        invited_by: invited_by || user.id,
+        invited_by: invited_by || userId,
         facility_id: facility_id || null,
       })
       .select()
