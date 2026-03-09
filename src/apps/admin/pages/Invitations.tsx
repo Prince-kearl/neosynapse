@@ -108,10 +108,10 @@ export default function AdminInvitations() {
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={facilityId} onValueChange={setFacilityId}>
+              <Select value={facilityId || "none"} onValueChange={(v) => setFacilityId(v === "none" ? "" : v)}>
                 <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Facility (optional)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No facility</SelectItem>
+                  <SelectItem value="none">No facility</SelectItem>
                   {facilities.map((f: any) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
