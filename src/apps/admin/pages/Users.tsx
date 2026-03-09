@@ -1,29 +1,56 @@
-import { Users, Search, Shield, MoreVertical } from "lucide-react";
+import { Users, Search, Loader2, UserCheck, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
-// TODO: Fetch real users from profiles table
-const mockUsers = [
-  { id: "1", name: "Ama Mensah", email: "ama@email.com", role: "patient", status: "active" },
-  { id: "2", name: "Dr. Kwame Asante", email: "kwame@hospital.gh", role: "professional", status: "active" },
-  { id: "3", name: "Admin User", email: "admin@neosynapse.health", role: "admin", status: "active" },
-  { id: "4", name: "Efua Owusu", email: "efua@email.com", role: "patient", status: "active" },
-];
-
-const roleColors: Record<string, string> = {
-  patient: "bg-blue-500/10 text-blue-500",
-  professional: "bg-green-500/10 text-green-500",
-  admin: "bg-destructive/10 text-destructive",
+const roleStyles: Record<string, string> = {
+  patient: "border-blue-500/50 text-blue-500",
+  professional: "border-emerald-500/50 text-emerald-500",
+  admin: "border-destructive/50 text-destructive",
 };
 
 export default function AdminUsers() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const filtered = mockUsers.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const toggleStatus = useMutation({
+    mutationFn: async ({ userId, newStatus }: { userId: string; newStatus: string }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: newStatus })
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast({ title: "User updated" });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const filtered = users.filter((u: any) => {
+    const name = u.full_name || u.display_name || "";
+    const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
+      (u.user_id || "").toLowerCase().includes(search.toLowerCase());
     const matchesRole = !roleFilter || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -33,40 +60,81 @@ export default function AdminUsers() {
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Users</h1>
-          <p className="text-muted-foreground">Manage platform users and access</p>
+          <p className="text-muted-foreground">Manage platform users and access — {users.length} total</p>
         </div>
 
-        <div className="flex gap-3">
+        {/* Search + Filter */}
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-12 rounded-xl" />
+            <Input placeholder="Search by name..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-12 rounded-xl" />
           </div>
           <div className="flex gap-2">
             {["patient", "professional", "admin"].map((role) => (
-              <Button key={role} variant={roleFilter === role ? "default" : "outline"} size="sm" onClick={() => setRoleFilter(roleFilter === role ? null : role)} className="capitalize">
+              <Button
+                key={role}
+                variant={roleFilter === role ? "default" : "outline"}
+                size="sm"
+                onClick={() => setRoleFilter(roleFilter === role ? null : role)}
+                className="capitalize"
+              >
                 {role}
               </Button>
             ))}
           </div>
         </div>
 
-        <div className="space-y-3">
-          {filtered.map((user) => (
-            <div key={user.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">{user.name.charAt(0)}</div>
-                <div>
-                  <p className="font-medium">{user.name}</p>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+        {/* User List */}
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filtered.length > 0 ? (
+          <div className="space-y-3">
+            {filtered.map((u: any) => (
+              <div key={u.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                    {(u.full_name || u.display_name || "?").charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-medium">{u.full_name || u.display_name || "Unnamed"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Joined {new Date(u.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className={roleStyles[u.role] || ""}>{u.role}</Badge>
+                  <Badge variant="outline" className={
+                    u.status === "active" ? "border-emerald-500/50 text-emerald-500" : "border-destructive/50 text-destructive"
+                  }>
+                    {u.status}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleStatus.mutate({
+                      userId: u.user_id,
+                      newStatus: u.status === "active" ? "suspended" : "active",
+                    })}
+                  >
+                    {u.status === "active" ? (
+                      <><UserX className="w-4 h-4 mr-1" /> Suspend</>
+                    ) : (
+                      <><UserCheck className="w-4 h-4 mr-1" /> Activate</>
+                    )}
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Badge className={roleColors[user.role]}>{user.role}</Badge>
-                <Badge variant="outline" className="border-green-500/50 text-green-500">{user.status}</Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card rounded-2xl p-8 text-center border border-border">
+            <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+            <p className="text-muted-foreground">No users found</p>
+          </div>
+        )}
       </div>
     </div>
   );

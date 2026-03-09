@@ -1,33 +1,120 @@
-import { Users, Mail, Building2, ShieldCheck, ScrollText, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { Users, Mail, Building2, ShieldCheck, ScrollText, Activity, ChevronRight, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/auth/hooks/useUserRole";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { profile } = useUserRole();
+
+  const displayName = profile?.display_name || profile?.full_name || "Admin";
+
+  // Fetch counts
+  const { data: userCount = 0 } = useQuery({
+    queryKey: ["admin-user-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("profiles").select("*", { count: "exact", head: true });
+      if (error) return 0;
+      return count || 0;
+    },
+  });
+
+  const { data: pendingInvites = 0 } = useQuery({
+    queryKey: ["admin-pending-invites"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("invitations").select("*", { count: "exact", head: true }).eq("status", "pending");
+      if (error) return 0;
+      return count || 0;
+    },
+  });
+
+  const { data: facilityCount = 0 } = useQuery({
+    queryKey: ["admin-facility-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("facilities").select("*", { count: "exact", head: true });
+      if (error) return 0;
+      return count || 0;
+    },
+  });
+
+  const { data: proCount = 0 } = useQuery({
+    queryKey: ["admin-pro-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("professional_profiles").select("*", { count: "exact", head: true });
+      if (error) return 0;
+      return count || 0;
+    },
+  });
+
+  // Recent audit logs
+  const { data: recentLogs = [] } = useQuery({
+    queryKey: ["admin-recent-logs"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(5);
+      if (error) return [];
+      return data || [];
+    },
+  });
+
+  // Pending verifications
+  const { data: pendingVerifications = 0 } = useQuery({
+    queryKey: ["admin-pending-verifications"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("professional_profiles").select("*", { count: "exact", head: true }).eq("verification_status", "pending");
+      if (error) return 0;
+      return count || 0;
+    },
+  });
+
+  const stats = [
+    { label: "Total Users", value: userCount, icon: Users, color: "text-primary" },
+    { label: "Pending Invites", value: pendingInvites, icon: Mail, color: "text-yellow-400" },
+    { label: "Active Facilities", value: facilityCount, icon: Building2, color: "text-accent" },
+    { label: "Clinicians", value: proCount, icon: ShieldCheck, color: "text-emerald-400" },
+  ];
 
   return (
     <div className="flex-1 min-h-screen bg-background">
-      <div className="p-4 lg:p-6 max-w-7xl space-y-6 lg:space-y-8">
+      <div className="p-4 lg:p-6 max-w-7xl mx-auto space-y-6">
+        {/* Header */}
         <div>
-          <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground">Admin Console</h1>
-          <p className="text-muted-foreground mt-1">System overview and management</p>
+          <h1 className="font-display text-2xl lg:text-3xl font-bold">Admin Console</h1>
+          <p className="text-muted-foreground mt-1">Welcome back, {displayName}. System overview and management.</p>
         </div>
 
-        {/* Stats */}
+        {/* Alerts */}
+        {(pendingVerifications > 0 || pendingInvites > 0) && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="w-5 h-5 text-yellow-500" />
+              <span className="font-semibold text-yellow-500">Action Required</span>
+            </div>
+            <div className="text-sm text-muted-foreground space-y-1">
+              {pendingVerifications > 0 && (
+                <p>{pendingVerifications} professional(s) awaiting verification.</p>
+              )}
+              {pendingInvites > 0 && (
+                <p>{pendingInvites} invitation(s) still pending acceptance.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: "Total Users", value: "24", icon: Users, color: "bg-primary/10 text-primary" },
-            { label: "Pending Invites", value: "3", icon: Mail, color: "bg-yellow-500/10 text-yellow-500" },
-            { label: "Active Facilities", value: "5", icon: Building2, color: "bg-accent/10 text-accent" },
-            { label: "Clinicians", value: "8", icon: ShieldCheck, color: "bg-green-500/10 text-green-500" },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
+          {stats.map((stat) => (
+            <div key={stat.label} className="bg-card rounded-2xl p-4 border border-border">
               <div className="flex items-center gap-3 mb-2">
-                <div className={`w-10 h-10 rounded-xl ${stat.color} flex items-center justify-center`}>
-                  <stat.icon className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
-                <span className="text-2xl font-bold">{stat.value}</span>
               </div>
+              <p className="text-2xl font-bold">{stat.value}</p>
               <p className="text-sm text-muted-foreground">{stat.label}</p>
             </div>
           ))}
@@ -35,42 +122,57 @@ export default function AdminDashboard() {
 
         {/* Quick Actions */}
         <section>
-          <h2 className="font-display text-lg font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <h2 className="font-display text-lg font-semibold mb-3">Quick Actions</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: "Invite Professional", url: "/admin/invitations", icon: Mail },
-              { label: "Manage Users", url: "/admin/users", icon: Users },
-              { label: "Add Facility", url: "/admin/facilities", icon: Building2 },
-              { label: "View Audit Log", url: "/admin/audit", icon: ScrollText },
+              { label: "Invite Professional", path: "/admin/invitations", icon: Mail, desc: "Send invite link" },
+              { label: "Manage Users", path: "/admin/users", icon: Users, desc: "View all accounts" },
+              { label: "Add Facility", path: "/admin/facilities", icon: Building2, desc: "Register location" },
+              { label: "View Audit Log", path: "/admin/audit", icon: ScrollText, desc: "Review activity" },
             ].map((action) => (
-              <button key={action.label} onClick={() => navigate(action.url)} className="bg-card rounded-2xl p-4 shadow-food-card border border-border text-left hover:border-primary/50 transition-colors">
-                <action.icon className="w-8 h-8 text-primary mb-2" />
+              <button
+                key={action.label}
+                onClick={() => navigate(action.path)}
+                className="bg-card border border-border rounded-2xl p-4 text-left hover:border-primary/50 transition-colors group"
+              >
+                <action.icon className="w-6 h-6 text-primary mb-2 group-hover:scale-110 transition-transform" />
                 <p className="font-medium text-sm">{action.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
               </button>
             ))}
           </div>
         </section>
 
         {/* Recent Activity */}
-        <section className="bg-card rounded-2xl p-5 shadow-food-card border border-border">
-          <h2 className="font-display text-lg font-semibold mb-4">Recent Activity</h2>
-          <div className="space-y-3">
-            {[
-              { action: "Professional invitation sent to dr.ama@hospital.gh", time: "2 hours ago", type: "info" },
-              { action: "New patient registration: kofi.asante@email.com", time: "5 hours ago", type: "success" },
-              { action: "Facility 'Korle-Bu Teaching Hospital' updated", time: "1 day ago", type: "info" },
-            ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 bg-muted/30 rounded-xl">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.type === "success" ? "bg-green-500/10" : "bg-primary/10"}`}>
-                  {item.type === "success" ? <CheckCircle className="w-4 h-4 text-green-500" /> : <Clock className="w-4 h-4 text-primary" />}
-                </div>
-                <div>
-                  <p className="text-sm">{item.action}</p>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
-                </div>
-              </div>
-            ))}
+        <section className="bg-card rounded-2xl p-5 border border-border">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold flex items-center gap-2">
+              <ScrollText className="w-5 h-5 text-primary" />
+              Recent Activity
+            </h2>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/admin/audit")}>
+              View All <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
           </div>
+          {recentLogs.length > 0 ? (
+            <div className="space-y-2">
+              {recentLogs.map((log: any) => (
+                <div key={log.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium">{log.action}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {log.entity_type}{log.entity_id ? ` • ${log.entity_id.slice(0, 8)}...` : ""}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(log.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No recent activity recorded.</p>
+          )}
         </section>
       </div>
     </div>
