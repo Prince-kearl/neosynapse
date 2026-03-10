@@ -1,4 +1,4 @@
-project_id = "mkiuyamxwrjzfnzyqkzd"
+project_id = "yzdnjmgpfuifgdizzlpz"
 
 [functions.send-invitation]
 verify_jwt = false
