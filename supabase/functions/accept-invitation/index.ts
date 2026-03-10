@@ -2,7 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -104,7 +105,12 @@ Deno.serve(async (req) => {
         }, { onConflict: "user_id" });
     }
 
-    // 5. Mark invitation as accepted
+    // 5. Insert role into user_roles table
+    await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: userId, role: invitation.role }, { onConflict: "user_id,role" });
+
+    // 6. Mark invitation as accepted
     await supabaseAdmin
       .from("invitations")
       .update({ status: "accepted" })

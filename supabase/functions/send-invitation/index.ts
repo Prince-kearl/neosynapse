@@ -66,14 +66,15 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    // Check if caller is admin
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
+    // Check if caller is admin (using user_roles table for multi-role support)
+    const { data: adminRole } = await supabaseAdmin
+      .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .single();
+      .eq("role", "admin")
+      .maybeSingle();
 
-    if (profile?.role !== "admin") {
+    if (!adminRole) {
       return new Response(JSON.stringify({ error: "Only admins can send invitations" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
