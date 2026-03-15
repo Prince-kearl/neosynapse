@@ -175,8 +175,8 @@ Deno.serve(async (req) => {
           emailError = `Resend API error: ${emailResponse.status} - ${errBody}`;
           console.error("Email send failed:", emailError);
         }
-      } catch (err) {
-        emailError = `Email send exception: ${err.message}`;
+      } catch (err: unknown) {
+        emailError = `Email send exception: ${err instanceof Error ? err.message : String(err)}`;
         console.error(emailError);
       }
     } else {
