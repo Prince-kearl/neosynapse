@@ -194,7 +194,7 @@ export default function PatientAIAssistant() {
     setIsRecording(false);
   }, []);
 
-  // ---- Transcription ----
+  // ---- Transcription (ElevenLabs with Web Speech API fallback) ----
   const transcribeAudio = async (blob: Blob, mimeType: string) => {
     setIsTranscribing(true);
     try {
@@ -204,49 +204,70 @@ export default function PatientAIAssistant() {
 
       const resp = await fetch(`${SUPABASE_URL}/functions/v1/speech-to-text`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
+        headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
         body: formData,
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Transcription failed (${resp.status})`);
-      }
+      if (!resp.ok) throw new Error("ElevenLabs STT failed");
 
       const data = await resp.json();
       const text = data.text?.trim();
       if (text) {
-        setAutoVoice(true); // Enable auto-TTS for voice-initiated conversation
+        setAutoVoice(true);
         sendMessage(text);
       } else {
         toast({ title: "No speech detected", description: "Please speak clearly and try again.", variant: "destructive" });
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Could not transcribe audio.";
-      toast({ title: "Transcription Error", description: msg, variant: "destructive" });
+    } catch {
+      // Fallback: use browser Web Speech API for live recognition
+      console.warn("ElevenLabs STT unavailable, falling back to Web Speech API");
+      fallbackWebSpeechRecognition();
     } finally {
       setIsTranscribing(false);
     }
   };
 
-  // ---- Text-to-Speech ----
+  const fallbackWebSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ title: "Voice Not Supported", description: "Your browser doesn't support speech recognition. Please type your message instead.", variant: "destructive" });
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = language === "tw" ? "ak-GH" : language === "ga" ? "gaa" : language === "ee" ? "ee-GH" : language === "ha" ? "ha-NG" : "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    toast({ title: "Listening...", description: "Speak now — using browser speech recognition as fallback." });
+
+    recognition.onresult = (event: any) => {
+      const text = event.results[0]?.[0]?.transcript?.trim();
+      if (text) {
+        setAutoVoice(true);
+        sendMessage(text);
+      }
+    };
+    recognition.onerror = () => {
+      toast({ title: "Speech Error", description: "Could not recognize speech. Please try again or type your message.", variant: "destructive" });
+    };
+    recognition.start();
+  };
+
+  // ---- Text-to-Speech (ElevenLabs with browser SpeechSynthesis fallback) ----
   const speakText = async (text: string) => {
-    // Stop any current playback
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
     setIsSpeaking(true);
-    try {
-      // Strip markdown for cleaner speech
-      const cleanText = text
-        .replace(/[#*_`~\[\]()>]/g, "")
-        .replace(/\n{2,}/g, ". ")
-        .replace(/\n/g, " ")
-        .slice(0, 4000);
 
+    const cleanText = text
+      .replace(/[#*_`~\[\]()>]/g, "")
+      .replace(/\n{2,}/g, ". ")
+      .replace(/\n/g, " ")
+      .slice(0, 4000);
+
+    try {
       const resp = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
         method: "POST",
         headers: {
@@ -256,28 +277,34 @@ export default function PatientAIAssistant() {
         body: JSON.stringify({ text: cleanText }),
       });
 
-      if (!resp.ok) throw new Error("TTS failed");
+      if (!resp.ok) throw new Error("ElevenLabs TTS failed");
 
       const audioBlob = await resp.blob();
+      if (audioBlob.type.includes("json")) throw new Error("TTS returned error JSON");
+
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
 
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        audioRef.current = null;
-      };
+      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(audioUrl); audioRef.current = null; };
+      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(audioUrl); audioRef.current = null; };
 
       await audio.play();
     } catch {
-      setIsSpeaking(false);
-      toast({ title: "Voice Error", description: "Could not play audio response.", variant: "destructive" });
+      // Fallback: browser SpeechSynthesis
+      console.warn("ElevenLabs TTS unavailable, falling back to browser speech synthesis");
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText.slice(0, 2000));
+        utterance.lang = language === "tw" ? "ak" : language === "ga" ? "en-GH" : language === "ee" ? "en-GH" : language === "ha" ? "ha" : "en-US";
+        utterance.rate = 1.0;
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setIsSpeaking(false);
+        toast({ title: "Voice Unavailable", description: "Text-to-speech is not available. Please read the response instead.", variant: "destructive" });
+      }
     }
   };
 
