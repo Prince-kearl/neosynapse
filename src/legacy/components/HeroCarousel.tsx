@@ -69,7 +69,7 @@ export function HeroCarousel() {
       <div>
         <p className="text-muted-foreground text-sm">Hello {firstName}</p>
         <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground">
-          How May I Help You?
+          How are you feeling today?
         </h1>
       </div>
 
