@@ -39,7 +39,7 @@ export function MobileHeader({
             <Bell className="w-4 h-4 text-muted-foreground" />
           </Button>
           <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full bg-primary/10" asChild>
-            <Link to="/profile">
+            <Link to="/patient/profile">
               <User className="w-4 h-4 text-primary" />
             </Link>
           </Button>

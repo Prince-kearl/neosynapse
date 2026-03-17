@@ -60,7 +60,7 @@ export function HealthProfileCard({ completionPercent = 66 }: HealthProfileCardP
             size="sm"
             className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full gap-1"
           >
-            <Link to="/profile">
+            <Link to="/patient/profile">
               Complete Profile
               <ChevronRight className="w-4 h-4" />
             </Link>

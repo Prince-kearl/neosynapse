@@ -69,7 +69,7 @@ export function HeroCarousel() {
       <div>
         <p className="text-muted-foreground text-sm">Hello {firstName}</p>
         <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground">
-          How May I Help You?
+          How are you feeling today?
         </h1>
       </div>
 
@@ -115,7 +115,7 @@ export function HeroCarousel() {
                       size="sm"
                       className="w-fit bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full"
                     >
-                      <Link to="/explore">Ask Now</Link>
+                      <Link to="/patient/ai-assistant">Ask Now</Link>
                     </Button>
                   </div>
                 </div>
