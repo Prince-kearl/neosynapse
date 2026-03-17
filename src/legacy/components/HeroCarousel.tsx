@@ -115,7 +115,7 @@ export function HeroCarousel() {
                       size="sm"
                       className="w-fit bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full"
                     >
-                      <Link to="/explore">Ask Now</Link>
+                      <Link to="/patient/ai-assistant">Ask Now</Link>
                     </Button>
                   </div>
                 </div>
