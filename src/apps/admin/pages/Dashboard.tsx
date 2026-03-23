@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -86,6 +87,9 @@ export default function AdminDashboard() {
           <h1 className="font-display text-2xl lg:text-3xl font-bold">Admin Console</h1>
           <p className="text-muted-foreground mt-1">Welcome back, {displayName}. System overview and management.</p>
         </div>
+
+        {/* Role Switcher for Admins */}
+        <RoleSwitcher currentPath={window.location.pathname} />
 
         {/* Alerts */}
         {(pendingVerifications > 0 || pendingInvites > 0) && (

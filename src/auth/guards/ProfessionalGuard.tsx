@@ -9,7 +9,7 @@ interface ProfessionalGuardProps {
 
 export function ProfessionalGuard({ children }: ProfessionalGuardProps) {
   const { user, isLoading: authLoading } = useAuth();
-  const { isProfessional, isLoading: roleLoading } = useUserRole();
+  const { isProfessional, isAdmin, isLoading: roleLoading } = useUserRole();
   const location = useLocation();
 
   if (authLoading || roleLoading) {
@@ -24,7 +24,7 @@ export function ProfessionalGuard({ children }: ProfessionalGuardProps) {
     return <Navigate to="/auth/sign-in" state={{ from: location }} replace />;
   }
 
-  if (!isProfessional) {
+  if (!isProfessional && !isAdmin) {
     // Redirect unauthorized users to sign-in
     return <Navigate to="/auth/sign-in" replace />;
   }
