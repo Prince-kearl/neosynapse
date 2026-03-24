@@ -110,22 +110,12 @@ export function HeroCarousel() {
                     src={slide.image}
                     alt={slide.title}
                     className="absolute inset-0 w-full h-full object-cover"
-                    style={{ borderRadius: "28px 0 0 28px" }}
-                  />
-                  {/* Gradient fade from image into green card */}
-                  <div
-                    className="absolute inset-0"
                     style={{
-                      background:
-                        "linear-gradient(to right, transparent 30%, #5FC88A 95%)",
-                    }}
-                  />
-                  {/* Circular/oval soft mask */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background:
-                        "radial-gradient(ellipse 70% 80% at 30% 50%, transparent 50%, #5FC88A 100%)",
+                      borderRadius: "28px 0 0 28px",
+                      maskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
+                      WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
+                      maskSize: "100% 100%",
+                      WebkitMaskSize: "100% 100%",
                     }}
                   />
                 </div>
