@@ -12,6 +12,10 @@ interface MobileHeaderProps {
   showSearchAndFilters?: boolean;
   selectedFilters?: string[];
   onFilterChange?: (filters: string[]) => void;
+  location?: string;
+  radius?: number;
+  onLocationChange?: (location: string) => void;
+  onRadiusChange?: (radius: number) => void;
 }
 
 export function MobileHeader({ 
@@ -19,7 +23,11 @@ export function MobileHeader({
   onSearchChange,
   showSearchAndFilters = true,
   selectedFilters = [],
-  onFilterChange
+  onFilterChange,
+  location,
+  radius,
+  onLocationChange,
+  onRadiusChange
 }: MobileHeaderProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
@@ -32,7 +40,12 @@ export function MobileHeader({
     <header className="sticky top-0 z-50 bg-background lg:hidden">
       {/* Top Row - Location, Notification, Profile */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
-        <LocationSelector />
+        <LocationSelector
+          selectedLocation={location}
+          radius={radius}
+          onLocationChange={onLocationChange}
+          onRadiusChange={onRadiusChange}
+        />
 
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full">

@@ -2,28 +2,72 @@ import { Hospital, MapPin, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const hospitals = [
-  { id: "1", name: "Korle Bu Teaching Hospital", distance: "2.3 km", status: "Open" },
-  { id: "2", name: "37 Military Hospital", distance: "4.1 km", status: "Open" },
-  { id: "3", name: "Ridge Hospital", distance: "5.7 km", status: "Open" },
+  { id: "1", name: "Korle Bu Teaching Hospital", lat: 5.5600, lng: -0.1750, status: "Open" },
+  { id: "2", name: "37 Military Hospital", lat: 5.5571, lng: -0.1688, status: "Open" },
+  { id: "3", name: "Ridge Hospital", lat: 5.5554, lng: -0.2003, status: "Open" },
+  { id: "4", name: "Achimota Hospital", lat: 5.6402, lng: -0.2505, status: "Open" },
+  { id: "5", name: "La General Hospital", lat: 5.5795, lng: -0.1702, status: "Open" },
 ];
 
-export function NearbyHospitalsSection() {
+const locationCoordinates: Record<string, { lat: number; lng: number }> = {
+  Achimota: { lat: 5.6397, lng: -0.2443 },
+  "East Legon": { lat: 5.6521, lng: -0.1736 },
+  Osu: { lat: 5.5459, lng: -0.1890 },
+  Labone: { lat: 5.5616, lng: -0.1834 },
+  Cantonments: { lat: 5.5567, lng: -0.1847 },
+  "Airport City": { lat: 5.6054, lng: -0.1663 },
+  Madina: { lat: 5.6839, lng: 0.0449 },
+  Tema: { lat: 5.6580, lng: 0.0159 },
+  Spintex: { lat: 5.6102, lng: 0.0713 },
+  Dansoman: { lat: 5.5840, lng: -0.2841 },
+};
+
+const toRadians = (deg: number) => (deg * Math.PI) / 180;
+const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const R = 6371; // km
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+interface NearbyHospitalsSectionProps {
+  location: string;
+  radius: number;
+}
+
+export function NearbyHospitalsSection({ location, radius }: NearbyHospitalsSectionProps) {
+  const center = locationCoordinates[location] || locationCoordinates.Achimota;
+  const withDistance = hospitals
+    .map((hospital) => {
+      const distance = haversineDistance(center.lat, center.lng, hospital.lat, hospital.lng);
+      return { ...hospital, distance };
+    })
+    .sort((a, b) => a.distance - b.distance);
+
+  const filtered = withDistance.filter((hospital) => hospital.distance <= radius);
+  const chosen = filtered.length > 0 ? filtered : withDistance.slice(0, 3);
+
   return (
     <section>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-lg lg:text-xl font-semibold">
-          Nearby Hospitals
+          Nearby Hospitals ({location}, within {radius} km)
         </h2>
-        <Button variant="ghost" size="sm" className="text-muted-foreground gap-1">
+        <Button variant="ghost" size="sm" className="text-muted-foreground gap-1" disabled>
           <MapPin className="w-4 h-4 text-primary" />
-          Achimota
+          {location}
           <ChevronDown className="w-3 h-3" />
         </Button>
       </div>
 
       {/* Hospital Cards */}
       <div className="space-y-3 mb-4">
-        {hospitals.map((hospital) => (
+        {chosen.map((hospital) => (
           <div
             key={hospital.id}
             className="bg-card rounded-xl p-4 border border-border flex items-center gap-4 hover:border-primary/30 transition-all duration-200 cursor-pointer"
@@ -34,7 +78,7 @@ export function NearbyHospitalsSection() {
             <div className="flex-1 min-w-0">
               <h3 className="font-medium text-foreground truncate">{hospital.name}</h3>
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span>{hospital.distance}</span>
+                <span>{hospital.distance.toFixed(1)} km</span>
                 <span className="text-primary text-xs font-medium">● {hospital.status}</span>
               </div>
             </div>

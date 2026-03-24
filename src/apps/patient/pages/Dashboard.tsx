@@ -27,6 +27,8 @@ export default function PatientDashboard() {
   const { data: patientProfile } = usePatientProfile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState("Achimota");
+  const [deliveryRadius, setDeliveryRadius] = useState(10);
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
 
@@ -54,6 +56,10 @@ export default function PatientDashboard() {
           showSearchAndFilters={true}
           selectedFilters={selectedFilters}
           onFilterChange={setSelectedFilters}
+          location={selectedLocation}
+          radius={deliveryRadius}
+          onLocationChange={setSelectedLocation}
+          onRadiusChange={setDeliveryRadius}
         />
       </div>
 
@@ -92,7 +98,10 @@ export default function PatientDashboard() {
         </section>
 
         {/* Nearest Hospital */}
-        <NearbyHospitalsSection />
+        <NearbyHospitalsSection
+          location={selectedLocation}
+          radius={deliveryRadius}
+        />
       </main>
     </div>
   );
