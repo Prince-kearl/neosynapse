@@ -12,7 +12,7 @@ export function HealthProfileCard({ completionPercent = 66 }: HealthProfileCardP
   const strokeDashoffset = circumference - (completionPercent / 100) * circumference;
 
   return (
-    <div className="bg-card rounded-2xl p-6 shadow-food-card">
+    <div className="bg-gradient-to-b from-card to-card/95 rounded-2xl p-6 border border-border/20 shadow-lg shadow-black/5 dark:shadow-black/20">
       <div className="flex items-center gap-6">
         {/* Circular Progress */}
         <div className="relative flex-shrink-0">
