@@ -1,5 +1,5 @@
-import { Hospital, MapPin, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Hospital } from "lucide-react";
+import { LocationSelector } from "@/legacy/components/LocationSelector";
 
 const hospitals = [
   { id: "1", name: "Korle Bu Teaching Hospital", lat: 5.5600, lng: -0.1750, status: "Open" },
@@ -35,13 +35,14 @@ const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 };
 
-interface NearbyHospitalsSectionProps {
-  location: string;
-  radius: number;
-}
 
-export function NearbyHospitalsSection({ location, radius }: NearbyHospitalsSectionProps) {
-  const center = locationCoordinates[location] || locationCoordinates.Achimota;
+export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocationChange, onRadiusChange, onUseCurrentLocation, locationError, isLocating }: NearbyHospitalsSectionProps) {
+  let center: { lat: number; lng: number };
+  if (location === "Current Location" && typeof gpsCoords?.lat === "number" && typeof gpsCoords?.lng === "number") {
+    center = gpsCoords;
+  } else {
+    center = locationCoordinates[location] || locationCoordinates.Achimota;
+  }
   const withDistance = hospitals
     .map((hospital) => {
       const distance = haversineDistance(center.lat, center.lng, hospital.lat, hospital.lng);
@@ -54,15 +55,21 @@ export function NearbyHospitalsSection({ location, radius }: NearbyHospitalsSect
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <h2 className="font-display text-lg lg:text-xl font-semibold">
           Nearby Hospitals ({location}, within {radius} km)
         </h2>
-        <Button variant="ghost" size="sm" className="text-muted-foreground gap-1" disabled>
-          <MapPin className="w-4 h-4 text-primary" />
-          {location}
-          <ChevronDown className="w-3 h-3" />
-        </Button>
+        <div className="min-w-[180px]">
+          <LocationSelector
+            selectedLocation={location}
+            radius={radius}
+            onLocationChange={onLocationChange}
+            onRadiusChange={onRadiusChange}
+            onUseCurrentLocation={onUseCurrentLocation}
+            locationError={locationError}
+            isLocating={isLocating}
+          />
+        </div>
       </div>
 
       {/* Hospital Cards */}

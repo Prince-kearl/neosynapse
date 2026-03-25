@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
@@ -6,6 +6,7 @@ import { usePatientProfile } from "@/shared/hooks/useHealthcare";
 import { HeroCarousel } from "@/legacy/components/HeroCarousel";
 import { MobileHeader } from "@/legacy/components/MobileHeader";
 import { HealthProfileCard } from "@/legacy/components/HealthProfileCard";
+import { LocationSelector } from "@/legacy/components/LocationSelector";
 import { NearbyHospitalsSection } from "@/legacy/components/NearbyHospitalsSection";
 import {
   Stethoscope, Bot, CalendarCheck, Hospital,
@@ -29,6 +30,84 @@ export default function PatientDashboard() {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("Achimota");
   const [deliveryRadius, setDeliveryRadius] = useState(10);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Helper: Reverse geocode lat/lon to area name using OpenStreetMap Nominatim
+  const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
+      const data = await resp.json();
+      return (
+        data.address?.suburb ||
+        data.address?.neighbourhood ||
+        data.address?.city_district ||
+        data.address?.town ||
+        data.address?.village ||
+        data.address?.city ||
+        data.display_name?.split(",")[0] ||
+        "Current Location"
+      );
+    } catch (e) {
+      return "Current Location";
+    }
+  };
+
+  // Automatic location detection on mount
+  useEffect(() => {
+    setIsLocating(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setGpsCoords({ lat: latitude, lng: longitude });
+          const area = await reverseGeocode(latitude, longitude);
+          setSelectedLocation(area);
+          setLocationError(null);
+          setIsLocating(false);
+        },
+        (err) => {
+          setLocationError("Location access denied. Please enable GPS or select a location manually.");
+          setGpsCoords(null);
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setLocationError("Geolocation not supported by your browser.");
+      setGpsCoords(null);
+      setIsLocating(false);
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // Handler for 'Use Current Location' button
+  const handleUseCurrentLocation = useCallback(() => {
+    setIsLocating(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setGpsCoords({ lat: latitude, lng: longitude });
+          const area = await reverseGeocode(latitude, longitude);
+          setSelectedLocation(area);
+          setLocationError(null);
+          setIsLocating(false);
+        },
+        (err) => {
+          setLocationError("Location access denied. Please enable GPS or select a location manually.");
+          setGpsCoords(null);
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setLocationError("Geolocation not supported by your browser.");
+      setGpsCoords(null);
+      setIsLocating(false);
+    }
+  }, []);
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
 
@@ -60,6 +139,9 @@ export default function PatientDashboard() {
           radius={deliveryRadius}
           onLocationChange={setSelectedLocation}
           onRadiusChange={setDeliveryRadius}
+          onUseCurrentLocation={handleUseCurrentLocation}
+          locationError={locationError}
+          isLocating={isLocating}
         />
       </div>
 
@@ -101,6 +183,12 @@ export default function PatientDashboard() {
         <NearbyHospitalsSection
           location={selectedLocation}
           radius={deliveryRadius}
+          gpsCoords={gpsCoords}
+          onLocationChange={setSelectedLocation}
+          onRadiusChange={setDeliveryRadius}
+          onUseCurrentLocation={handleUseCurrentLocation}
+          locationError={locationError}
+          isLocating={isLocating}
         />
       </main>
     </div>

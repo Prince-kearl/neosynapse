@@ -16,6 +16,9 @@ interface MobileHeaderProps {
   radius?: number;
   onLocationChange?: (location: string) => void;
   onRadiusChange?: (radius: number) => void;
+  onUseCurrentLocation?: () => void;
+  locationError?: string | null;
+  isLocating?: boolean;
 }
 
 export function MobileHeader({ 
@@ -27,7 +30,10 @@ export function MobileHeader({
   location,
   radius,
   onLocationChange,
-  onRadiusChange
+  onRadiusChange,
+  onUseCurrentLocation,
+  locationError,
+  isLocating
 }: MobileHeaderProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
@@ -45,6 +51,9 @@ export function MobileHeader({
           radius={radius}
           onLocationChange={onLocationChange}
           onRadiusChange={onRadiusChange}
+          onUseCurrentLocation={onUseCurrentLocation}
+          locationError={locationError}
+          isLocating={isLocating}
         />
 
         <div className="flex items-center gap-2">

@@ -18,6 +18,9 @@ interface LocationSelectorProps {
   radius?: number;
   onLocationChange?: (location: string) => void;
   onRadiusChange?: (radius: number) => void;
+  onUseCurrentLocation?: () => void;
+  locationError?: string | null;
+  isLocating?: boolean;
 }
 
 export function LocationSelector({
@@ -25,6 +28,9 @@ export function LocationSelector({
   radius = 10,
   onLocationChange,
   onRadiusChange,
+  onUseCurrentLocation,
+  locationError,
+  isLocating
 }: LocationSelectorProps) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(selectedLocation);
@@ -64,21 +70,23 @@ export function LocationSelector({
             className="w-full rounded-xl border border-primary/30 px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
 
-          <div className="rounded-lg bg-rose-100/90 p-2 text-xs text-rose-700 border border-rose-200">
-            <span className="font-medium">GPS access denied.</span> Select location manually or enable GPS in settings.
-          </div>
+          {locationError && (
+            <div className="rounded-lg bg-rose-100/90 p-2 text-xs text-rose-700 border border-rose-200">
+              <span className="font-medium">{locationError}</span>
+            </div>
+          )}
 
           <button
             onClick={() => {
-              const value = "Use current location";
-              setSelected(value);
-              onLocationChange?.(value);
+              if (onUseCurrentLocation) onUseCurrentLocation();
               setOpen(false);
             }}
-            className="w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+            className="w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+            disabled={isLocating}
           >
             <span className="inline-flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> Use current location
+              <MapPin className="w-4 h-4" />
+              {isLocating ? "Detecting location..." : "Use current location"}
             </span>
           </button>
 
