@@ -146,32 +146,34 @@ export default function PatientDashboard() {
       </div>
 
       {/* Main Content */}
-      <main className="p-4 lg:p-6 space-y-6 max-w-7xl">
+      <main className="px-2 sm:px-4 md:px-6 py-4 space-y-6 max-w-7xl mx-auto w-full">
         {/* Hero Carousel (includes greeting + slides + dots) */}
         <HeroCarousel />
 
         {/* Health Profile Completion */}
-        <HealthProfileCard completionPercent={profileCompletion} />
+        <div className="w-full">
+          <HealthProfileCard completionPercent={profileCompletion} />
+        </div>
 
         {/* Quick Actions */}
         <section>
           <h2 className="font-display text-lg lg:text-xl font-semibold mb-3">
             Quick Actions
           </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {quickActions.map((action) => (
               <button
                 key={action.title}
                 onClick={() => navigate(action.url)}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl bg-card border border-primary/30 transition-all duration-200",
+                  "flex flex-col sm:flex-row items-center sm:items-start gap-2 sm:gap-3 px-4 py-3 rounded-xl bg-card border border-primary/30 transition-all duration-200 w-full min-h-[56px]",
                   "hover:border-primary/60 hover:shadow-md active:scale-[0.98]"
                 )}
               >
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <action.icon className="w-4 h-4 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mb-2 sm:mb-0">
+                  <action.icon className="w-5 h-5 text-primary" />
                 </div>
-                <span className="text-sm font-medium text-foreground truncate">
+                <span className="text-sm font-medium text-foreground text-center sm:text-left break-words w-full">
                   {action.title}
                 </span>
               </button>

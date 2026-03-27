@@ -15,6 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MedicalReportTools } from "./MedicalReportTools";
+
+// Dynamically import pdfjs-dist for compatibility with Vite/ESM
+let pdfjsLib: any;
+import Tesseract from "tesseract.js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -35,9 +40,13 @@ function AIAssistant() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  // Voice mode: manual listen/respond
   const [autoVoice, setAutoVoice] = useState(false); // auto-play TTS for voice-initiated msgs
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [mode, setMode] = useState(() => localStorage.getItem("ai-assistant-mode") || "text");
+  // Always default to text mode when opening the AI Assistant
+  const [mode, setMode] = useState("text");
+  // Remove continuous voice loop
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -100,7 +109,7 @@ function AIAssistant() {
   };
 
   // ---- Image upload ----
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -108,19 +117,44 @@ function AIAssistant() {
       e.target.value = "";
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      const prompt = input.trim() || "Please analyze this medical image and provide your assessment.";
-      setInput("");
-      sendMessage(prompt, base64);
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Run OCR on the image
+      const ocrText = await extractImageText(file);
+      if (ocrText && ocrText.replace(/\s/g, "").length > 20) {
+        // If OCR finds enough text, send both the text and the image
+        sendMessage(
+          `This image may contain a medical report or document. Here is the extracted text:\n\n${ocrText}\n\nPlease analyze this report and summarize the key findings. If the image contains other medical information, analyze it visually as well.`,
+          await fileToBase64(file)
+        );
+      } else {
+        // If not much text, just send the image for visual analysis
+        sendMessage(
+          input.trim() || "Please analyze this medical image and provide your assessment.",
+          await fileToBase64(file)
+        );
+      }
+    } catch (err) {
+      toast({ title: "Image OCR Failed", description: "Could not extract text from image.", variant: "destructive" });
+      // Fallback: send image only
+      const base64 = await fileToBase64(file);
+      sendMessage(input.trim() || "Please analyze this medical image and provide your assessment.", base64);
+    }
+    setInput("");
     e.target.value = "";
   };
 
+  // Helper to convert file to base64
+  async function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   // ---- File (report) upload ----
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -136,6 +170,17 @@ function AIAssistant() {
         sendMessage(`Please analyze this uploaded medical report image: ${file.name}`, base64);
       };
       reader.readAsDataURL(file);
+    } else if (file.type === "application/pdf") {
+      // Extract text from PDF and send to AI
+      try {
+        const text = await extractPdfText(file);
+        const preview = text.slice(0, 3000);
+        sendMessage(
+          `I'm uploading a medical report PDF (${file.name}). Here is the extracted text:\n\n${preview}\n\nPlease analyze this report and summarize the key findings.`
+        );
+      } catch (err) {
+        toast({ title: "PDF Extraction Failed", description: "Could not extract text from PDF.", variant: "destructive" });
+      }
     } else {
       // For text-based files, read as text
       const reader = new FileReader();
@@ -152,57 +197,56 @@ function AIAssistant() {
   };
 
   // ---- Voice recording ----
+  // Manual voice mode: only start listening when user triggers
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
-      });
-
-      const mimeType = getRecorderMimeType();
-      const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
-      const recorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current);
-          recordingTimerRef.current = null;
-        }
+      setLiveTranscript("");
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = language === "tw" ? "ak-GH" : language === "ga" ? "gaa" : language === "ee" ? "ee-GH" : language === "ha" ? "ha-NG" : "en-US";
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        setIsRecording(true);
         setRecordingDuration(0);
-
-        const actualMime = recorder.mimeType || "audio/webm";
-        const blob = new Blob(chunksRef.current, { type: actualMime });
-        if (blob.size > 0) {
-          transcribeAudio(blob, actualMime);
-        }
-      };
-
-      recorder.start(1000);
-      setIsRecording(true);
-      setRecordingDuration(0);
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingDuration((d) => d + 1);
-      }, 1000);
-    } catch (err: unknown) {
-      const name = err instanceof Error ? err.name : "";
-      if (name === "NotAllowedError") {
-        toast({
-          title: "Microphone Access Denied",
-          description: "Please allow microphone access in your browser settings to use voice input.",
-          variant: "destructive",
-        });
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingDuration((d) => d + 1);
+        }, 1000);
+        recognition.onresult = (event: any) => {
+          let transcript = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            transcript += event.results[i][0].transcript;
+          }
+          setLiveTranscript(transcript);
+        };
+        recognition.onend = () => {
+          setIsRecording(false);
+          if (recordingTimerRef.current) {
+            clearInterval(recordingTimerRef.current);
+            recordingTimerRef.current = null;
+          }
+          setRecordingDuration(0);
+          if (liveTranscript.trim()) {
+            setAutoVoice(true);
+            sendMessage(liveTranscript.trim());
+            setLiveTranscript("");
+          }
+        };
+        recognition.onerror = () => {
+          setIsRecording(false);
+          setLiveTranscript("");
+          toast({ title: "Speech Error", description: "Could not recognize speech. Please try again or type your message.", variant: "destructive" });
+        };
+        recognition.start();
       } else {
-        toast({ title: "Microphone Error", description: "Could not access microphone.", variant: "destructive" });
+        toast({ title: "Voice Not Supported", description: "Your browser doesn't support speech recognition. Please type your message instead.", variant: "destructive" });
       }
+    } catch (err: unknown) {
+      toast({ title: "Microphone Error", description: "Could not access microphone.", variant: "destructive" });
     }
-  }, []);
+  }, [language, liveTranscript, sendMessage]);
 
+  // Stop recording only
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
@@ -467,14 +511,22 @@ function AIAssistant() {
               {/* Optionally add SVG or canvas animation here */}
               <div className="w-40 h-40 rounded-full bg-background/80 shadow-inner" />
             </div>
-            <div className="text-xl font-semibold text-primary mb-4">AI is listening</div>
+            <div className="text-xl font-semibold text-primary mb-2">{isRecording ? "Listening..." : "Voice Chat"}</div>
+            <div className="text-base text-muted-foreground mb-4 min-h-[32px] max-w-lg text-center">
+              {isRecording && (liveTranscript || <span className="opacity-60">Say something…</span>)}
+              {!isRecording && <span className="opacity-60">Press the mic to start speaking</span>}
+            </div>
             <Button
               size="icon"
-              className="h-20 w-20 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center text-4xl animate-pulse"
-              // onClick={...} // Hook up to start/stop recording as needed
+              className={`h-20 w-20 rounded-full ${isRecording ? "bg-destructive" : "bg-primary"} text-primary-foreground shadow-lg flex items-center justify-center text-4xl ${isRecording ? "animate-pulse" : ""}`}
+              onClick={isRecording ? stopRecording : startRecording}
+              aria-label={isRecording ? "Stop recording" : "Start voice input"}
             >
-              <Mic className="w-12 h-12" />
+              {isRecording ? <MicOff className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
             </Button>
+            {isRecording && (
+              <div className="mt-2 text-xs text-muted-foreground">Duration: {formatDuration(recordingDuration)}</div>
+            )}
           </div>
         </div>
       )}
@@ -515,98 +567,131 @@ function AIAssistant() {
         </div>
       )}
 
-      {/* Input */}
-      <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2">
-            {/* Hidden file inputs */}
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageUpload}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf,.txt,.csv,.doc,.docx"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
+      {/* Input - Redesigned Search Box UI */}
+      <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center w-full rounded-full bg-white border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}>
 
-            {/* Image upload */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 h-10 w-10"
-              onClick={() => imageInputRef.current?.click()}
-              disabled={inputDisabled}
-              title="Upload image"
-            >
-              <Image className="w-5 h-5" />
-            </Button>
-
-            {/* File upload */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 h-10 w-10"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={inputDisabled}
-              title="Upload medical report"
-            >
-              <FileUp className="w-5 h-5" />
-            </Button>
+            {/* Plus icon (left) for upload */}
+            <>
+              {/* Hidden file inputs */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf,.txt,.csv,.doc,.docx"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <button
+                type="button"
+                className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent/30 transition"
+                tabIndex={-1}
+                aria-label="Upload file or image"
+                style={{ outline: 'none', border: 'none', background: 'none' }}
+                onClick={() => {
+                  // Open a menu or just trigger file upload for now
+                  fileInputRef.current?.click();
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="10" cy="10" r="9" stroke="#6B7280" strokeWidth="1.5" fill="none" />
+                  <path d="M10 6V14" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M6 10H14" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </>
 
             {/* Text input */}
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder={isRecording ? "Listening…" : isTranscribing ? "Transcribing…" : "Describe your symptoms or ask a health question..."}
-                rows={1}
-                disabled={inputDisabled || isRecording}
-                className="w-full resize-none rounded-2xl bg-card border border-border px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground disabled:opacity-50"
-              />
-            </div>
+            <input
+              ref={textareaRef as any}
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={isRecording ? "Listening…" : isTranscribing ? "Transcribing…" : "Ask anything"}
+              disabled={inputDisabled || isRecording}
+              className="flex-1 bg-transparent border-none outline-none text-base px-2 placeholder:text-muted-foreground disabled:opacity-50"
+              style={{ minWidth: 0 }}
+            />
 
-            {/* Mic button */}
-            <Button
-              variant={isRecording ? "destructive" : "ghost"}
-              size="icon"
-              className={`shrink-0 h-10 w-10 ${isRecording ? "animate-pulse" : ""}`}
+            {/* Mic icon */}
+            <button
+              type="button"
+              className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent/30 transition"
               onClick={isRecording ? stopRecording : startRecording}
               disabled={isTranscribing || isLoading}
-              title={isRecording ? "Stop recording" : "Start voice input"}
+              aria-label={isRecording ? "Stop recording" : "Start voice input"}
+              style={{ outline: 'none', border: 'none', background: 'none' }}
             >
-              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </Button>
+              {isRecording ? <MicOff className="w-5 h-5 text-primary animate-pulse" /> : <Mic className="w-5 h-5 text-muted-foreground" />}
+            </button>
 
-            {/* Send button */}
-            <Button
-              size="icon"
-              className="shrink-0 h-10 w-10 bg-primary hover:bg-primary/90"
+            {/* Send/voice button (right) */}
+            <button
+              type="button"
+              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary hover:bg-primary/80 transition"
               onClick={handleSend}
               disabled={!input.trim() || inputDisabled}
+              aria-label="Send"
+              style={{ outline: 'none', border: 'none' }}
             >
-              <Send className="w-4 h-4" />
-            </Button>
+              <Send className="w-5 h-5 text-white" />
+            </button>
           </div>
-          <p className="text-[10px] text-muted-foreground text-center mt-2">
-            Neo Synapse provides guidance only. Always consult a healthcare professional for diagnosis.
-          </p>
         </div>
       </div>
     </div>
   );
 }
+
+// --- Medical Report Extraction ---
+function extractReportAndJson(messages: ChatMessage[]) {
+  // Find the last assistant message containing the report
+  const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant" && m.content.includes("---JSON---"));
+  if (!lastAssistantMsg) return { markdown: null, json: null };
+  const [markdownPart, jsonPart] = lastAssistantMsg.content.split("---JSON---");
+  let json = null;
+  try {
+    json = JSON.parse(jsonPart);
+  } catch {}
+  return { markdown: markdownPart?.trim() || null, json };
+}
+
+// --- PDF text extraction helper ---
+  async function extractPdfText(file: File): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer();
+    if (!pdfjsLib) {
+      pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
+    }
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((item: any) => item.str).join(" ") + "\n";
+    }
+    return text;
+  }
+
+// --- OCR helper for images ---
+  async function extractImageText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      Tesseract.recognize(file, 'eng', { logger: () => {} })
+        .then(({ data: { text } }) => resolve(text))
+        .catch(reject);
+    });
+  }
 
 export default AIAssistant;

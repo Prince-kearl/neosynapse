@@ -57,29 +57,12 @@ const promoSlides: PromoSlide[] = [
 
 export function HeroCarousel() {
   const { user } = useAuth();
-  const { profile } = useUserRole();
-  const [api, setApi] = useState<CarouselApi>();
-  const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!api) return;
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap());
-    api.on("select", () => {
-      setCurrent(api.selectedScrollSnap());
-    });
-  }, [api]);
-
-  const displayName =
-    profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
-
   return (
     <section className="space-y-4">
       {/* Greeting */}
       <div>
         <p className="text-muted-foreground text-sm">Hello {displayName}</p>
-        <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground">
+        <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground break-words">
           How are you feeling today?
         </h1>
       </div>
@@ -97,52 +80,43 @@ export function HeroCarousel() {
           {promoSlides.map((slide) => (
             <CarouselItem key={slide.id} className="pl-2 md:pl-4">
               <div
-                className="relative overflow-hidden flex items-center h-[170px] lg:h-[190px]"
-                style={{
-                  background: "linear-gradient(135deg, #5FC88A, #47A66C)",
-                  borderRadius: "28px",
-                  padding: "0",
-                }}
+                className="relative overflow-hidden flex flex-col md:flex-row items-stretch md:items-center h-auto md:h-[190px] w-full rounded-2xl bg-gradient-to-br from-[#5FC88A] to-[#47A66C] p-0"
               >
-                {/* Left: Image with fade mask */}
-                <div className="relative w-[45%] h-full shrink-0">
+                {/* Image on top for mobile, left for desktop */}
+                <div className="relative w-full md:w-[45%] h-[120px] md:h-full shrink-0 flex items-center justify-center">
                   <img
                     src={slide.image}
                     alt={slide.title}
-                    className="absolute inset-0 w-full h-full object-cover"
+                    className="w-full h-full object-cover rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none"
                     style={{
-                      borderRadius: "28px 0 0 28px",
-                      maskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
-                      WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)",
-                      maskSize: "100% 100%",
-                      WebkitMaskSize: "100% 100%",
+                      maskImage: undefined,
+                      WebkitMaskImage: undefined,
                     }}
                   />
                 </div>
-
-                {/* Right: Content */}
-                <div className="flex-1 flex flex-col justify-center pr-5 pl-2 py-4 z-10">
-                  <h3
-                    className="font-display font-semibold mb-1"
-                    style={{ fontSize: "20px", color: "#1E1E1E" }}
-                  >
+                {/* Content below image on mobile, right on desktop */}
+                <div className="flex-1 flex flex-col justify-center px-4 py-4 z-10">
+                  <h3 className="font-display font-semibold mb-1 text-lg md:text-xl text-[#1E1E1E] break-words">
                     {slide.title}
                   </h3>
-                  <p
-                    className="mb-3 leading-snug"
-                    style={{
-                      fontSize: "14px",
-                      color: "#EAF7EF",
-                      maxWidth: "220px",
-                    }}
-                  >
+                  <p className="mb-3 leading-snug text-[14px] md:text-base text-[#EAF7EF] max-w-full break-words">
                     {slide.subtitle}
                   </p>
                   <Link
                     to={slide.buttonLink}
-                    className="inline-flex items-center gap-2 w-fit"
-                    style={{
-                      background: "#2B2B2B",
+                    className="inline-flex items-center gap-2 w-fit bg-[#2B2B2B] rounded-full px-4 py-2 text-[14px] text-white"
+                  >
+                    <slide.icon className="w-4 h-4" />
+                    {slide.buttonLabel}
+                  </Link>
+                </div>
+              </div>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+      </Carousel>
+    </section>
+  );
                       borderRadius: "999px",
                       padding: "10px 18px",
                       fontSize: "14px",
