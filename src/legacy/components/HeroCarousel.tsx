@@ -57,6 +57,18 @@ const promoSlides: PromoSlide[] = [
 
 export function HeroCarousel() {
   const { user } = useAuth();
+  // Add missing state and handlers for pagination
+  const [api, setApi] = useState<CarouselApi | null>(null);
+  const [current, setCurrent] = useState(0);
+  const count = promoSlides.length;
+  const displayName = user?.displayName || "there";
+
+  useEffect(() => {
+    if (!api) return;
+    setCurrent(api.selectedScrollSnap() || 0);
+    api.on("select", () => setCurrent(api.selectedScrollSnap() || 0));
+  }, [api]);
+
   return (
     <section className="space-y-4">
       {/* Greeting */}
@@ -105,23 +117,6 @@ export function HeroCarousel() {
                   <Link
                     to={slide.buttonLink}
                     className="inline-flex items-center gap-2 w-fit bg-[#2B2B2B] rounded-full px-4 py-2 text-[14px] text-white"
-                  >
-                    <slide.icon className="w-4 h-4" />
-                    {slide.buttonLabel}
-                  </Link>
-                </div>
-              </div>
-            </CarouselItem>
-          ))}
-        </CarouselContent>
-      </Carousel>
-    </section>
-  );
-                      borderRadius: "999px",
-                      padding: "10px 18px",
-                      fontSize: "14px",
-                      color: "#ffffff",
-                    }}
                   >
                     <slide.icon className="w-4 h-4" />
                     {slide.buttonLabel}
