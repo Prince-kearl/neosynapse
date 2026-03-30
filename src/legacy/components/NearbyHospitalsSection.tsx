@@ -72,7 +72,7 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
         <h2 className="font-display text-lg lg:text-xl font-semibold">
           Nearby Hospitals ({location}, within {radius} km)
         </h2>
-        <div className="min-w-[180px]">
+        <div className="w-full sm:w-auto">
           <LocationSelector
             selectedLocation={location}
             radius={radius}

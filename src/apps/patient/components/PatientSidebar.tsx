@@ -42,7 +42,7 @@ export function PatientSidebar() {
   return (
     <aside
       className={cn(
-        "hidden lg:flex h-screen bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 shadow-sidebar sticky top-0",
+        "sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto bg-sidebar border-r border-sidebar-border shadow-sidebar transition-all duration-300 lg:flex",
         collapsed ? "w-20" : "w-64"
       )}
     >

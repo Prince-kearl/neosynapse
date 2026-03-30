@@ -28,7 +28,7 @@ export function FilterChips({ selectedFilters, onFilterChange }: FilterChipsProp
   };
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin -mx-4 px-4">
+    <div className="w-full flex gap-2 overflow-x-auto overflow-y-hidden pb-1 scrollbar-thin">
       {filterChips.map((chip) => {
         const isActive = selectedFilters.includes(chip.id);
         const Icon = chip.icon;
