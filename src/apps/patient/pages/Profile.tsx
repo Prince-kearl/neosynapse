@@ -8,21 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatientProfile } from "@/shared/hooks/useHealthcare";
-import { patientProfileService } from "@/shared/services/healthcare";
+import { consentService, patientProfileService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
-
-const accountMenuItems = [
-  { icon: MapPin, label: "Saved Locations", description: "Home & hospital addresses" },
-  { icon: CreditCard, label: "Payment & Insurance", description: "Insurance cards & payment methods" },
-  { icon: Bell, label: "Notifications", description: "Appointment & health alerts" },
-  { icon: Shield, label: "Privacy & Security", description: "Medical data protection settings" },
-];
 
 export default function PatientProfile() {
   const navigate = useNavigate();
@@ -30,10 +25,26 @@ export default function PatientProfile() {
   const { user, signOut, isLoading: authLoading } = useAuth();
   const { profile } = useUserRole();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [medicalHistoryDialogOpen, setMedicalHistoryDialogOpen] = useState(false);
+  const [consentDialogOpen, setConsentDialogOpen] = useState(false);
+  const [savedLocationsDialogOpen, setSavedLocationsDialogOpen] = useState(false);
+  const [paymentInsuranceDialogOpen, setPaymentInsuranceDialogOpen] = useState(false);
+  const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
+  const [privacySecurityDialogOpen, setPrivacySecurityDialogOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split('@')[0] || "Patient";
 
   const { data: patientProfile, isLoading: profileLoading } = usePatientProfile();
+  const { data: consentRecords = [] } = useQuery({
+    queryKey: ["consents", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await consentService.getForPatient(user.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
 
   const [formData, setFormData] = useState({
     date_of_birth: "",
@@ -43,6 +54,78 @@ export default function PatientProfile() {
     emergency_contact_phone: "",
     preferred_language: "en",
   });
+  const [medicalHistoryData, setMedicalHistoryData] = useState({
+    conditions: "",
+    allergies: "",
+    medications: "",
+  });
+  const [consentData, setConsentData] = useState({
+    dataSharing: false,
+    recording: false,
+  });
+  const [savedLocationsData, setSavedLocationsData] = useState({
+    homeAddress: "",
+    preferredHospital: "",
+    otherLocations: "",
+  });
+  const [paymentInsuranceData, setPaymentInsuranceData] = useState({
+    insuranceProvider: "",
+    policyNumber: "",
+    memberId: "",
+    insurancePlan: "",
+    paymentMethod: "",
+  });
+  const [notificationData, setNotificationData] = useState({
+    appointmentReminders: true,
+    medicationAlerts: true,
+    healthTips: false,
+    emailNotifications: true,
+  });
+  const [privacySecurityData, setPrivacySecurityData] = useState({
+    profileVisibility: "care_team",
+    twoFactorEnabled: false,
+    biometricLock: false,
+    activityAlerts: true,
+  });
+
+  const getLatestConsentByType = (type: string) =>
+    consentRecords.find((c) => c.consent_type === type);
+
+  const latestDataSharingConsent = getLatestConsentByType("data_sharing");
+  const latestRecordingConsent = getLatestConsentByType("recording");
+  const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
+  const profileMeta = (insuranceInfo.profile_meta as Record<string, unknown> | undefined) || {};
+  const savedLocationsMeta = (profileMeta.saved_locations as Record<string, unknown> | undefined) || {};
+  const paymentInsuranceMeta = (profileMeta.payment_insurance as Record<string, unknown> | undefined) || {};
+  const notificationSettingsMeta = (profileMeta.notification_settings as Record<string, unknown> | undefined) || {};
+  const privacySecuritySettingsMeta = (profileMeta.privacy_security_settings as Record<string, unknown> | undefined) || {};
+
+  const notificationSummary = (() => {
+    const labels: string[] = [];
+    if (notificationSettingsMeta.appointment_reminders === true) labels.push("Appointments");
+    if (notificationSettingsMeta.medication_alerts === true) labels.push("Medication");
+    if (notificationSettingsMeta.health_tips === true) labels.push("Health tips");
+    if (notificationSettingsMeta.email_notifications === true) labels.push("Email");
+    return labels.length ? `Enabled: ${labels.join(", ")}` : "No notification preferences saved";
+  })();
+
+  const privacySummary = (() => {
+    const visibility =
+      privacySecuritySettingsMeta.profile_visibility === "private"
+        ? "Private"
+        : privacySecuritySettingsMeta.profile_visibility === "care_team"
+          ? "Care team only"
+          : "Not set";
+
+    const controls: string[] = [];
+    if (privacySecuritySettingsMeta.two_factor_enabled === true) controls.push("2FA");
+    if (privacySecuritySettingsMeta.biometric_lock === true) controls.push("Biometric");
+    if (privacySecuritySettingsMeta.activity_alerts === true) controls.push("Alerts");
+
+    return controls.length
+      ? `Visibility: ${visibility} • ${controls.join(", ")}`
+      : `Visibility: ${visibility}`;
+  })();
 
   const initializeForm = () => {
     if (patientProfile) {
@@ -58,6 +141,73 @@ export default function PatientProfile() {
     setEditDialogOpen(true);
   };
 
+  const initializeMedicalHistoryForm = () => {
+    const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
+    const conditions = Array.isArray(insuranceInfo.conditions) ? insuranceInfo.conditions.join(", ") : "";
+    const allergies = Array.isArray(insuranceInfo.allergies) ? insuranceInfo.allergies.join(", ") : "";
+    const medications = Array.isArray(insuranceInfo.medications) ? insuranceInfo.medications.join(", ") : "";
+
+    setMedicalHistoryData({ conditions, allergies, medications });
+    setMedicalHistoryDialogOpen(true);
+  };
+
+  const initializeConsentForm = () => {
+    setConsentData({
+      dataSharing: !!latestDataSharingConsent?.granted,
+      recording: !!latestRecordingConsent?.granted,
+    });
+    setConsentDialogOpen(true);
+  };
+
+  const initializeSavedLocationsForm = () => {
+    setSavedLocationsData({
+      homeAddress: (savedLocationsMeta.home_address as string) || "",
+      preferredHospital: (savedLocationsMeta.preferred_hospital as string) || "",
+      otherLocations: (savedLocationsMeta.other_locations as string) || "",
+    });
+    setSavedLocationsDialogOpen(true);
+  };
+
+  const initializePaymentInsuranceForm = () => {
+    setPaymentInsuranceData({
+      insuranceProvider: (paymentInsuranceMeta.insurance_provider as string) || "",
+      policyNumber: (paymentInsuranceMeta.policy_number as string) || "",
+      memberId: (paymentInsuranceMeta.member_id as string) || "",
+      insurancePlan: (paymentInsuranceMeta.insurance_plan as string) || "",
+      paymentMethod: (paymentInsuranceMeta.payment_method as string) || "",
+    });
+    setPaymentInsuranceDialogOpen(true);
+  };
+
+  const initializeNotificationForm = () => {
+    const getBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
+
+    setNotificationData({
+      appointmentReminders: getBool(notificationSettingsMeta.appointment_reminders, true),
+      medicationAlerts: getBool(notificationSettingsMeta.medication_alerts, true),
+      healthTips: getBool(notificationSettingsMeta.health_tips, false),
+      emailNotifications: getBool(notificationSettingsMeta.email_notifications, true),
+    });
+    setNotificationDialogOpen(true);
+  };
+
+  const initializePrivacySecurityForm = () => {
+    const getBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
+    const visibility =
+      privacySecuritySettingsMeta.profile_visibility === "private" ||
+      privacySecuritySettingsMeta.profile_visibility === "care_team"
+        ? (privacySecuritySettingsMeta.profile_visibility as "private" | "care_team")
+        : "care_team";
+
+    setPrivacySecurityData({
+      profileVisibility: visibility,
+      twoFactorEnabled: getBool(privacySecuritySettingsMeta.two_factor_enabled, false),
+      biometricLock: getBool(privacySecuritySettingsMeta.biometric_lock, false),
+      activityAlerts: getBool(privacySecuritySettingsMeta.activity_alerts, true),
+    });
+    setPrivacySecurityDialogOpen(true);
+  };
+
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!user) throw new Error("Not authenticated");
@@ -71,6 +221,390 @@ export default function PatientProfile() {
       queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
       toast({ title: "Profile updated", description: "Your health profile has been saved." });
       setEditDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearPersonalDetailsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await patientProfileService.upsert(user.id, {
+        date_of_birth: null,
+        gender: null,
+        phone: null,
+        emergency_contact_name: null,
+        emergency_contact_phone: null,
+        preferred_language: "en",
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Details cleared", description: "Personal details removed successfully." });
+      setEditDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveMedicalHistoryMutation = useMutation({
+    mutationFn: async (data: typeof medicalHistoryData) => {
+      if (!user) throw new Error("Not authenticated");
+      const toList = (value: string) =>
+        value
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+
+      const insurance_info = {
+        conditions: toList(data.conditions),
+        allergies: toList(data.allergies),
+        medications: toList(data.medications),
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Medical history updated" });
+      setMedicalHistoryDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearMedicalHistoryMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: null,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Medical history cleared" });
+      setMedicalHistoryDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveConsentMutation = useMutation({
+    mutationFn: async (data: typeof consentData) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const syncConsent = async (
+        type: "data_sharing" | "recording",
+        desiredGranted: boolean,
+        latest: { id: string; granted: boolean } | undefined
+      ) => {
+        if (desiredGranted) {
+          if (!latest || !latest.granted) {
+            const { error } = await consentService.create({
+              patient_id: user.id,
+              consent_type: type,
+              granted: true,
+            });
+            if (error) throw error;
+          }
+          return;
+        }
+
+        if (latest?.granted) {
+          const { error } = await consentService.revoke(latest.id);
+          if (error) throw error;
+          return;
+        }
+
+        if (!latest) {
+          const { error } = await consentService.create({
+            patient_id: user.id,
+            consent_type: type,
+            granted: false,
+          });
+          if (error) throw error;
+        }
+      };
+
+      await syncConsent("data_sharing", data.dataSharing, latestDataSharingConsent as any);
+      await syncConsent("recording", data.recording, latestRecordingConsent as any);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["consents", user?.id] });
+      toast({ title: "Consent settings updated" });
+      setConsentDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveSavedLocationsMutation = useMutation({
+    mutationFn: async (data: typeof savedLocationsData) => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          saved_locations: {
+            home_address: data.homeAddress || null,
+            preferred_hospital: data.preferredHospital || null,
+            other_locations: data.otherLocations || null,
+          },
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Saved locations updated" });
+      setSavedLocationsDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearSavedLocationsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          saved_locations: null,
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Saved locations cleared" });
+      setSavedLocationsDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const savePaymentInsuranceMutation = useMutation({
+    mutationFn: async (data: typeof paymentInsuranceData) => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          payment_insurance: {
+            insurance_provider: data.insuranceProvider || null,
+            policy_number: data.policyNumber || null,
+            member_id: data.memberId || null,
+            insurance_plan: data.insurancePlan || null,
+            payment_method: data.paymentMethod || null,
+          },
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Payment & insurance updated" });
+      setPaymentInsuranceDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearPaymentInsuranceMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          payment_insurance: null,
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Payment & insurance cleared" });
+      setPaymentInsuranceDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveNotificationMutation = useMutation({
+    mutationFn: async (data: typeof notificationData) => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          notification_settings: {
+            appointment_reminders: data.appointmentReminders,
+            medication_alerts: data.medicationAlerts,
+            health_tips: data.healthTips,
+            email_notifications: data.emailNotifications,
+          },
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Notification settings updated" });
+      setNotificationDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearNotificationMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          notification_settings: null,
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Notification settings cleared" });
+      setNotificationDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const savePrivacySecurityMutation = useMutation({
+    mutationFn: async (data: typeof privacySecurityData) => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          privacy_security_settings: {
+            profile_visibility: data.profileVisibility,
+            two_factor_enabled: data.twoFactorEnabled,
+            biometric_lock: data.biometricLock,
+            activity_alerts: data.activityAlerts,
+          },
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Privacy & security settings updated" });
+      setPrivacySecurityDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearPrivacySecurityMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
+      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
+
+      const nextInsuranceInfo = {
+        ...baseInsuranceInfo,
+        profile_meta: {
+          ...baseProfileMeta,
+          privacy_security_settings: null,
+        },
+      };
+
+      const { error } = await patientProfileService.upsert(user.id, {
+        insurance_info: nextInsuranceInfo,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+      toast({ title: "Privacy & security settings cleared" });
+      setPrivacySecurityDialogOpen(false);
     },
     onError: (error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -216,18 +750,31 @@ export default function PatientProfile() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button 
-                        className="w-full" 
-                        onClick={() => saveMutation.mutate(formData)}
-                        disabled={saveMutation.isPending}
-                      >
-                        {saveMutation.isPending ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Save className="w-4 h-4 mr-2" />
-                        )}
-                        Save Changes
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => clearPersonalDetailsMutation.mutate()}
+                          disabled={clearPersonalDetailsMutation.isPending || saveMutation.isPending}
+                        >
+                          {clearPersonalDetailsMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : null}
+                          Clear
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          onClick={() => saveMutation.mutate(formData)}
+                          disabled={saveMutation.isPending || clearPersonalDetailsMutation.isPending}
+                        >
+                          {saveMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Save className="w-4 h-4 mr-2" />
+                          )}
+                          Save Changes
+                        </Button>
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -242,10 +789,72 @@ export default function PatientProfile() {
                   </div>
                   <div>
                     <p className="font-medium text-foreground">Medical History</p>
-                    <p className="text-sm text-muted-foreground">Conditions, allergies & medications</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(patientProfile?.insurance_info as Record<string, unknown> | null)
+                        ? "Conditions, allergies & medications on file"
+                        : "No medical history saved yet"}
+                    </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">Edit</Button>
+                <Dialog open={medicalHistoryDialogOpen} onOpenChange={setMedicalHistoryDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={initializeMedicalHistoryForm}>Edit</Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Edit Medical History</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="conditions">Conditions</Label>
+                        <Textarea
+                          id="conditions"
+                          placeholder="e.g. Hypertension, Asthma"
+                          value={medicalHistoryData.conditions}
+                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, conditions: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="allergies">Allergies</Label>
+                        <Textarea
+                          id="allergies"
+                          placeholder="e.g. Penicillin, Peanuts"
+                          value={medicalHistoryData.allergies}
+                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, allergies: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="medications">Current Medications</Label>
+                        <Textarea
+                          id="medications"
+                          placeholder="e.g. Metformin 500mg"
+                          value={medicalHistoryData.medications}
+                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, medications: e.target.value })}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">Separate multiple items with commas.</p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => clearMedicalHistoryMutation.mutate()}
+                          disabled={clearMedicalHistoryMutation.isPending || saveMedicalHistoryMutation.isPending}
+                        >
+                          {clearMedicalHistoryMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          Clear
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          onClick={() => saveMedicalHistoryMutation.mutate(medicalHistoryData)}
+                          disabled={saveMedicalHistoryMutation.isPending || clearMedicalHistoryMutation.isPending}
+                        >
+                          {saveMedicalHistoryMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
               
               <Separator />
@@ -257,10 +866,53 @@ export default function PatientProfile() {
                   </div>
                   <div>
                     <p className="font-medium text-foreground">Consent Settings</p>
-                    <p className="text-sm text-muted-foreground">Data sharing & recording preferences</p>
+                    <p className="text-sm text-muted-foreground">
+                      Data sharing: {latestDataSharingConsent?.granted ? "On" : "Off"} • Recording: {latestRecordingConsent?.granted ? "On" : "Off"}
+                    </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">Manage</Button>
+                <Dialog open={consentDialogOpen} onOpenChange={setConsentDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={initializeConsentForm}>Manage</Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Consent Settings</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                        <div>
+                          <p className="font-medium">Data Sharing</p>
+                          <p className="text-xs text-muted-foreground">Share profile with healthcare providers.</p>
+                        </div>
+                        <Switch
+                          checked={consentData.dataSharing}
+                          onCheckedChange={(checked) => setConsentData((prev) => ({ ...prev, dataSharing: checked }))}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                        <div>
+                          <p className="font-medium">Recording Consent</p>
+                          <p className="text-xs text-muted-foreground">Allow consultation recording and transcription.</p>
+                        </div>
+                        <Switch
+                          checked={consentData.recording}
+                          onCheckedChange={(checked) => setConsentData((prev) => ({ ...prev, recording: checked }))}
+                        />
+                      </div>
+
+                      <Button
+                        className="w-full"
+                        onClick={() => saveConsentMutation.mutate(consentData)}
+                        disabled={saveConsentMutation.isPending}
+                      >
+                        {saveConsentMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        Save Preferences
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
           )}
@@ -268,21 +920,340 @@ export default function PatientProfile() {
 
         {/* Account Menu Items */}
         <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
-          {accountMenuItems.map((item, index) => (
-            <div key={item.label}>
-              <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left">
+          <Dialog open={savedLocationsDialogOpen} onOpenChange={setSavedLocationsDialogOpen}>
+            <DialogTrigger asChild>
+              <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left" onClick={initializeSavedLocationsForm}>
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <item.icon className="w-5 h-5 text-primary" />
+                  <MapPin className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">{item.label}</p>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
+                  <p className="font-medium text-foreground">Saved Locations</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(savedLocationsMeta.home_address as string) || "Home & hospital addresses"}
+                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
               </button>
-              {index < accountMenuItems.length - 1 && <Separator />}
-            </div>
-          ))}
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Saved Locations</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="home_address">Home Address</Label>
+                  <Input
+                    id="home_address"
+                    placeholder="e.g. East Legon, Accra"
+                    value={savedLocationsData.homeAddress}
+                    onChange={(e) => setSavedLocationsData({ ...savedLocationsData, homeAddress: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="preferred_hospital">Preferred Hospital</Label>
+                  <Input
+                    id="preferred_hospital"
+                    placeholder="e.g. Korle-Bu Teaching Hospital"
+                    value={savedLocationsData.preferredHospital}
+                    onChange={(e) => setSavedLocationsData({ ...savedLocationsData, preferredHospital: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="other_locations">Other Notes</Label>
+                  <Textarea
+                    id="other_locations"
+                    placeholder="Additional location details"
+                    value={savedLocationsData.otherLocations}
+                    onChange={(e) => setSavedLocationsData({ ...savedLocationsData, otherLocations: e.target.value })}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => clearSavedLocationsMutation.mutate()}
+                    disabled={clearSavedLocationsMutation.isPending || saveSavedLocationsMutation.isPending}
+                  >
+                    {clearSavedLocationsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Clear
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => saveSavedLocationsMutation.mutate(savedLocationsData)}
+                    disabled={saveSavedLocationsMutation.isPending || clearSavedLocationsMutation.isPending}
+                  >
+                    {saveSavedLocationsMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Separator />
+
+          <Dialog open={paymentInsuranceDialogOpen} onOpenChange={setPaymentInsuranceDialogOpen}>
+            <DialogTrigger asChild>
+              <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left" onClick={initializePaymentInsuranceForm}>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Payment & Insurance</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(paymentInsuranceMeta.insurance_provider as string) || "Insurance cards & payment methods"}
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Payment & Insurance</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="insurance_provider">Insurance Provider</Label>
+                  <Input
+                    id="insurance_provider"
+                    placeholder="e.g. NHIS"
+                    value={paymentInsuranceData.insuranceProvider}
+                    onChange={(e) => setPaymentInsuranceData({ ...paymentInsuranceData, insuranceProvider: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="policy_number">Policy Number</Label>
+                  <Input
+                    id="policy_number"
+                    placeholder="Enter policy number"
+                    value={paymentInsuranceData.policyNumber}
+                    onChange={(e) => setPaymentInsuranceData({ ...paymentInsuranceData, policyNumber: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="member_id">Member ID</Label>
+                  <Input
+                    id="member_id"
+                    placeholder="Enter member ID"
+                    value={paymentInsuranceData.memberId}
+                    onChange={(e) => setPaymentInsuranceData({ ...paymentInsuranceData, memberId: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="insurance_plan">Insurance Plan</Label>
+                  <Input
+                    id="insurance_plan"
+                    placeholder="e.g. Family Plan"
+                    value={paymentInsuranceData.insurancePlan}
+                    onChange={(e) => setPaymentInsuranceData({ ...paymentInsuranceData, insurancePlan: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="payment_method">Preferred Payment Method</Label>
+                  <Input
+                    id="payment_method"
+                    placeholder="e.g. Mobile Money"
+                    value={paymentInsuranceData.paymentMethod}
+                    onChange={(e) => setPaymentInsuranceData({ ...paymentInsuranceData, paymentMethod: e.target.value })}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => clearPaymentInsuranceMutation.mutate()}
+                    disabled={clearPaymentInsuranceMutation.isPending || savePaymentInsuranceMutation.isPending}
+                  >
+                    {clearPaymentInsuranceMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Clear
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => savePaymentInsuranceMutation.mutate(paymentInsuranceData)}
+                    disabled={savePaymentInsuranceMutation.isPending || clearPaymentInsuranceMutation.isPending}
+                  >
+                    {savePaymentInsuranceMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Separator />
+
+          <Dialog open={notificationDialogOpen} onOpenChange={setNotificationDialogOpen}>
+            <DialogTrigger asChild>
+              <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left" onClick={initializeNotificationForm}>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Notifications</p>
+                  <p className="text-sm text-muted-foreground">{notificationSummary}</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Notifications</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Appointment Reminders</p>
+                    <p className="text-xs text-muted-foreground">Receive reminders before scheduled consultations.</p>
+                  </div>
+                  <Switch
+                    checked={notificationData.appointmentReminders}
+                    onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, appointmentReminders: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Medication Alerts</p>
+                    <p className="text-xs text-muted-foreground">Get reminders for medications and dosage windows.</p>
+                  </div>
+                  <Switch
+                    checked={notificationData.medicationAlerts}
+                    onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, medicationAlerts: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Health Tips</p>
+                    <p className="text-xs text-muted-foreground">Receive personalized wellness recommendations.</p>
+                  </div>
+                  <Switch
+                    checked={notificationData.healthTips}
+                    onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, healthTips: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Email Notifications</p>
+                    <p className="text-xs text-muted-foreground">Send notification summaries to your email.</p>
+                  </div>
+                  <Switch
+                    checked={notificationData.emailNotifications}
+                    onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, emailNotifications: checked }))}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => clearNotificationMutation.mutate()}
+                    disabled={clearNotificationMutation.isPending || saveNotificationMutation.isPending}
+                  >
+                    {clearNotificationMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Clear
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => saveNotificationMutation.mutate(notificationData)}
+                    disabled={saveNotificationMutation.isPending || clearNotificationMutation.isPending}
+                  >
+                    {saveNotificationMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Separator />
+
+          <Dialog open={privacySecurityDialogOpen} onOpenChange={setPrivacySecurityDialogOpen}>
+            <DialogTrigger asChild>
+              <button className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left" onClick={initializePrivacySecurityForm}>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Privacy & Security</p>
+                  <p className="text-sm text-muted-foreground">{privacySummary}</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Privacy & Security</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="profile_visibility">Profile Visibility</Label>
+                  <Select
+                    value={privacySecurityData.profileVisibility}
+                    onValueChange={(value: "private" | "care_team") =>
+                      setPrivacySecurityData((prev) => ({ ...prev, profileVisibility: value }))
+                    }
+                  >
+                    <SelectTrigger id="profile_visibility">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="care_team">Care Team Only</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Two-Factor Authentication</p>
+                    <p className="text-xs text-muted-foreground">Require an extra step when signing in.</p>
+                  </div>
+                  <Switch
+                    checked={privacySecurityData.twoFactorEnabled}
+                    onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, twoFactorEnabled: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Biometric Lock</p>
+                    <p className="text-xs text-muted-foreground">Allow biometric verification where supported.</p>
+                  </div>
+                  <Switch
+                    checked={privacySecurityData.biometricLock}
+                    onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, biometricLock: checked }))}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div>
+                    <p className="font-medium">Security Activity Alerts</p>
+                    <p className="text-xs text-muted-foreground">Get notified of important account activity.</p>
+                  </div>
+                  <Switch
+                    checked={privacySecurityData.activityAlerts}
+                    onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, activityAlerts: checked }))}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => clearPrivacySecurityMutation.mutate()}
+                    disabled={clearPrivacySecurityMutation.isPending || savePrivacySecurityMutation.isPending}
+                  >
+                    {clearPrivacySecurityMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Clear
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => savePrivacySecurityMutation.mutate(privacySecurityData)}
+                    disabled={savePrivacySecurityMutation.isPending || clearPrivacySecurityMutation.isPending}
+                  >
+                    {savePrivacySecurityMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">

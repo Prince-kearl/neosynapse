@@ -20,6 +20,7 @@ export interface Profile {
   full_name: string | null;
   role: UserRole;
   status: string;
+  settings_json: Record<string, unknown> | null;
   // Legacy fields still in DB schema
   default_budget: number | null;
   diet_preferences: string[] | null;
@@ -51,6 +52,7 @@ export interface ProfessionalProfile {
   specialty: string | null;
   facility_id: string | null;
   verification_status: VerificationStatus;
+  settings_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }

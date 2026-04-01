@@ -52,6 +52,13 @@ export const profileService = {
   update: (userId: string, data: Partial<Pick<Profile, "display_name" | "full_name" | "avatar_url">>) =>
     supabase.from("profiles").update(data).eq("user_id", userId),
 
+  /** Update profile settings JSON */
+  updateSettings: (userId: string, settingsJson: Record<string, unknown>) =>
+    supabase
+      .from("profiles")
+      .update({ settings_json: settingsJson as any, updated_at: new Date().toISOString() } as any)
+      .eq("user_id", userId),
+
   /** Admin: get all profiles (RLS enforced — only admins see all) */
   getAllProfiles: () =>
     supabase.from("profiles").select("*").order("created_at", { ascending: false }),
@@ -91,6 +98,19 @@ export const professionalProfileService = {
   /** Admin: update verification status */
   updateVerification: (userId: string, status: string) =>
     supabase.from("professional_profiles").update({ verification_status: status }).eq("user_id", userId),
+
+  /** Update professional settings JSON */
+  updateSettings: (userId: string, settingsJson: Record<string, unknown>) =>
+    supabase
+      .from("professional_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          settings_json: settingsJson as any,
+          updated_at: new Date().toISOString(),
+        } as any,
+        { onConflict: "user_id" }
+      ),
 };
 
 // ─── Facilities ─────────────────────────────────────────────────

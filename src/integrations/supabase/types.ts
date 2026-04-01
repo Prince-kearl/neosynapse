@@ -566,6 +566,7 @@ export type Database = {
           id: string
           license_number: string | null
           profession_type: string | null
+          settings_json: Json | null
           specialty: string | null
           updated_at: string
           user_id: string
@@ -577,6 +578,7 @@ export type Database = {
           id?: string
           license_number?: string | null
           profession_type?: string | null
+          settings_json?: Json | null
           specialty?: string | null
           updated_at?: string
           user_id: string
@@ -588,6 +590,7 @@ export type Database = {
           id?: string
           license_number?: string | null
           profession_type?: string | null
+          settings_json?: Json | null
           specialty?: string | null
           updated_at?: string
           user_id?: string
@@ -605,6 +608,7 @@ export type Database = {
           full_name: string | null
           id: string
           role: Database["public"]["Enums"]["user_role"]
+          settings_json: Json | null
           status: string
           updated_at: string
           user_id: string
@@ -618,6 +622,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
+          settings_json?: Json | null
           status?: string
           updated_at?: string
           user_id: string
@@ -631,6 +636,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
+          settings_json?: Json | null
           status?: string
           updated_at?: string
           user_id?: string

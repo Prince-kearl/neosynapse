@@ -1,35 +1,96 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Globe, Moon, Shield, LogOut, User, Stethoscope } from "lucide-react";
+import { ArrowLeft, Bell, Globe, Moon, Shield, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { professionalProfileService } from "@/shared/services/healthcare";
+import { usePushNotifications } from "@/legacy/hooks/usePushNotifications";
+import { toast } from "@/hooks/use-toast";
 
 export default function ProfessionalSettings() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
+  const { language, setLanguage } = useLanguage();
   const { profile } = useUserRole();
+  const { isSupported, permission, requestPermission } = usePushNotifications();
 
   const { data: proProfile } = useQuery({
     queryKey: ["pro-profile", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("professional_profiles")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle();
+      const { data } = await professionalProfileService.get(user!.id);
       return data;
     },
     enabled: !!user,
   });
 
+  const settings = ((proProfile?.settings_json as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const patientAlertsEnabled = settings.patient_alerts !== false;
+  const activityLoggingVisible = settings.activity_logging_visible !== false;
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (nextSettings: Record<string, unknown>) => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await professionalProfileService.updateSettings(user.id, nextSettings);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pro-profile", user?.id] });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const persistSettings = (nextSettings: Record<string, unknown>, successTitle: string) => {
+    saveSettingsMutation.mutate(nextSettings, {
+      onSuccess: () => {
+        toast({ title: successTitle });
+      },
+    });
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
+  };
+
+  const handlePatientAlertsToggle = async (checked: boolean) => {
+    if (checked && isSupported && permission !== "granted") {
+      const granted = await requestPermission();
+      if (!granted) {
+        toast({
+          title: "Notifications not enabled",
+          description: "Allow browser notifications to receive urgent patient alerts.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    persistSettings(
+      {
+        ...settings,
+        patient_alerts: checked,
+      },
+      checked ? "Patient alerts enabled" : "Patient alerts disabled"
+    );
+  };
+
+  const handleActivityLoggingInfoToggle = (checked: boolean) => {
+    persistSettings(
+      {
+        ...settings,
+        activity_logging_visible: checked,
+      },
+      checked ? "Compliance details visible" : "Compliance details hidden"
+    );
   };
 
   return (
@@ -109,10 +170,12 @@ export default function ProfessionalSettings() {
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">Patient Alerts</p>
-                  <p className="text-sm text-muted-foreground">High-urgency triage notifications</p>
+                  <p className="text-sm text-muted-foreground">
+                    {patientAlertsEnabled ? "High-urgency triage notifications enabled" : "Patient alerts are off"}
+                  </p>
                 </div>
               </div>
-              <Switch defaultChecked />
+              <Switch checked={patientAlertsEnabled} onCheckedChange={handlePatientAlertsToggle} disabled={saveSettingsMutation.isPending} />
             </div>
           </div>
         </section>
@@ -129,7 +192,7 @@ export default function ProfessionalSettings() {
                   <p className="text-sm text-muted-foreground">Clinical actions logged for audit compliance</p>
                 </div>
               </div>
-              <Switch defaultChecked disabled />
+              <Switch checked={activityLoggingVisible} onCheckedChange={handleActivityLoggingInfoToggle} disabled={saveSettingsMutation.isPending} />
             </div>
           </div>
         </section>
@@ -141,9 +204,26 @@ export default function ProfessionalSettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Globe className="w-5 h-5 text-muted-foreground" />
-                <span className="font-medium">English (US)</span>
+                <span className="font-medium">App Language</span>
               </div>
-              <Button variant="outline" size="sm">Change</Button>
+              <Select
+                value={language}
+                onValueChange={(value) => {
+                  setLanguage(value as typeof language);
+                  toast({ title: "Language updated" });
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.nativeName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </section>
