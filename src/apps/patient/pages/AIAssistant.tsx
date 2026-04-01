@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send, Mic, MicOff, Image, FileUp, Trash2, Bot, User, Loader2, Volume2,
-  Languages, Sparkles, Square
+  Languages, Sparkles, MessageSquareText, Square, Play
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMedicalChat, type ChatMessage } from "@/hooks/useMedicalChat";
-import { useLanguage, SUPPORTED_LANGUAGES } from "@/contexts/LanguageContext";
+import { useLanguage, SUPPORTED_LANGUAGES, type LanguageCode } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import {
   Select,
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useSearchParams } from "react-router-dom";
 import { MedicalReportTools } from "./MedicalReportTools";
+import { medicalReportService } from "@/shared/services/healthcare";
 
 // Dynamically import pdfjs-dist for compatibility with Vite/ESM
 let pdfjsLib: any;
@@ -34,10 +37,329 @@ function getRecorderMimeType(): string {
   return "";
 }
 
+const RECOGNITION_LANGUAGE_MAP = {
+  en: "en-US",
+  tw: "ak-GH",
+  ga: "gaa",
+  ee: "ee-GH",
+  ha: "ha-NG",
+} as const;
+
+const SPEECH_LANGUAGE_MAP = {
+  en: "en-US",
+  tw: "ak",
+  ga: "en-GH",
+  ee: "en-GH",
+  ha: "ha",
+} as const;
+
+const OCR_LANGUAGE_MAP: Record<LanguageCode, string> = {
+  en: "eng",
+  tw: "eng",
+  ga: "eng",
+  ee: "eng",
+  ha: "hau",
+};
+
+type VoiceStyle = "natural" | "balanced" | "fast";
+
+const VOICE_STYLE_LABELS: Record<LanguageCode, { label: string; natural: string; balanced: string; fast: string }> = {
+  en: { label: "Voice", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+  tw: { label: "Nne", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+  ga: { label: "Voice", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+  ee: { label: "Gbe", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+  ha: { label: "Murya", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+};
+
+const VOICE_PREVIEW_TEXT: Record<LanguageCode, string> = {
+  en: "Hello. This is a quick preview of your selected voice style.",
+  tw: "Agoo. Eyi yɛ wo nne nhyehyɛe a woapaw no hwɛsie tiawa.",
+  ga: "Agoo. Eyi hewɔ voice style ni a otsɔɔ lɛ preview kpokpoi.",
+  ee: "Fofo. Esia nye gbeɖiɖi ƒe kpɔkpɔa kpui a nètia.",
+  ha: "Sannu. Wannan gajeren gwaji ne na salo na murya da ka zaɓa.",
+};
+
+const AI_ASSISTANT_COPY = {
+  en: {
+    switchToVoice: "Switch to voice chat",
+    switchToText: "Switch to text chat",
+    voiceChat: "Voice Chat",
+    textChat: "Text Chat",
+    welcomeTitle: "How can I help you today?",
+    welcomeDescription: "Ask me health questions, describe symptoms, or upload a medical image for analysis. I support text, voice, and image input.",
+    suggestions: [
+      "I have a headache and fever",
+      "What does my blood test result mean?",
+      "Symptoms of malaria vs typhoid",
+      "Help me prepare for a doctor visit",
+    ],
+    analyzeImageFallback: "Please analyze this medical image and provide your assessment.",
+    imageWithOcrPrompt: (ocrText: string) => `This image may contain a medical report or document. Here is the extracted text:\n\n${ocrText}\n\nPlease analyze this report and summarize the key findings. If the image contains other medical information, analyze it visually as well.`,
+    uploadedReportImagePrompt: (fileName: string) => `Please analyze this uploaded medical report image: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `I'm uploading a medical report PDF (${fileName}). Here is the extracted text:\n\n${preview}\n\nPlease analyze this report and summarize the key findings.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `I'm uploading a medical report (${fileName}). Here is the content:\n\n${preview}\n\nPlease analyze this report and summarize the key findings.`,
+    fileTooLargeTitle: "File too large",
+    fileTooLargeImageDescription: "Max 10 MB for images.",
+    fileTooLargeDescription: "Max 10 MB.",
+    imageOcrFailedTitle: "Image OCR Failed",
+    imageOcrFailedDescription: "Could not extract text from image.",
+    pdfFailedTitle: "PDF Extraction Failed",
+    pdfFailedDescription: "Could not extract text from PDF.",
+    speechErrorTitle: "Speech Error",
+    speechErrorDescription: "Could not recognize speech. Please try again or type your message.",
+    voiceUnsupportedTitle: "Voice Not Supported",
+    voiceUnsupportedDescription: "Your browser doesn't support speech recognition. Please type your message instead.",
+    microphoneErrorTitle: "Microphone Error",
+    microphoneErrorDescription: "Could not access microphone.",
+    noSpeechTitle: "No speech detected",
+    noSpeechDescription: "Please speak clearly and try again.",
+    listeningFallbackTitle: "Listening...",
+    listeningFallbackDescription: "Speak now - using browser speech recognition as fallback.",
+    voiceUnavailableTitle: "Voice Unavailable",
+    voiceUnavailableDescription: "Text-to-speech is not available. Please read the response instead.",
+    listening: "Listening...",
+    saySomething: "Say something...",
+    pressMic: "Press the mic to start speaking",
+    duration: "Duration",
+    listeningIndicator: "Listening...",
+    stop: "Stop",
+    transcribing: "Transcribing your speech...",
+    uploadAria: "Upload file or image",
+    uploadedAlt: "Uploaded file preview",
+    inputPlaceholder: "Ask anything",
+    inputListeningPlaceholder: "Listening...",
+    inputTranscribingPlaceholder: "Transcribing...",
+    startVoiceInput: "Start voice input",
+    stopRecording: "Stop recording",
+    send: "Send",
+    listen: "Listen",
+  },
+  tw: {
+    switchToVoice: "Sesae kɔ kasa mu",
+    switchToText: "Sesae kɔ twerɛ mu",
+    voiceChat: "Kasa Mu",
+    textChat: "Twerɛ Mu",
+    welcomeTitle: "Mɛboa wo dɛn nnɛ?",
+    welcomeDescription: "Bisa me apɔmuden ho nsɛmmisa, kyerɛkyerɛ wo yareɛ nsɛnkyerɛnne, anaa fa mfonini ba ma menhwehwɛ mu. Metumi de twerɛ, nne, ne mfonini ayɛ adwuma.",
+    suggestions: [
+      "Me ti yε me na mewɔ atiridii",
+      "Dɛn na me mogya nhwehwɛmu kyerɛ?",
+      "Malaria ne typhoid nsɛnkyerɛnne",
+      "Boa me ma mensiesie me ho ansa na makɔ ayaresabea",
+    ],
+    analyzeImageFallback: "Yɛ me ayare ho mfonini yi ho nhwehwɛmu na ma me wo nhwehwɛmu mu adwene.",
+    imageWithOcrPrompt: (ocrText: string) => `Eyi betumi ayɛ ayaresa krataa anaa dɔkita krataa. Nsɛm a yɛyii fii mu no ni:\n\n${ocrText}\n\nYɛ krataa yi ho nhwehwɛmu na bɔ mu tɔfa atitiriw no mu. Sɛ mfonini no wɔ ayaresa ho nsɛm foforo a, hwɛ no nso.`,
+    uploadedReportImagePrompt: (fileName: string) => `Yɛ ayaresa krataa mfonini a wɔde aba yi ho nhwehwɛmu: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Mede ayaresa krataa PDF (${fileName}) reba. Nsɛm a yɛyii fii mu no ni:\n\n${preview}\n\nYɛ krataa yi ho nhwehwɛmu na bɔ mu tɔfa atitiriw no mu.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Mede ayaresa krataa (${fileName}) reba. Ne mu nsɛm no ni:\n\n${preview}\n\nYɛ krataa yi ho nhwehwɛmu na bɔ mu tɔfa atitiriw no mu.`,
+    fileTooLargeTitle: "Fael no sõ dodo",
+    fileTooLargeImageDescription: "Mfonini mu kɛse ntumi ntra 10 MB.",
+    fileTooLargeDescription: "Fael no ntumi ntra 10 MB.",
+    imageOcrFailedTitle: "Antumi anyi nsɛm amfi mfonini no mu",
+    imageOcrFailedDescription: "Yɛantumi anyi nsɛm amfi mfonini no mu.",
+    pdfFailedTitle: "PDF yi mu nsɛm anyi",
+    pdfFailedDescription: "Yɛantumi anyi nsɛm amfi PDF no mu.",
+    speechErrorTitle: "Kasa mfomso",
+    speechErrorDescription: "Yɛantumi anhu wo nne no. San yɛ bio anaa twerɛ wo nkrasɛm no.",
+    voiceUnsupportedTitle: "Browser no nni nne boa",
+    voiceUnsupportedDescription: "Wo browser no nni nne-hunu mu mmoa. Yɛsrɛ wo, twerɛ wo nkrasɛm no mmom.",
+    microphoneErrorTitle: "Mikrofon mfomso",
+    microphoneErrorDescription: "Yɛantumi annya mikrofon no ho kwan.",
+    noSpeechTitle: "Yɛante nne biara",
+    noSpeechDescription: "Yɛsrɛ wo kasa pefee na san yɛ bio.",
+    listeningFallbackTitle: "Retie...",
+    listeningFallbackDescription: "Kasa seesei - yɛde browser nne-hunu reboa.",
+    voiceUnavailableTitle: "Nne no nni hɔ",
+    voiceUnavailableDescription: "Text-to-speech nni hɔ. Yɛsrɛ wo kenkan mmuae no mmom.",
+    listening: "Retie...",
+    saySomething: "Ka biribi...",
+    pressMic: "Hyɛ mic no so na fi ase kasa",
+    duration: "Bere",
+    listeningIndicator: "Retie...",
+    stop: "Gyae",
+    transcribing: "Yɛrekyerɛ wo nne no agu nsɛm mu...",
+    uploadAria: "Fa fael anaa mfonini ba",
+    uploadedAlt: "Mfonini a wɔde aba",
+    inputPlaceholder: "Bisa biribiara",
+    inputListeningPlaceholder: "Retie...",
+    inputTranscribingPlaceholder: "Yɛrekyerɛ agu nsɛm mu...",
+    startVoiceInput: "Fi ase ka",
+    stopRecording: "Gyae nne kyerew",
+    send: "Soma",
+    listen: "Tie",
+  },
+  ga: {
+    switchToVoice: "Bue niyɔŋmɔ kasa",
+    switchToText: "Bue mantsɛ mli",
+    voiceChat: "Niyɔŋmɔ Kasa",
+    textChat: "Mantsɛ",
+    welcomeTitle: "Mibɔɔ bo dɛn lɛ?",
+    welcomeDescription: "Buu mi apɔmɔtsɔmɔ hewalɛi, tsɔmi mli shihilɛmɔi, alo lɛ mli medical aworan ni mihewalɛ. Miyaa mantsɛ, niyɔŋmɔ kɛ aworan input.",
+    suggestions: [
+      "Mitsui gbɛmɔ kɛ fever",
+      "Medaa mli blood test result lɛ shishi?",
+      "Malaria kɛ typhoid shihilɛmɔi",
+      "Bɔɔ mi ni miakɛ doctor he",
+    ],
+    analyzeImageFallback: "Hewalɛ medical aworan ni kɛ bo mi assessment.",
+    imageWithOcrPrompt: (ocrText: string) => `Aworan ni saa medical report alo document. Text ni yɛ kɛ bo ni:\n\n${ocrText}\n\nHewalɛ report ni kɛ tsɔ summary of key findings. Ni medical information hewɔ mli lɛ, hewalɛ amɛi hu.`,
+    uploadedReportImagePrompt: (fileName: string) => `Hewalɛ medical report image ni a wɔtsɔ ba: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Mi tsɔɔ medical report PDF (${fileName}) ba. Text ni yɛ kɛ bo ni:\n\n${preview}\n\nHewalɛ report ni kɛ tsɔ summary of key findings.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Mi tsɔɔ medical report (${fileName}) ba. Lɛ mli content ni:\n\n${preview}\n\nHewalɛ report ni kɛ tsɔ summary of key findings.`,
+    fileTooLargeTitle: "File ni yɛ kpaa",
+    fileTooLargeImageDescription: "Image lɛ ko ejoo 10 MB.",
+    fileTooLargeDescription: "File lɛ ko ejoo 10 MB.",
+    imageOcrFailedTitle: "Image OCR yɛ boɔ",
+    imageOcrFailedDescription: "Mitaŋ yɛ image lɛ mli text.",
+    pdfFailedTitle: "PDF extraction yɛ boɔ",
+    pdfFailedDescription: "Mitaŋ yɛ PDF lɛ mli text.",
+    speechErrorTitle: "Kasa boɔ",
+    speechErrorDescription: "Mitaŋ yɔ niyɔŋmɔ lɛ. Kɛ ekofo alo tsɔ mantsɛ.",
+    voiceUnsupportedTitle: "Browser niyaa voice support baa",
+    voiceUnsupportedDescription: "Wo browser niyaa speech recognition baa. Tsɔ mantsɛ mmom.",
+    microphoneErrorTitle: "Microphone boɔ",
+    microphoneErrorDescription: "Mitaŋ yaa microphone lɛ.",
+    noSpeechTitle: "Niyɔŋmɔ ko yɔ",
+    noSpeechDescription: "Kasa tsɔɔ ni kɛ ekofo bio.",
+    listeningFallbackTitle: "Miye niyɔŋmɔ...",
+    listeningFallbackDescription: "Kasa shishi - browser speech recognition fallback ni nɔɔ.",
+    voiceUnavailableTitle: "Voice ko nɔ",
+    voiceUnavailableDescription: "Text-to-speech ko nɔ. Tsɔɔ answer lɛ kɛe.",
+    listening: "Miye niyɔŋmɔ...",
+    saySomething: "Kasa nyɛ...",
+    pressMic: "Nyɔ mic lɛ ni fɔɔ kasa",
+    duration: "Mberɛ",
+    listeningIndicator: "Miye niyɔŋmɔ...",
+    stop: "Tso",
+    transcribing: "Miyi wo niyɔŋmɔ lɛ mli mantsɛ...",
+    uploadAria: "Tsɔ file alo image ba",
+    uploadedAlt: "File preview a wɔtsɔ ba",
+    inputPlaceholder: "Buu hewalɛ hewalɛmɔ hewalɛ",
+    inputListeningPlaceholder: "Miye niyɔŋmɔ...",
+    inputTranscribingPlaceholder: "Miyi mantsɛ...",
+    startVoiceInput: "Fɔɔ voice input",
+    stopRecording: "Tso recording",
+    send: "Kɛ",
+    listen: "Nɔ",
+  },
+  ee: {
+    switchToVoice: "Trɔ yi dzi gbeɖiɖi me",
+    switchToText: "Trɔ yi dzi nuŋɔŋɔ me",
+    voiceChat: "Gbeɖiɖi",
+    textChat: "Nuŋɔŋɔ",
+    welcomeTitle: "Aleke mate ŋu akpe ɖe ŋuwò egbe?",
+    welcomeDescription: "Bia nya siwo ku ɖe lãmesẽ ŋu, gblɔ nudzɔdzɔmeviwo, alo ɖo medical nɔnɔmetata ɖe eme be maɖe egɔme. Mewɔa dɔ kple nuŋɔŋɔ, gbe, kple nɔnɔmetata.",
+    suggestions: [
+      "Ta le vevim eye asra le dzim",
+      "Nu ka nye blood test result gblɔna?",
+      "Malaria kple typhoid dzesiwo",
+      "Kpe ɖe ŋunye be maɖo ŋku doctor gbɔ yiɖe",
+    ],
+    analyzeImageFallback: "Taflatse, ɖe egɔme le medical nɔnɔmetata sia me eye nàtsɔ assessment na me.",
+    imageWithOcrPrompt: (ocrText: string) => `Nɔnɔmetata sia ate ŋu anye medical report alo document. Text si míekpɔ le eme lae nye esi:\n\n${ocrText}\n\nTaflatse, ɖe egɔme le report sia me eye nàwɔ key findings summary. Ne medical information bubu le eme la, ɖe egɔme hã.`,
+    uploadedReportImagePrompt: (fileName: string) => `Taflatse, ɖe egɔme le medical report nɔnɔmetata si wowɔ upload la me: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Mele medical report PDF (${fileName}) upload ge. Text si míekpɔ le eme lae nye esi:\n\n${preview}\n\nTaflatse, ɖe egɔme le report sia me eye nàwɔ key findings summary.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Mele medical report (${fileName}) upload ge. Esi le eme lae nye esi:\n\n${preview}\n\nTaflatse, ɖe egɔme le report sia me eye nàwɔ key findings summary.`,
+    fileTooLargeTitle: "File la gã akpa",
+    fileTooLargeImageDescription: "Nɔnɔmetata mele 10 MB wu ge o.",
+    fileTooLargeDescription: "File la mele 10 MB wu ge o.",
+    imageOcrFailedTitle: "Míemate ŋu ɖe text tso nɔnɔmetata me o",
+    imageOcrFailedDescription: "Míemate ŋu ɖe text tso nɔnɔmetata me o.",
+    pdfFailedTitle: "PDF extraction geɖe o",
+    pdfFailedDescription: "Míemate ŋu ɖe text tso PDF me o.",
+    speechErrorTitle: "Gbeɖiɖi ƒe vodada",
+    speechErrorDescription: "Míemate ŋu se gbe la o. Taflatse gblɔ ake alo naŋlɔ wo nya la.",
+    voiceUnsupportedTitle: "Browser la mekpɔ gbeʋuɖoɖo o",
+    voiceUnsupportedDescription: "Wo browser la mekpɔ speech recognition o. Taflatse naŋlɔ wo nya la potae.",
+    microphoneErrorTitle: "Microphone ƒe vodada",
+    microphoneErrorDescription: "Míemate ŋu kpɔ microphone la o.",
+    noSpeechTitle: "Míemese gbe aɖeke o",
+    noSpeechDescription: "Taflatse gblɔ nyuie eye nàte ŋu agbugbɔe ake.",
+    listeningFallbackTitle: "Mele se ge...",
+    listeningFallbackDescription: "Gblɔ fifia - browser speech recognition wɔ dɔ le afisia.",
+    voiceUnavailableTitle: "Gbeɖiɖi mele o",
+    voiceUnavailableDescription: "Text-to-speech mele o. Taflatse xlẽ answer la.",
+    listening: "Mele se ge...",
+    saySomething: "Gblɔ nane...",
+    pressMic: "Zi mic la be nàdze gɔme gblɔ",
+    duration: "Game",
+    listeningIndicator: "Mele se ge...",
+    stop: "Tᴐ",
+    transcribing: "Mele wo gbe la trɔm wòle nuŋɔŋɔ me...",
+    uploadAria: "Upload file alo nɔnɔmetata",
+    uploadedAlt: "Upload preview",
+    inputPlaceholder: "Bia nuɖuɖu aɖeke",
+    inputListeningPlaceholder: "Mele se ge...",
+    inputTranscribingPlaceholder: "Mele trɔm...",
+    startVoiceInput: "Dze gbeɖiɖi gɔme",
+    stopRecording: "Tᴐ recording",
+    send: "Ɖo",
+    listen: "Se",
+  },
+  ha: {
+    switchToVoice: "Canja zuwa magana",
+    switchToText: "Canja zuwa rubutu",
+    voiceChat: "Tattaunawar Murya",
+    textChat: "Tattaunawar Rubutu",
+    welcomeTitle: "Ta yaya zan taimaka maka yau?",
+    welcomeDescription: "Ka tambaye ni tambayoyin lafiya, ka bayyana alamomin rashin lafiya, ko ka loda hoton likita domin nazari. Ina tallafawa rubutu, murya, da hoto.",
+    suggestions: [
+      "Ina da ciwon kai da zazzabi",
+      "Menene sakamakon gwajin jinina yake nufi?",
+      "Alamomin malaria da typhoid",
+      "Ka taimaka mini na shirya ganin likita",
+    ],
+    analyzeImageFallback: "Da fatan za a bincika wannan hoton lafiya kuma a ba ni sharhi.",
+    imageWithOcrPrompt: (ocrText: string) => `Wannan hoton na iya dauke da rahoton lafiya ko takarda. Ga rubutun da aka cire:\n\n${ocrText}\n\nDa fatan za a bincika wannan rahoto kuma a takaita mahimman bayanai. Idan hoton yana dauke da wasu bayanan lafiya, a bincika su ma.`,
+    uploadedReportImagePrompt: (fileName: string) => `Da fatan za a bincika wannan hoton rahoton lafiya da aka loda: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Ina loda rahoton lafiya PDF (${fileName}). Ga rubutun da aka cire:\n\n${preview}\n\nDa fatan za a bincika wannan rahoto kuma a takaita mahimman bayanai.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Ina loda rahoton lafiya (${fileName}). Ga abin da ke ciki:\n\n${preview}\n\nDa fatan za a bincika wannan rahoto kuma a takaita mahimman bayanai.`,
+    fileTooLargeTitle: "Fayil ya yi girma sosai",
+    fileTooLargeImageDescription: "Iyakar hoto ita ce 10 MB.",
+    fileTooLargeDescription: "Iyakar fayil ita ce 10 MB.",
+    imageOcrFailedTitle: "An kasa cire rubutu daga hoto",
+    imageOcrFailedDescription: "Ba a iya cire rubutu daga hoton ba.",
+    pdfFailedTitle: "An kasa cire rubutu daga PDF",
+    pdfFailedDescription: "Ba a iya cire rubutu daga PDF ba.",
+    speechErrorTitle: "Kuskuren magana",
+    speechErrorDescription: "Ba a iya gane maganar ba. A sake gwadawa ko a rubuta sakonka.",
+    voiceUnsupportedTitle: "Ba a tallafa murya ba",
+    voiceUnsupportedDescription: "Browser dinka baya tallafawa gane magana. A rubuta sakonka maimakon haka.",
+    microphoneErrorTitle: "Kuskuren makirufo",
+    microphoneErrorDescription: "Ba a iya samun damar amfani da makirufo ba.",
+    noSpeechTitle: "Ba a gano magana ba",
+    noSpeechDescription: "Yi magana a fili sannan a sake gwadawa.",
+    listeningFallbackTitle: "Ana sauraro...",
+    listeningFallbackDescription: "Yi magana yanzu - ana amfani da speech recognition na browser a madadin.",
+    voiceUnavailableTitle: "Muryar ba ta samuwa",
+    voiceUnavailableDescription: "Text-to-speech ba ya samuwa. Da fatan za a karanta amsar maimakon haka.",
+    listening: "Ana sauraro...",
+    saySomething: "Faɗi wani abu...",
+    pressMic: "Danna mic don fara magana",
+    duration: "Lokaci",
+    listeningIndicator: "Ana sauraro...",
+    stop: "Tsaya",
+    transcribing: "Ana maida maganarka zuwa rubutu...",
+    uploadAria: "Loda fayil ko hoto",
+    uploadedAlt: "Abin da aka loda",
+    inputPlaceholder: "Tambayi komai",
+    inputListeningPlaceholder: "Ana sauraro...",
+    inputTranscribingPlaceholder: "Ana rubutawa...",
+    startVoiceInput: "Fara shigar murya",
+    stopRecording: "Dakatar da rikodi",
+    send: "Aika",
+    listen: "Saurara",
+  },
+} as const;
+
 function AIAssistant() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { messages, isLoading, sendMessage, clearChat } = useMedicalChat();
   const [searchParams, setSearchParams] = useSearchParams();
   const { language, setLanguage } = useLanguage();
+  const copy = AI_ASSISTANT_COPY[language] || AI_ASSISTANT_COPY.en;
+  const styleLabels = VOICE_STYLE_LABELS[language] || VOICE_STYLE_LABELS.en;
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -46,21 +368,29 @@ function AIAssistant() {
   const [autoVoice, setAutoVoice] = useState(false); // auto-play TTS for voice-initiated msgs
   const [liveTranscript, setLiveTranscript] = useState("");
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [voiceStyle, setVoiceStyle] = useState<VoiceStyle>(() => {
+    const saved = localStorage.getItem("ai-assistant-voice-style");
+    return saved === "natural" || saved === "balanced" || saved === "fast" ? saved : "natural";
+  });
   // Always default to text mode when opening the AI Assistant
   const [mode, setMode] = useState("text");
   // Remove continuous voice loop
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<any | null>(null);
+  const transcriptRef = useRef("");
+  const stopRequestedRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speakRequestIdRef = useRef(0);
   const prevMessageCountRef = useRef(0);
   const lastUrlQueryRef = useRef<string | null>(null);
+  const savedReportSignaturesRef = useRef<Set<string>>(new Set());
   // --- Suggestion chip highlight state ---
   const [highlightedChip, setHighlightedChip] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewText = VOICE_PREVIEW_TEXT[language] || VOICE_PREVIEW_TEXT.en;
 
   const handleChipClick = (chipText: string, idx: number) => {
     setInput(chipText);
@@ -73,6 +403,10 @@ function AIAssistant() {
   useEffect(() => {
     localStorage.setItem("ai-assistant-mode", mode);
   }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem("ai-assistant-voice-style", voiceStyle);
+  }, [voiceStyle]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -113,7 +447,17 @@ function AIAssistant() {
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Ignore shutdown errors.
+        }
+      }
       audioRef.current?.pause();
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
@@ -131,31 +475,25 @@ function AIAssistant() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 10 MB for images.", variant: "destructive" });
+      toast({ title: copy.fileTooLargeTitle, description: copy.fileTooLargeImageDescription, variant: "destructive" });
       e.target.value = "";
       return;
     }
     try {
-      // Run OCR on the image
-      const ocrText = await extractImageText(file);
+      // Run OCR on the image using the currently selected assistant language.
+      const ocrText = await extractImageText(file, language);
       if (ocrText && ocrText.replace(/\s/g, "").length > 20) {
         // If OCR finds enough text, send both the text and the image
-        sendMessage(
-          `This image may contain a medical report or document. Here is the extracted text:\n\n${ocrText}\n\nPlease analyze this report and summarize the key findings. If the image contains other medical information, analyze it visually as well.`,
-          await fileToBase64(file)
-        );
+        sendMessage(copy.imageWithOcrPrompt(ocrText), await fileToBase64(file));
       } else {
         // If not much text, just send the image for visual analysis
-        sendMessage(
-          input.trim() || "Please analyze this medical image and provide your assessment.",
-          await fileToBase64(file)
-        );
+        sendMessage(input.trim() || copy.analyzeImageFallback, await fileToBase64(file));
       }
     } catch (err) {
-      toast({ title: "Image OCR Failed", description: "Could not extract text from image.", variant: "destructive" });
+      toast({ title: copy.imageOcrFailedTitle, description: copy.imageOcrFailedDescription, variant: "destructive" });
       // Fallback: send image only
       const base64 = await fileToBase64(file);
-      sendMessage(input.trim() || "Please analyze this medical image and provide your assessment.", base64);
+      sendMessage(input.trim() || copy.analyzeImageFallback, base64);
     }
     setInput("");
     e.target.value = "";
@@ -176,7 +514,7 @@ function AIAssistant() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 10 MB.", variant: "destructive" });
+      toast({ title: copy.fileTooLargeTitle, description: copy.fileTooLargeDescription, variant: "destructive" });
       e.target.value = "";
       return;
     }
@@ -185,7 +523,7 @@ function AIAssistant() {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
-        sendMessage(`Please analyze this uploaded medical report image: ${file.name}`, base64);
+        sendMessage(copy.uploadedReportImagePrompt(file.name), base64);
       };
       reader.readAsDataURL(file);
     } else if (file.type === "application/pdf") {
@@ -193,11 +531,9 @@ function AIAssistant() {
       try {
         const text = await extractPdfText(file);
         const preview = text.slice(0, 3000);
-        sendMessage(
-          `I'm uploading a medical report PDF (${file.name}). Here is the extracted text:\n\n${preview}\n\nPlease analyze this report and summarize the key findings.`
-        );
+        sendMessage(copy.uploadedPdfPrompt(file.name, preview));
       } catch (err) {
-        toast({ title: "PDF Extraction Failed", description: "Could not extract text from PDF.", variant: "destructive" });
+        toast({ title: copy.pdfFailedTitle, description: copy.pdfFailedDescription, variant: "destructive" });
       }
     } else {
       // For text-based files, read as text
@@ -205,9 +541,7 @@ function AIAssistant() {
       reader.onload = () => {
         const text = reader.result as string;
         const preview = text.slice(0, 3000);
-        sendMessage(
-          `I'm uploading a medical report (${file.name}). Here is the content:\n\n${preview}\n\nPlease analyze this report and summarize the key findings.`
-        );
+        sendMessage(copy.uploadedReportPrompt(file.name, preview));
       };
       reader.readAsText(file);
     }
@@ -218,175 +552,248 @@ function AIAssistant() {
   // Manual voice mode: only start listening when user triggers
   const startRecording = useCallback(async () => {
     try {
+      if (isRecording) return;
       setLiveTranscript("");
+      transcriptRef.current = "";
+      stopRequestedRef.current = false;
+
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
-        recognition.lang = language === "tw" ? "ak-GH" : language === "ga" ? "gaa" : language === "ee" ? "ee-GH" : language === "ha" ? "ha-NG" : "en-US";
+        recognitionRef.current = recognition;
+        recognition.lang = RECOGNITION_LANGUAGE_MAP[language] || RECOGNITION_LANGUAGE_MAP.en;
         recognition.interimResults = true;
+        recognition.continuous = true;
         recognition.maxAlternatives = 1;
+
         setIsRecording(true);
         setRecordingDuration(0);
         recordingTimerRef.current = setInterval(() => {
           setRecordingDuration((d) => d + 1);
         }, 1000);
+
         recognition.onresult = (event: any) => {
-          let transcript = "";
+          let interimTranscript = "";
           for (let i = event.resultIndex; i < event.results.length; ++i) {
-            transcript += event.results[i][0].transcript;
+            const chunk = event.results[i][0]?.transcript || "";
+            if (event.results[i].isFinal) {
+              transcriptRef.current += `${chunk} `;
+            } else {
+              interimTranscript += chunk;
+            }
           }
-          setLiveTranscript(transcript);
+          setLiveTranscript(`${transcriptRef.current}${interimTranscript}`.trim());
         };
+
         recognition.onend = () => {
+          recognitionRef.current = null;
           setIsRecording(false);
           if (recordingTimerRef.current) {
             clearInterval(recordingTimerRef.current);
             recordingTimerRef.current = null;
           }
           setRecordingDuration(0);
-          if (liveTranscript.trim()) {
+
+          const finalTranscript = transcriptRef.current.trim();
+          transcriptRef.current = "";
+          if (finalTranscript) {
             setAutoVoice(true);
-            sendMessage(liveTranscript.trim());
+            sendMessage(finalTranscript);
             setLiveTranscript("");
+          } else if (!stopRequestedRef.current) {
+            toast({ title: copy.noSpeechTitle, description: copy.noSpeechDescription, variant: "destructive" });
           }
+          stopRequestedRef.current = false;
         };
+
         recognition.onerror = () => {
-          setIsRecording(false);
-          setLiveTranscript("");
-          toast({ title: "Speech Error", description: "Could not recognize speech. Please try again or type your message.", variant: "destructive" });
+          if (!stopRequestedRef.current) {
+            setIsRecording(false);
+            setLiveTranscript("");
+            toast({ title: copy.speechErrorTitle, description: copy.speechErrorDescription, variant: "destructive" });
+          }
         };
         recognition.start();
       } else {
-        toast({ title: "Voice Not Supported", description: "Your browser doesn't support speech recognition. Please type your message instead.", variant: "destructive" });
+        toast({ title: copy.voiceUnsupportedTitle, description: copy.voiceUnsupportedDescription, variant: "destructive" });
       }
     } catch (err: unknown) {
-      toast({ title: "Microphone Error", description: "Could not access microphone.", variant: "destructive" });
+      toast({ title: copy.microphoneErrorTitle, description: copy.microphoneErrorDescription, variant: "destructive" });
     }
-  }, [language, liveTranscript, sendMessage]);
+  }, [language, sendMessage, copy, isRecording]);
 
   // Stop recording only
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+    stopRequestedRef.current = true;
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Ignore stop errors.
+      }
     }
     setIsRecording(false);
+    setLiveTranscript("");
   }, []);
 
-  // ---- Transcription (ElevenLabs with Web Speech API fallback) ----
-  const transcribeAudio = async (blob: Blob, mimeType: string) => {
-    setIsTranscribing(true);
-    try {
-      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-      const formData = new FormData();
-      formData.append("audio", blob, `recording.${ext}`);
-
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/speech-to-text`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
-        body: formData,
-      });
-
-      if (!resp.ok) throw new Error("ElevenLabs STT failed");
-
-      const data = await resp.json();
-      const text = data.text?.trim();
-      if (text) {
-        setAutoVoice(true);
-        sendMessage(text);
-      } else {
-        toast({ title: "No speech detected", description: "Please speak clearly and try again.", variant: "destructive" });
-      }
-    } catch {
-      // Fallback: use browser Web Speech API for live recognition
-      console.warn("ElevenLabs STT unavailable, falling back to Web Speech API");
-      fallbackWebSpeechRecognition();
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  const fallbackWebSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast({ title: "Voice Not Supported", description: "Your browser doesn't support speech recognition. Please type your message instead.", variant: "destructive" });
+  // ---- Text-to-Speech (browser speech synthesis, prefer Google voices) ----
+  const speakText = async (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      toast({ title: copy.voiceUnavailableTitle, description: copy.voiceUnavailableDescription, variant: "destructive" });
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.lang = language === "tw" ? "ak-GH" : language === "ga" ? "gaa" : language === "ee" ? "ee-GH" : language === "ha" ? "ha-NG" : "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
 
-    toast({ title: "Listening...", description: "Speak now — using browser speech recognition as fallback." });
-
-    recognition.onresult = (event: any) => {
-      const text = event.results[0]?.[0]?.transcript?.trim();
-      if (text) {
-        setAutoVoice(true);
-        sendMessage(text);
-      }
-    };
-    recognition.onerror = () => {
-      toast({ title: "Speech Error", description: "Could not recognize speech. Please try again or type your message.", variant: "destructive" });
-    };
-    recognition.start();
-  };
-
-  // ---- Text-to-Speech (ElevenLabs with browser SpeechSynthesis fallback) ----
-  const speakText = async (text: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
     setIsSpeaking(true);
 
     const cleanText = text
       .replace(/[#*_`~\[\]()>]/g, "")
       .replace(/\n{2,}/g, ". ")
       .replace(/\n/g, " ")
-      .slice(0, 4000);
+      .replace(/\s*([,;:])\s*/g, "$1 ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 3000);
+
+    const synth = window.speechSynthesis;
+    const targetLang = SPEECH_LANGUAGE_MAP[language] || SPEECH_LANGUAGE_MAP.en;
+    const requestId = ++speakRequestIdRef.current;
+
+    const getVoices = async (): Promise<SpeechSynthesisVoice[]> => {
+      const existing = synth.getVoices();
+      if (existing.length > 0) return existing;
+      return await new Promise((resolve) => {
+        const handler = () => {
+          const loaded = synth.getVoices();
+          if (loaded.length > 0) {
+            synth.removeEventListener("voiceschanged", handler);
+            resolve(loaded);
+          }
+        };
+        synth.addEventListener("voiceschanged", handler);
+        setTimeout(() => {
+          synth.removeEventListener("voiceschanged", handler);
+          resolve(synth.getVoices());
+        }, 700);
+      });
+    };
+
+    const pickVoice = (voices: SpeechSynthesisVoice[]) => {
+      const langPrefix = targetLang.toLowerCase().slice(0, 2);
+      const compatible = voices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
+      if (compatible.length === 0) return null;
+
+      const scored = compatible
+        .map((voice) => {
+          const name = voice.name.toLowerCase();
+          let score = 0;
+
+          if (voice.lang.toLowerCase() === targetLang.toLowerCase()) score += 40;
+          if (!voice.localService) score += 8;
+
+          if (/google|siri|samantha|neural|wavenet|premium|natural/.test(name)) score += 30;
+          if (/female|woman|zira|aria|jenny/.test(name)) score += 8;
+          if (/compact|espeak|robot|classic/.test(name)) score -= 25;
+
+          return { voice, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      return scored[0]?.voice || null;
+    };
+
+    const splitIntoChunks = (value: string, maxLen = 220) => {
+      const sentences = value.match(/[^.!?]+[.!?]*/g) || [value];
+      const chunks: string[] = [];
+      let current = "";
+      for (const raw of sentences) {
+        const sentence = raw.trim();
+        if (!sentence) continue;
+        if ((`${current} ${sentence}`).trim().length <= maxLen) {
+          current = `${current} ${sentence}`.trim();
+        } else {
+          if (current) chunks.push(current);
+          if (sentence.length <= maxLen) {
+            current = sentence;
+          } else {
+            const words = sentence.split(" ");
+            let line = "";
+            for (const word of words) {
+              if ((`${line} ${word}`).trim().length <= maxLen) {
+                line = `${line} ${word}`.trim();
+              } else {
+                if (line) chunks.push(line);
+                line = word;
+              }
+            }
+            current = line;
+          }
+        }
+      }
+      if (current) chunks.push(current);
+      return chunks;
+    };
 
     try {
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-        body: JSON.stringify({ text: cleanText }),
-      });
+      synth.cancel();
+      const voices = await getVoices();
+      const voice = pickVoice(voices);
+      const chunks = splitIntoChunks(cleanText);
+      const prosodyByLang: Record<string, { rate: number; pitch: number }> = {
+        en: { rate: 0.92, pitch: 1.0 },
+        tw: { rate: 0.9, pitch: 0.98 },
+        ga: { rate: 0.9, pitch: 0.98 },
+        ee: { rate: 0.9, pitch: 0.98 },
+        ha: { rate: 0.9, pitch: 0.98 },
+      };
+      const styleMultipliers: Record<VoiceStyle, { rate: number; pitch: number }> = {
+        natural: { rate: 0.97, pitch: 1.02 },
+        balanced: { rate: 1.03, pitch: 1.0 },
+        fast: { rate: 1.14, pitch: 0.98 },
+      };
+      const base = prosodyByLang[language] || prosodyByLang.en;
+      const style = styleMultipliers[voiceStyle] || styleMultipliers.natural;
+      const prosody = {
+        rate: Math.min(1.25, Math.max(0.75, base.rate * style.rate)),
+        pitch: Math.min(1.3, Math.max(0.7, base.pitch * style.pitch)),
+      };
 
-      if (!resp.ok) throw new Error("ElevenLabs TTS failed");
+      for (const chunk of chunks) {
+        if (requestId !== speakRequestIdRef.current) {
+          setIsSpeaking(false);
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          const utterance = new SpeechSynthesisUtterance(chunk);
+          utterance.lang = targetLang;
+          utterance.voice = voice;
+          utterance.rate = prosody.rate;
+          utterance.pitch = prosody.pitch;
+          utterance.volume = 1;
+          utterance.onend = () => resolve();
+          utterance.onerror = () => reject(new Error("speech synthesis failed"));
+          synth.speak(utterance);
+        });
 
-      const audioBlob = await resp.blob();
-      if (audioBlob.type.includes("json")) throw new Error("TTS returned error JSON");
-
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(audioUrl); audioRef.current = null; };
-      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(audioUrl); audioRef.current = null; };
-
-      await audio.play();
-    } catch {
-      // Fallback: browser SpeechSynthesis
-      console.warn("ElevenLabs TTS unavailable, falling back to browser speech synthesis");
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(cleanText.slice(0, 2000));
-        utterance.lang = language === "tw" ? "ak" : language === "ga" ? "en-GH" : language === "ee" ? "en-GH" : language === "ha" ? "ha" : "en-US";
-        utterance.rate = 1.0;
-        utterance.onend = () => setIsSpeaking(false);
-        utterance.onerror = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-      } else {
-        setIsSpeaking(false);
-        toast({ title: "Voice Unavailable", description: "Text-to-speech is not available. Please read the response instead.", variant: "destructive" });
+        // Tiny breath pause between chunks to reduce robotic cadence.
+        const pauseByStyle: Record<VoiceStyle, number> = { natural: 90, balanced: 65, fast: 40 };
+        await new Promise((resolve) => setTimeout(resolve, pauseByStyle[voiceStyle]));
       }
+      setIsSpeaking(false);
+    } catch {
+      setIsSpeaking(false);
+      toast({ title: copy.voiceUnavailableTitle, description: copy.voiceUnavailableDescription, variant: "destructive" });
     }
   };
 
   const stopSpeaking = () => {
+    speakRequestIdRef.current += 1;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -398,6 +805,48 @@ function AIAssistant() {
   const inputDisabled = isLoading || isTranscribing;
 
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const { markdown: generatedReportMarkdown, json: generatedReportJson } = extractReportAndJson(messages);
+
+  // Auto-save generated AI report to medical_reports so it appears in Reports history.
+  useEffect(() => {
+    if (!user?.id || !generatedReportMarkdown) return;
+
+    const jsonKey = generatedReportJson ? JSON.stringify(generatedReportJson).slice(0, 300) : "";
+    const signature = `${generatedReportMarkdown.slice(0, 280)}|${jsonKey}`;
+    if (savedReportSignaturesRef.current.has(signature)) return;
+
+    let cancelled = false;
+    const persistReport = async () => {
+      const payload = {
+        ...(generatedReportJson && typeof generatedReportJson === "object" ? generatedReportJson as Record<string, unknown> : {}),
+        markdown: generatedReportMarkdown,
+        source: "ai_assistant",
+        generated_at: new Date().toISOString(),
+      };
+
+      const { error } = await medicalReportService.create({
+        patient_id: user.id,
+        report_type: "ai_assistant",
+        report_json: payload,
+      });
+
+      if (cancelled) return;
+      if (error) {
+        console.error("Failed to auto-save AI report:", error);
+        return;
+      }
+
+      savedReportSignaturesRef.current.add(signature);
+      queryClient.invalidateQueries({ queryKey: ["my-reports", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["recent-reports", user.id] });
+      toast({ title: "Report saved to history" });
+    };
+
+    persistReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [generatedReportMarkdown, generatedReportJson, user?.id, queryClient]);
 
   // ---- Message Bubble ----
   const MessageBubble = ({ msg }: { msg: ChatMessage }) => {
@@ -426,7 +875,7 @@ function AIAssistant() {
               onClick={() => isSpeaking ? stopSpeaking() : speakText(msg.content)}
             >
               <Volume2 className="w-3 h-3 mr-1" />
-              {isSpeaking ? "Stop" : "Listen"}
+              {isSpeaking ? copy.stop : copy.listen}
             </Button>
           )}
         </div>
@@ -436,7 +885,7 @@ function AIAssistant() {
   return (
     <div className="flex-1 min-h-screen bg-background flex flex-col">
       {/* Top Bar with Mode Toggle */}
-      <div className="sticky top-0 z-10 bg-primary/90 backdrop-blur p-4 flex items-center justify-between">
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 p-4 backdrop-blur">
         <Select value={language} onValueChange={(v: any) => setLanguage(v)}>
           <SelectTrigger className="w-[120px] h-10 text-base bg-background/80 border-none shadow-none">
             <Languages className="w-4 h-4 mr-1" />
@@ -450,23 +899,44 @@ function AIAssistant() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex gap-2 mx-auto">
-          <Button
-            variant={mode === "text" ? "default" : "outline"}
-            className={`rounded-full px-4 py-2 text-base font-semibold border-primary/40 ${mode === "text" ? "bg-background/80 text-primary border-2" : "bg-background/80"}`}
-            onClick={() => setMode("text")}
-          >
-            <Square className="w-4 h-4 mr-2" />Text Chat
-          </Button>
-          <Button
-            variant={mode === "voice" ? "default" : "outline"}
-            className={`rounded-full px-4 py-2 text-base font-semibold border-primary/40 ${mode === "voice" ? "bg-background/80 text-primary border-2" : "bg-background/80"}`}
-            onClick={() => setMode("voice")}
-          >
-            <Mic className="w-4 h-4 mr-2" />Voice Chat
-          </Button>
+
+        <Select value={voiceStyle} onValueChange={(v: VoiceStyle) => setVoiceStyle(v)}>
+          <SelectTrigger className="w-[128px] h-10 text-sm bg-background/80 border-none shadow-none">
+            <Volume2 className="w-4 h-4 mr-1" />
+            <SelectValue placeholder={styleLabels.label} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="natural">{styleLabels.natural}</SelectItem>
+            <SelectItem value="balanced">{styleLabels.balanced}</SelectItem>
+            <SelectItem value="fast">{styleLabels.fast}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-10 w-10 rounded-full border-primary/40 bg-background/80"
+          onClick={() => (isSpeaking ? stopSpeaking() : speakText(previewText))}
+          aria-label={isSpeaking ? copy.stop : "Preview voice style"}
+          title={isSpeaking ? copy.stop : "Preview voice style"}
+        >
+          {isSpeaking ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </Button>
+
+        <div className="ml-auto">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-10 w-10 rounded-full border-primary/40 bg-background/80"
+          onClick={() => setMode(mode === "text" ? "voice" : "text")}
+          aria-label={mode === "text" ? copy.switchToVoice : copy.switchToText}
+          title={mode === "text" ? copy.voiceChat : copy.textChat}
+        >
+          {mode === "text" ? <Mic className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
+        </Button>
         </div>
-        <div className="w-10" /> {/* Spacer for symmetry */}
       </div>
 
       {/* Main Content: Text or Voice Mode */}
@@ -475,17 +945,12 @@ function AIAssistant() {
           {/* Welcome & Suggestions */}
           {messages.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center px-4">
-              <h2 className="text-2xl md:text-3xl font-bold text-primary mb-2 text-center mt-8">How can I help you today?</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-primary mb-2 text-center mt-8">{copy.welcomeTitle}</h2>
               <p className="text-base text-muted-foreground mb-6 text-center max-w-xl">
-                Ask me health questions, describe symptoms, or upload a medical image for analysis. I support text, voice, and image input.
+                {copy.welcomeDescription}
               </p>
               <div className="flex flex-wrap gap-3 w-full max-w-lg mb-8 justify-center">
-                {[
-                  "I have a headache and fever",
-                  "What does my blood test result mean?",
-                  "Symptoms of malaria vs typhoid",
-                  "Help me prepare for a doctor visit",
-                ].map((chip, idx) => (
+                {copy.suggestions.map((chip, idx) => (
                   <Button
                     key={chip}
                     variant="outline"
@@ -515,6 +980,14 @@ function AIAssistant() {
                     </div>
                   </div>
                 )}
+
+                {generatedReportMarkdown && (
+                  <MedicalReportTools
+                    markdown={generatedReportMarkdown}
+                    json={generatedReportJson}
+                  />
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             </div>
@@ -529,21 +1002,21 @@ function AIAssistant() {
               {/* Optionally add SVG or canvas animation here */}
               <div className="w-40 h-40 rounded-full bg-background/80 shadow-inner" />
             </div>
-            <div className="text-xl font-semibold text-primary mb-2">{isRecording ? "Listening..." : "Voice Chat"}</div>
+            <div className="text-xl font-semibold text-primary mb-2">{isRecording ? copy.listening : copy.voiceChat}</div>
             <div className="text-base text-muted-foreground mb-4 min-h-[32px] max-w-lg text-center">
-              {isRecording && (liveTranscript || <span className="opacity-60">Say something…</span>)}
-              {!isRecording && <span className="opacity-60">Press the mic to start speaking</span>}
+              {isRecording && (liveTranscript || <span className="opacity-60">{copy.saySomething}</span>)}
+              {!isRecording && <span className="opacity-60">{copy.pressMic}</span>}
             </div>
             <Button
               size="icon"
               className={`h-20 w-20 rounded-full ${isRecording ? "bg-destructive" : "bg-primary"} text-primary-foreground shadow-lg flex items-center justify-center text-4xl ${isRecording ? "animate-pulse" : ""}`}
               onClick={isRecording ? stopRecording : startRecording}
-              aria-label={isRecording ? "Stop recording" : "Start voice input"}
+              aria-label={isRecording ? copy.stopRecording : copy.startVoiceInput}
             >
               {isRecording ? <MicOff className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
             </Button>
             {isRecording && (
-              <div className="mt-2 text-xs text-muted-foreground">Duration: {formatDuration(recordingDuration)}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{copy.duration}: {formatDuration(recordingDuration)}</div>
             )}
           </div>
         </div>
@@ -559,7 +1032,7 @@ function AIAssistant() {
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
               </span>
               <span className="text-sm font-medium text-destructive">
-                Listening… {formatDuration(recordingDuration)}
+                {copy.listeningIndicator} {formatDuration(recordingDuration)}
               </span>
             </div>
             <Button
@@ -569,7 +1042,7 @@ function AIAssistant() {
               className="h-8 gap-1.5"
             >
               <Square className="w-3 h-3" />
-              Stop
+              {copy.stop}
             </Button>
           </div>
         </div>
@@ -580,7 +1053,7 @@ function AIAssistant() {
         <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
           <div className="max-w-3xl mx-auto flex items-center gap-3">
             <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">Transcribing your speech…</span>
+            <span className="text-sm text-muted-foreground">{copy.transcribing}</span>
           </div>
         </div>
       )}
@@ -611,7 +1084,7 @@ function AIAssistant() {
                 type="button"
                 className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent/30 transition"
                 tabIndex={-1}
-                aria-label="Upload file or image"
+                aria-label={copy.uploadAria}
                 style={{ outline: 'none', border: 'none', background: 'none' }}
                 onClick={() => {
                   // Open a menu or just trigger file upload for now
@@ -638,7 +1111,7 @@ function AIAssistant() {
                   handleSend();
                 }
               }}
-              placeholder={isRecording ? "Listening…" : isTranscribing ? "Transcribing…" : "Ask anything"}
+              placeholder={isRecording ? copy.inputListeningPlaceholder : isTranscribing ? copy.inputTranscribingPlaceholder : copy.inputPlaceholder}
               disabled={inputDisabled || isRecording}
               className="flex-1 bg-transparent border-none outline-none text-base px-2 placeholder:text-muted-foreground disabled:opacity-50"
               style={{ minWidth: 0 }}
@@ -650,7 +1123,7 @@ function AIAssistant() {
               className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-accent/30 transition"
               onClick={isRecording ? stopRecording : startRecording}
               disabled={isTranscribing || isLoading}
-              aria-label={isRecording ? "Stop recording" : "Start voice input"}
+              aria-label={isRecording ? copy.stopRecording : copy.startVoiceInput}
               style={{ outline: 'none', border: 'none', background: 'none' }}
             >
               {isRecording ? <MicOff className="w-5 h-5 text-primary animate-pulse" /> : <Mic className="w-5 h-5 text-muted-foreground" />}
@@ -662,7 +1135,7 @@ function AIAssistant() {
               className="flex items-center justify-center w-10 h-10 rounded-full bg-primary hover:bg-primary/80 transition"
               onClick={handleSend}
               disabled={!input.trim() || inputDisabled}
-              aria-label="Send"
+              aria-label={copy.send}
               style={{ outline: 'none', border: 'none' }}
             >
               <Send className="w-5 h-5 text-white" />
@@ -703,13 +1176,169 @@ function extractReportAndJson(messages: ChatMessage[]) {
     return text;
   }
 
-// --- OCR helper for images ---
-  async function extractImageText(file: File): Promise<string> {
+// --- OCR image preprocessing ---
+  async function preprocessImageForOcr(file: File): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      Tesseract.recognize(file, 'eng', { logger: () => {} })
-        .then(({ data: { text } }) => resolve(text))
-        .catch(reject);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          // 1. Upscale: Tesseract works best at ~300 dpi; scale up small images.
+          const MAX_DIM = 2400;
+          const MIN_DIM = 1000;
+          let { width, height } = img;
+          const maxSide = Math.max(width, height);
+          if (maxSide < MIN_DIM) {
+            const scale = MIN_DIM / maxSide;
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          } else if (maxSide > MAX_DIM) {
+            const scale = MAX_DIM / maxSide;
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d")!;
+
+          // Draw with high-quality downscaling if needed.
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // 2. Get pixel data for manual processing.
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const data = imageData.data;
+
+          // 3. Convert to grayscale using perceptual luminance weights.
+          for (let i = 0; i < data.length; i += 4) {
+            const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            data[i] = lum;
+            data[i + 1] = lum;
+            data[i + 2] = lum;
+          }
+
+          // 4. Auto-contrast: stretch histogram so the darkest pixel → 0 and
+          //    brightest → 255, avoiding clipping from extreme outliers (1% each tail).
+          const luminances: number[] = [];
+          for (let i = 0; i < data.length; i += 4) luminances.push(data[i]);
+          luminances.sort((a, b) => a - b);
+          const lo = luminances[Math.floor(luminances.length * 0.01)];
+          const hi = luminances[Math.floor(luminances.length * 0.99)];
+          const range = hi - lo || 1;
+          for (let i = 0; i < data.length; i += 4) {
+            const stretched = Math.round(Math.min(255, Math.max(0, ((data[i] - lo) / range) * 255)));
+            data[i] = stretched;
+            data[i + 1] = stretched;
+            data[i + 2] = stretched;
+          }
+
+          // 5. Unsharp mask (sharpening): blend original with blurred version.
+          //    We approximate a 3×3 Gaussian blur then subtract it.
+          const blurred = new Uint8ClampedArray(data.length);
+          const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+          const kernelSum = 16;
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              let sum = 0;
+              for (let ky = -1; ky <= 1; ky++) {
+                for (let kx = -1; kx <= 1; kx++) {
+                  const ny = Math.min(height - 1, Math.max(0, y + ky));
+                  const nx = Math.min(width - 1, Math.max(0, x + kx));
+                  sum += data[(ny * width + nx) * 4] * kernel[(ky + 1) * 3 + (kx + 1)];
+                }
+              }
+              const idx = (y * width + x) * 4;
+              blurred[idx] = sum / kernelSum;
+            }
+          }
+          const SHARPEN_AMOUNT = 1.2;
+          for (let i = 0; i < data.length; i += 4) {
+            const sharpened = Math.round(Math.min(255, Math.max(0, data[i] + SHARPEN_AMOUNT * (data[i] - blurred[i]))));
+            data[i] = sharpened;
+            data[i + 1] = sharpened;
+            data[i + 2] = sharpened;
+          }
+
+          // 6. Local adaptive thresholding (Sauvola-style): threshold each pixel
+          //    against the local mean in a window, improving text/bg separation
+          //    regardless of uneven lighting.
+          const WINDOW = 15; // half-window radius
+          const K = 0.15;    // sensitivity constant
+          const binarized = new Uint8ClampedArray(data.length);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              let sum = 0;
+              let count = 0;
+              for (let wy = -WINDOW; wy <= WINDOW; wy++) {
+                for (let wx = -WINDOW; wx <= WINDOW; wx++) {
+                  const ny = y + wy;
+                  const nx = x + wx;
+                  if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+                    sum += data[(ny * width + nx) * 4];
+                    count++;
+                  }
+                }
+              }
+              const mean = sum / count;
+              const threshold = mean * (1 - K);
+              const idx = (y * width + x) * 4;
+              const val = data[idx] >= threshold ? 255 : 0;
+              binarized[idx] = val;
+              binarized[idx + 1] = val;
+              binarized[idx + 2] = val;
+              binarized[idx + 3] = 255;
+            }
+          }
+          imageData.data.set(binarized);
+          ctx.putImageData(imageData, 0, 0);
+
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Canvas toBlob failed"));
+          }, "image/png");
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image load failed")); };
+      img.src = url;
     });
+  }
+
+// --- OCR helper for images ---
+  async function extractImageText(file: File, language: LanguageCode): Promise<string> {
+    const ocrLanguage = OCR_LANGUAGE_MAP[language] || "eng";
+
+    let inputFile: File | Blob = file;
+    try {
+      inputFile = await preprocessImageForOcr(file);
+    } catch {
+      // If preprocessing fails (unsupported format etc.) fall through to raw input.
+      inputFile = file;
+    }
+
+    try {
+      const { data: { text } } = await Tesseract.recognize(inputFile, ocrLanguage, {
+        logger: () => {},
+        tessedit_pageseg_mode: "3",   // AUTO — detect page layout automatically
+        tessedit_ocr_engine_mode: "1", // LSTM only
+      } as any);
+      return text;
+    } catch (error) {
+      if (ocrLanguage !== "eng") {
+        const { data: { text } } = await Tesseract.recognize(inputFile, "eng", {
+          logger: () => {},
+          tessedit_pageseg_mode: "3",
+          tessedit_ocr_engine_mode: "1",
+        } as any);
+        return text;
+      }
+      throw error;
+    }
   }
 
 export default AIAssistant;

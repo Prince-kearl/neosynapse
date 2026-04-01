@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type LanguageCode = "en" | "tw" | "ga" | "ee" | "ha";
 
@@ -25,8 +25,18 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguage] = useState<LanguageCode>("en");
+  const [language, setLanguage] = useState<LanguageCode>(() => {
+    const savedLanguage = localStorage.getItem("app-language");
+    if (savedLanguage && SUPPORTED_LANGUAGES.some((lang) => lang.code === savedLanguage)) {
+      return savedLanguage as LanguageCode;
+    }
+    return "en";
+  });
   const currentLanguage = SUPPORTED_LANGUAGES.find((l) => l.code === language) || SUPPORTED_LANGUAGES[0];
+
+  useEffect(() => {
+    localStorage.setItem("app-language", language);
+  }, [language]);
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, currentLanguage }}>
