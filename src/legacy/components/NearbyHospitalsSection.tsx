@@ -68,8 +68,8 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <h2 className="font-display text-lg lg:text-xl font-semibold">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 max-[380px]:mb-3">
+        <h2 className="font-display text-lg font-semibold lg:text-xl max-[380px]:text-base max-[380px]:leading-tight">
           Nearby Hospitals ({location}, within {radius} km)
         </h2>
         <div className="w-full sm:w-auto">
@@ -86,19 +86,19 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
       </div>
 
       {/* Hospital Cards */}
-      <div className="space-y-3 mb-4">
+      <div className="mb-4 space-y-3 max-[380px]:mb-3 max-[380px]:space-y-2.5">
         {chosen.map((hospital) => (
           <div
             key={hospital.id}
-            className={`bg-card rounded-xl p-4 border flex items-center gap-4 transition-all duration-200 cursor-pointer ${selectedHospital && selectedHospital.id === hospital.id ? 'border-primary/70 ring-2 ring-primary/30' : 'border-border hover:border-primary/30'}`}
+            className={`flex cursor-pointer items-center gap-4 rounded-xl border bg-card p-4 transition-all duration-200 max-[380px]:gap-3 max-[380px]:p-3 ${selectedHospital && selectedHospital.id === hospital.id ? 'border-primary/70 ring-2 ring-primary/30' : 'border-border hover:border-primary/30'}`}
             onClick={() => setSelectedHospitalId(hospital.id)}
           >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selectedHospital && selectedHospital.id === hospital.id ? 'bg-primary/20' : 'bg-primary/10'}`}>
-              <Hospital className={`w-5 h-5 ${selectedHospital && selectedHospital.id === hospital.id ? 'text-primary' : 'text-primary/60'}`} />
+            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl max-[380px]:h-8 max-[380px]:w-8 ${selectedHospital && selectedHospital.id === hospital.id ? 'bg-primary/20' : 'bg-primary/10'}`}>
+              <Hospital className={`h-5 w-5 max-[380px]:h-4 max-[380px]:w-4 ${selectedHospital && selectedHospital.id === hospital.id ? 'text-primary' : 'text-primary/60'}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-foreground truncate">{hospital.name}</h3>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <h3 className="truncate font-medium text-foreground max-[380px]:text-sm">{hospital.name}</h3>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground max-[380px]:gap-2 max-[380px]:text-xs">
                 <span>{hospital.distance.toFixed(1)} km</span>
                 <span className="text-primary text-xs font-medium">● {hospital.status}</span>
               </div>
@@ -119,7 +119,7 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
       </div>
 
       {/* Interactive Google Map */}
-      <div className="bg-card rounded-2xl overflow-hidden border border-border h-64 lg:h-96 relative">
+      <div className="relative h-64 overflow-hidden rounded-2xl border border-border bg-card lg:h-96 max-[380px]:h-56 max-[380px]:rounded-[20px]">
         {isLoaded && (
           <GoogleMap
             mapContainerStyle={{ width: "100%", height: "100%" }}

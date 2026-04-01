@@ -28,7 +28,7 @@ export function FilterChips({ selectedFilters, onFilterChange }: FilterChipsProp
   };
 
   return (
-    <div className="w-full flex gap-2 overflow-x-auto overflow-y-hidden pb-1 scrollbar-thin">
+    <div className="scrollbar-thin flex w-full gap-2 overflow-x-auto overflow-y-hidden pb-1 max-[380px]:gap-1.5 max-[380px]:pb-0.5">
       {filterChips.map((chip) => {
         const isActive = selectedFilters.includes(chip.id);
         const Icon = chip.icon;
@@ -38,7 +38,7 @@ export function FilterChips({ selectedFilters, onFilterChange }: FilterChipsProp
             key={chip.id}
             onClick={() => toggleFilter(chip.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0",
+              "inline-flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200 max-[380px]:gap-1 max-[380px]:px-3 max-[380px]:py-2 max-[380px]:text-xs",
               "border-2 active:scale-95",
               isActive
                 ? "bg-primary border-primary text-primary-foreground shadow-md glow-green"
@@ -48,7 +48,7 @@ export function FilterChips({ selectedFilters, onFilterChange }: FilterChipsProp
             {Icon && (
               <Icon
                 className={cn(
-                  "w-4 h-4",
+                  "h-4 w-4 max-[380px]:h-3.5 max-[380px]:w-3.5",
                   isActive ? "text-primary-foreground" : "text-muted-foreground"
                 )}
               />

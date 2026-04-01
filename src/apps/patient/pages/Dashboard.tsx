@@ -126,13 +126,14 @@ export default function PatientDashboard() {
   const profileCompletion = calculateProfileCompletion();
 
   return (
-    <div className="flex-1 min-h-screen bg-background">
+    <div className="flex-1 min-h-screen bg-background max-[380px]:text-[0.92rem]">
       {/* Mobile Header: Location + Bell + Avatar + Search + Filter Pills */}
       <div className="lg:hidden">
         <MobileHeader
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           showSearchAndFilters={true}
+          showLocationRow={false}
           selectedFilters={selectedFilters}
           onFilterChange={setSelectedFilters}
           location={selectedLocation}
@@ -146,7 +147,7 @@ export default function PatientDashboard() {
       </div>
 
       {/* Main Content */}
-      <main className="px-2 sm:px-4 md:px-6 py-4 space-y-6 max-w-7xl mx-auto w-full">
+      <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-4 sm:px-4 md:px-6 max-[380px]:space-y-4 max-[380px]:px-3 max-[380px]:py-3">
         {/* Hero Carousel (includes greeting + slides + dots) */}
         <HeroCarousel />
 
@@ -157,23 +158,23 @@ export default function PatientDashboard() {
 
         {/* Quick Actions */}
         <section>
-          <h2 className="font-display text-lg lg:text-xl font-semibold mb-3">
+          <h2 className="mb-3 font-display text-lg font-semibold lg:text-xl max-[380px]:mb-2 max-[380px]:text-base">
             Quick Actions
           </h2>
-          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-[380px]:gap-2">
             {quickActions.map((action) => (
               <button
                 key={action.title}
                 onClick={() => navigate(action.url)}
                 className={cn(
-                  "flex flex-col sm:flex-row items-center sm:items-start gap-2 sm:gap-3 px-4 py-3 rounded-xl bg-card border border-primary/30 transition-all duration-200 w-full min-h-[56px]",
+                  "flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-primary/30 bg-card px-4 py-3 text-left transition-all duration-200 max-[380px]:min-h-[50px] max-[380px]:gap-2 max-[380px]:px-3 max-[380px]:py-2.5",
                   "hover:border-primary/60 hover:shadow-md active:scale-[0.98]"
                 )}
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mb-2 sm:mb-0">
-                  <action.icon className="w-5 h-5 text-primary" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 max-[380px]:h-8 max-[380px]:w-8">
+                  <action.icon className="h-5 w-5 text-primary max-[380px]:h-4 max-[380px]:w-4" />
                 </div>
-                <span className="text-sm font-medium text-foreground text-center sm:text-left break-words w-full">
+                <span className="w-full break-words text-sm font-medium text-foreground max-[380px]:text-xs max-[380px]:leading-tight">
                   {action.title}
                 </span>
               </button>

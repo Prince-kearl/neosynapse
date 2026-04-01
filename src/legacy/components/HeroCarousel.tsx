@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Autoplay from "embla-carousel-autoplay";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserRole } from "@/auth/hooks/useUserRole";
 import {
   Carousel,
   CarouselContent,
@@ -70,11 +69,11 @@ export function HeroCarousel() {
   }, [api]);
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 max-[640px]:space-y-3 max-[480px]:space-y-2.5">
       {/* Greeting */}
       <div>
-        <p className="text-muted-foreground text-sm">Hello {displayName}</p>
-        <h1 className="font-display text-xl lg:text-2xl font-bold text-foreground break-words">
+        <p className="text-sm text-muted-foreground max-[640px]:text-xs">Hello {displayName}</p>
+        <h1 className="break-words font-display text-xl font-bold text-foreground lg:text-2xl max-[640px]:text-[2rem] max-[640px]:leading-[1.08] max-[480px]:text-[1.6rem] max-[480px]:leading-[1.1]">
           How are you feeling today?
         </h1>
       </div>
@@ -88,37 +87,40 @@ export function HeroCarousel() {
         ]}
         className="w-full"
       >
-        <CarouselContent className="-ml-2 md:-ml-4">
+        <CarouselContent className="-ml-2 md:-ml-4 max-[820px]:ml-0">
           {promoSlides.map((slide) => (
-            <CarouselItem key={slide.id} className="pl-2 md:pl-4">
+            <CarouselItem key={slide.id} className="pl-2 md:pl-4 max-[820px]:pl-0">
               <div
-                className="relative overflow-hidden flex flex-col md:flex-row items-stretch md:items-center h-auto md:h-[190px] w-full rounded-2xl bg-gradient-to-br from-[#5FC88A] to-[#47A66C] p-0"
+                className="relative flex h-[180px] w-full items-stretch overflow-hidden rounded-2xl bg-gradient-to-br from-[#63C88F] to-[#53B67B] p-0 sm:h-[200px] md:h-[190px] max-[820px]:h-[460px] max-[820px]:rounded-[30px] max-[640px]:h-[210px] max-[520px]:h-[178px] max-[480px]:h-[156px]"
               >
-                {/* Image on top for mobile, left for desktop */}
-                <div className="relative w-full md:w-[45%] h-[120px] md:h-full shrink-0 flex items-center justify-center">
+                {/* Image on the left */}
+                <div className="relative h-full w-[46%] shrink-0 sm:w-[45%] max-[820px]:w-[53%] max-[640px]:w-[50%] max-[480px]:w-[49%]">
                   <img
                     src={slide.image}
                     alt={slide.title}
-                    className="w-full h-full object-cover rounded-t-2xl md:rounded-l-2xl md:rounded-tr-none"
+                    className="h-full w-full object-cover rounded-l-2xl max-[640px]:rounded-l-[30px] max-[480px]:rounded-l-[20px]"
                     style={{
                       maskImage: undefined,
                       WebkitMaskImage: undefined,
                     }}
                   />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[#63C88F] via-[#63C88F]/70 to-transparent max-[820px]:w-28 max-[640px]:w-16 max-[480px]:w-12" />
                 </div>
-                {/* Content below image on mobile, right on desktop */}
-                <div className="flex-1 flex flex-col justify-center px-4 py-4 z-10">
-                  <h3 className="font-display font-semibold mb-1 text-lg md:text-xl text-[#1E1E1E] break-words">
+                {/* Content on the right */}
+                <div className="z-10 flex flex-1 flex-col justify-center px-4 py-3 sm:px-5 sm:py-4 max-[820px]:justify-center max-[820px]:px-7 max-[820px]:py-6 max-[640px]:px-3 max-[640px]:py-2 max-[480px]:px-2.5 max-[480px]:py-1.5">
+                  <h3 className="mb-1 font-display text-2xl font-semibold leading-tight text-[#151D1A] md:text-xl max-[820px]:text-[clamp(2.2rem,5.6vw,3.9rem)] max-[820px]:leading-[1.04] max-[640px]:text-[clamp(0.82rem,3.5vw,1.4rem)] max-[640px]:leading-tight">
                     {slide.title}
                   </h3>
-                  <p className="mb-3 leading-snug text-[14px] md:text-base text-[#EAF7EF] max-w-full break-words">
+                  <p className="mb-3 max-w-full break-words text-base leading-snug text-[#E8F7EE] md:text-base max-[820px]:mb-5 max-[820px]:max-w-[310px] max-[820px]:text-[clamp(1.25rem,3.8vw,2.5rem)] max-[820px]:leading-[1.15] max-[640px]:mb-2 max-[640px]:max-w-[220px] max-[640px]:text-[0.95rem] max-[640px]:leading-tight max-[520px]:max-w-[180px] max-[520px]:text-[0.85rem] max-[480px]:max-w-[160px] max-[480px]:text-[0.75rem]">
                     {slide.subtitle}
                   </p>
                   <Link
                     to={slide.buttonLink}
-                    className="inline-flex items-center gap-2 w-fit bg-[#2B2B2B] rounded-full px-4 py-2 text-[14px] text-white"
+                    className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-[#2B2B2B] px-5 py-2 text-base text-white md:px-4 md:py-2 md:text-[14px] max-[820px]:gap-3 max-[820px]:px-5 max-[820px]:py-3 max-[820px]:text-[clamp(1.05rem,3.2vw,2rem)] max-[640px]:gap-2 max-[640px]:px-3.5 max-[640px]:py-1.5 max-[640px]:text-[0.95rem] max-[520px]:px-3 max-[520px]:py-1.25 max-[520px]:text-[0.82rem] max-[480px]:gap-1.5 max-[480px]:px-2.5 max-[480px]:py-1 max-[480px]:text-[0.72rem]"
                   >
-                    <slide.icon className="w-4 h-4" />
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#343230] ring-1 ring-[#4A453F] max-[820px]:h-12 max-[820px]:w-12 max-[640px]:h-7 max-[640px]:w-7 max-[520px]:h-6 max-[520px]:w-6 max-[480px]:h-5 max-[480px]:w-5">
+                      <slide.icon className="h-4 w-4 max-[820px]:h-5 max-[820px]:w-5 max-[640px]:h-4 max-[640px]:w-4 max-[480px]:h-3 max-[480px]:w-3" />
+                    </span>
                     {slide.buttonLabel}
                   </Link>
                 </div>
@@ -129,15 +131,15 @@ export function HeroCarousel() {
       </Carousel>
 
       {/* Pagination Dots */}
-      <div className="flex justify-center gap-2">
+      <div className="flex justify-center gap-2 mt-2 max-[640px]:gap-1.5 max-[640px]:mt-1.5">
         {Array.from({ length: count }).map((_, index) => (
           <button
             key={index}
             onClick={() => api?.scrollTo(index)}
-            className="h-2 rounded-full transition-all duration-300"
+            className="h-2 rounded-full transition-all duration-300 max-[820px]:h-3 max-[480px]:h-2"
             style={{
               width: index === current ? "24px" : "8px",
-              backgroundColor: index === current ? "#22C55E" : "rgba(161,161,170,0.3)",
+              backgroundColor: index === current ? "#22C55E" : "rgba(161,161,170,0.45)",
             }}
             aria-label={`Go to slide ${index + 1}`}
           />

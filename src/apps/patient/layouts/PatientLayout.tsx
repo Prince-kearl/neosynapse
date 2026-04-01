@@ -9,7 +9,7 @@ export function PatientLayout() {
       <PatientSidebar />
       
       {/* Main Content Area */}
-      <div className="flex min-h-screen flex-1 flex-col lg:h-screen lg:min-h-0">
+      <div style={{ width: "100vw" }} className="flex min-h-screen flex-1 flex-col lg:h-screen lg:min-h-0">
         {/* Page Content */}
         <div className="flex-1 pb-20 lg:min-h-0 lg:overflow-y-auto lg:pb-0">
           <Outlet />
