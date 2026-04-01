@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Autoplay from "embla-carousel-autoplay";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   Carousel,
   CarouselContent,
@@ -54,13 +53,16 @@ const promoSlides: PromoSlide[] = [
   },
 ];
 
-export function HeroCarousel() {
-  const { user } = useAuth();
+interface HeroCarouselProps {
+  displayName?: string;
+}
+
+export function HeroCarousel({ displayName = "there" }: HeroCarouselProps) {
   // Add missing state and handlers for pagination
   const [api, setApi] = useState<CarouselApi | null>(null);
   const [current, setCurrent] = useState(0);
   const count = promoSlides.length;
-  const displayName = user?.displayName || "there";
+  const firstName = displayName.trim().split(/\s+/)[0] || "there";
 
   useEffect(() => {
     if (!api) return;
@@ -72,8 +74,8 @@ export function HeroCarousel() {
     <section className="space-y-4 max-[640px]:space-y-3 max-[480px]:space-y-2.5">
       {/* Greeting */}
       <div>
-        <p className="text-sm text-muted-foreground max-[640px]:text-xs">Hello {displayName}</p>
-        <h1 className="break-words font-display text-xl font-bold text-foreground lg:text-2xl max-[640px]:text-[2rem] max-[640px]:leading-[1.08] max-[480px]:text-[1.6rem] max-[480px]:leading-[1.1]">
+        <p className="text-sm text-muted-foreground max-[640px]:text-xs">Hello {firstName}</p>
+        <h1 className="break-words font-display text-xl font-bold text-foreground lg:text-2xl max-[640px]:text-[1.6rem] max-[640px]:leading-[1.08] max-[480px]:text-[1.24rem] max-[480px]:leading-[1.1] max-[380px]:text-[1.14rem]">
           How are you feeling today?
         </h1>
       </div>
@@ -98,13 +100,12 @@ export function HeroCarousel() {
                   <img
                     src={slide.image}
                     alt={slide.title}
-                    className="h-full w-full object-cover rounded-l-2xl max-[640px]:rounded-l-[30px] max-[480px]:rounded-l-[20px]"
+                    className="h-full w-full object-cover"
                     style={{
-                      maskImage: undefined,
-                      WebkitMaskImage: undefined,
+                      maskImage: 'linear-gradient(to right, black 40%, rgba(0,0,0,0.6) 65%, rgba(0,0,0,0.15) 82%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to right, black 40%, rgba(0,0,0,0.6) 65%, rgba(0,0,0,0.15) 82%, transparent 100%)',
                     }}
                   />
-                  <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[#63C88F] via-[#63C88F]/70 to-transparent max-[820px]:w-28 max-[640px]:w-16 max-[480px]:w-12" />
                 </div>
                 {/* Content on the right */}
                 <div className="z-10 flex flex-1 flex-col justify-center px-4 py-3 sm:px-5 sm:py-4 max-[820px]:justify-center max-[820px]:px-7 max-[820px]:py-6 max-[640px]:px-3 max-[640px]:py-2 max-[480px]:px-2.5 max-[480px]:py-1.5">

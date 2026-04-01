@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSearchParams } from "react-router-dom";
 import { MedicalReportTools } from "./MedicalReportTools";
 
 // Dynamically import pdfjs-dist for compatibility with Vite/ESM
@@ -35,6 +36,7 @@ function getRecorderMimeType(): string {
 
 function AIAssistant() {
   const { messages, isLoading, sendMessage, clearChat } = useMedicalChat();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { language, setLanguage } = useLanguage();
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -55,6 +57,7 @@ function AIAssistant() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const prevMessageCountRef = useRef(0);
+  const lastUrlQueryRef = useRef<string | null>(null);
   // --- Suggestion chip highlight state ---
   const [highlightedChip, setHighlightedChip] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -75,6 +78,21 @@ function AIAssistant() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Auto-send dashboard search query when arriving with ?query=...
+  useEffect(() => {
+    const queryFromUrl = searchParams.get("query")?.trim() || "";
+    if (!queryFromUrl || isLoading || lastUrlQueryRef.current === queryFromUrl) return;
+
+    lastUrlQueryRef.current = queryFromUrl;
+    setInput("");
+    setAutoVoice(false);
+    sendMessage(queryFromUrl);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("query");
+    setSearchParams(nextParams, { replace: true });
+  }, [isLoading, searchParams, sendMessage, setSearchParams]);
 
   // Auto-play TTS when assistant finishes responding (voice-initiated)
   useEffect(() => {

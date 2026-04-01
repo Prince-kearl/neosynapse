@@ -34,6 +34,12 @@ export default function PatientDashboard() {
   const [isLocating, setIsLocating] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  const handleSearch = useCallback((query: string) => {
+    if (query.trim()) {
+      navigate(`/patient/ai-assistant?query=${encodeURIComponent(query)}`);
+    }
+  }, [navigate]);
+
   // Helper: Reverse geocode lat/lon to area name using OpenStreetMap Nominatim
   const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
     try {
@@ -132,6 +138,7 @@ export default function PatientDashboard() {
         <MobileHeader
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          onSearch={handleSearch}
           showSearchAndFilters={true}
           showLocationRow={false}
           selectedFilters={selectedFilters}
@@ -149,7 +156,7 @@ export default function PatientDashboard() {
       {/* Main Content */}
       <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-4 sm:px-4 md:px-6 max-[380px]:space-y-4 max-[380px]:px-3 max-[380px]:py-3">
         {/* Hero Carousel (includes greeting + slides + dots) */}
-        <HeroCarousel />
+        <HeroCarousel displayName={displayName} />
 
         {/* Health Profile Completion */}
         <div className="w-full">

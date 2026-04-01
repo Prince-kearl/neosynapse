@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 interface MobileHeaderProps {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
+  onSearch?: (query: string) => void;
   showSearchAndFilters?: boolean;
   showLocationRow?: boolean;
   selectedFilters?: string[];
@@ -25,6 +26,7 @@ interface MobileHeaderProps {
 export function MobileHeader({ 
   searchQuery = "", 
   onSearchChange,
+  onSearch,
   showSearchAndFilters = true,
   showLocationRow = false,
   selectedFilters = [],
@@ -80,6 +82,7 @@ export function MobileHeader({
           <MobileSearchBar 
             value={localSearch} 
             onChange={handleSearchChange}
+            onSearch={onSearch}
           />
           <FilterChips 
             selectedFilters={selectedFilters}

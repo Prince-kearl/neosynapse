@@ -44,7 +44,7 @@ export function HealthProfileCard({ completionPercent = 66 }: HealthProfileCardP
           </span>
         </div>
         {/* Text & Button */}
-        <div className="flex flex-1 flex-col items-center gap-2 text-center sm:items-start sm:text-left max-[380px]:gap-1.5">
+        <div className="flex flex-1 flex-col items-start gap-2 text-left max-[380px]:gap-1.5">
           <div className="break-words text-base font-semibold text-foreground sm:text-lg max-[380px]:text-sm max-[380px]:leading-tight">Health Profile Completion</div>
           <div className="mb-2 break-words text-sm text-muted-foreground max-[380px]:mb-1 max-[380px]:text-xs max-[380px]:leading-tight">
             Complete your health profile for better care.
