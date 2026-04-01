@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, Mail, Lock, Eye, EyeOff, Activity, User } from "lucide-react";
 
@@ -11,12 +12,24 @@ const signUpSchema = z.object({
   fullName: z.string().min(2, { message: "Name must be at least 2 characters" }).max(100),
   email: z.string().trim().email({ message: "Invalid email address" }).max(255),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }).max(100),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  phone: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
+  preferredLanguage: z.string().optional(),
 });
 
 export default function PatientSignUp() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [gender, setGender] = useState("");
+  const [phone, setPhone] = useState("");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
+  const [preferredLanguage, setPreferredLanguage] = useState("en");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +43,17 @@ export default function PatientSignUp() {
     setError(null);
     setSuccessMessage(null);
 
-    const validation = signUpSchema.safeParse({ fullName, email, password });
+    const validation = signUpSchema.safeParse({
+      fullName,
+      email,
+      password,
+      dateOfBirth,
+      gender,
+      phone,
+      emergencyContactName,
+      emergencyContactPhone,
+      preferredLanguage,
+    });
     if (!validation.success) {
       setError(validation.error.errors[0].message);
       return;
@@ -38,7 +61,18 @@ export default function PatientSignUp() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await signUp(email, password);
+      const metadata = {
+        role: "patient",
+        full_name: fullName,
+        display_name: fullName,
+        date_of_birth: dateOfBirth || null,
+        gender: gender || null,
+        phone: phone || null,
+        emergency_contact_name: emergencyContactName || null,
+        emergency_contact_phone: emergencyContactPhone || null,
+        preferred_language: preferredLanguage || "en",
+      };
+      const { error } = await signUp(email, password, metadata);
       if (error) {
         if (error.message.includes("already registered")) {
           setError("An account with this email already exists");
@@ -142,6 +176,84 @@ export default function PatientSignUp() {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">At least 6 characters</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date_of_birth">Date of Birth</Label>
+              <Input
+                id="date_of_birth"
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gender">Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger className="h-12 rounded-xl">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+233 XX XXX XXXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
+              <Input
+                id="emergency_contact_name"
+                type="text"
+                placeholder="Contact full name"
+                value={emergencyContactName}
+                onChange={(e) => setEmergencyContactName(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="emergency_contact_phone">Emergency Contact Phone</Label>
+              <Input
+                id="emergency_contact_phone"
+                type="tel"
+                placeholder="+233 XX XXX XXXX"
+                value={emergencyContactPhone}
+                onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="preferred_language">Preferred Language</Label>
+              <Select value={preferredLanguage} onValueChange={setPreferredLanguage}>
+                <SelectTrigger className="h-12 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="tw">Twi</SelectItem>
+                  <SelectItem value="ga">Ga</SelectItem>
+                  <SelectItem value="ee">Ewe</SelectItem>
+                  <SelectItem value="ha">Hausa</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <Button
