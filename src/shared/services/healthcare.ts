@@ -30,8 +30,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   Profile, PatientProfile, ProfessionalProfile, Facility,
   Invitation, Appointment, Encounter, TriageSession, Consent,
-  Transcript, ClinicalNote, MedicalReport, AuditLog,
+  Transcript, ClinicalNote, MedicalReport, AuditLog, MedicalHistory, MedicalHistoryFile,
 } from "@/shared/types/healthcare";
+
+export const MEDICAL_HISTORY_BUCKET = "medical-history-documents";
 
 // ─── Profiles ───────────────────────────────────────────────────
 
@@ -80,6 +82,51 @@ export const patientProfileService = {
   /** Professional: get patient profile for assigned patient (RLS enforced) */
   getForAssignedPatient: (patientUserId: string) =>
     supabase.from("patient_profiles").select("*").eq("user_id", patientUserId).maybeSingle(),
+};
+
+export const medicalHistoryService = {
+  get: (userId: string) =>
+    supabase.from("medical_history").select("*").eq("user_id", userId).maybeSingle(),
+
+  upsert: (userId: string, data: Record<string, unknown>) =>
+    supabase
+      .from("medical_history")
+      .upsert({ user_id: userId, ...data } as any, { onConflict: "user_id" })
+      .select("*")
+      .single(),
+
+  listFiles: (userId: string) =>
+    supabase.from("medical_history_files").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+
+  /** Professional: get medical history for assigned patient (RLS enforced) */
+  getForAssignedPatient: (patientUserId: string) =>
+    supabase.from("medical_history").select("*").eq("user_id", patientUserId).maybeSingle(),
+
+  /** Professional: list files for assigned patient (RLS enforced) */
+  listFilesForAssignedPatient: (patientUserId: string) =>
+    supabase.from("medical_history_files").select("*").eq("user_id", patientUserId).order("created_at", { ascending: false }),
+
+  createFile: (data: Partial<MedicalHistoryFile> & { medical_history_id: string; user_id: string; file_name: string; file_path: string }) =>
+    supabase.from("medical_history_files").insert(data as any).select("*").single(),
+
+  deleteFileRecord: (id: string) =>
+    supabase.from("medical_history_files").delete().eq("id", id),
+
+  uploadFile: async (userId: string, file: File) => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filePath = `${userId}/${crypto.randomUUID()}-${safeName}`;
+    const result = await supabase.storage.from(MEDICAL_HISTORY_BUCKET).upload(filePath, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+    return { ...result, filePath };
+  },
+
+  deleteStorageFiles: (paths: string[]) =>
+    supabase.storage.from(MEDICAL_HISTORY_BUCKET).remove(paths),
+
+  createSignedUrl: (path: string) =>
+    supabase.storage.from(MEDICAL_HISTORY_BUCKET).createSignedUrl(path, 60 * 10),
 };
 
 // ─── Professional Profiles ──────────────────────────────────────

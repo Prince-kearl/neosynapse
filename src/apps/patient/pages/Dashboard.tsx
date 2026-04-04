@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { usePatientProfile } from "@/shared/hooks/useHealthcare";
+import { usePatientProfile, useMedicalHistory, useMedicalHistoryFiles } from "@/shared/hooks/useHealthcare";
 import { HeroCarousel } from "@/legacy/components/HeroCarousel";
 import { MobileHeader } from "@/legacy/components/MobileHeader";
 import { HealthProfileCard } from "@/legacy/components/HealthProfileCard";
@@ -10,7 +10,7 @@ import { LocationSelector } from "@/legacy/components/LocationSelector";
 import { NearbyHospitalsSection } from "@/legacy/components/NearbyHospitalsSection";
 import {
   Stethoscope, Bot, CalendarCheck, Hospital,
-  Video, FileText,
+  Video, FileText, ChevronRight, HeartPulse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,8 @@ export default function PatientDashboard() {
   const { user } = useAuth();
   const { profile } = useUserRole();
   const { data: patientProfile } = usePatientProfile();
+  const { data: medicalHistory } = useMedicalHistory();
+  const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("Achimota");
@@ -130,6 +132,12 @@ export default function PatientDashboard() {
   };
 
   const profileCompletion = calculateProfileCompletion();
+  const conditions = medicalHistory?.existing_conditions || [];
+  const allergies = medicalHistory?.allergies || [];
+  const medications = medicalHistory?.current_medications || [];
+  const conditionPreview = conditions.slice(0, 3);
+  const allergyPreview = allergies.slice(0, 3);
+  const medicationPreview = medications.slice(0, 3);
 
   return (
     <div className="flex-1 min-h-screen bg-background max-[380px]:text-[0.92rem]">
@@ -161,6 +169,104 @@ export default function PatientDashboard() {
         {/* Health Profile Completion */}
         <div className="w-full">
           <HealthProfileCard completionPercent={profileCompletion} />
+        </div>
+
+        {/* Medical History Reminder Card */}
+        {!medicalHistory?.onboarding_completed && (
+          <div className="rounded-2xl border border-border/20 bg-gradient-to-b from-card to-card/95 p-6 shadow-lg shadow-black/5 dark:shadow-black/20 max-[380px]:rounded-[20px] max-[380px]:p-4">
+            <div className="flex items-start gap-6 max-[480px]:gap-3 max-[380px]:gap-2.5">
+              {/* Readiness bars chart */}
+              <div className="w-[140px] shrink-0 rounded-xl border border-border/40 bg-background/40 p-3 max-[480px]:-mt-1 max-[480px]:w-[104px] max-[380px]:w-[92px] max-[380px]:p-2">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground max-[380px]:mb-1 max-[380px]:text-[9px]">
+                  Setup Progress
+                </div>
+                <div className="space-y-2 max-[380px]:space-y-1.5">
+                  <div className="space-y-1">
+                    <div className="h-2 rounded-full bg-muted/60">
+                      <div className="h-full w-0 rounded-full bg-primary" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground max-[380px]:text-[9px]">Current health</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2 rounded-full bg-muted/60">
+                      <div className="h-full w-0 rounded-full bg-primary" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground max-[380px]:text-[9px]">History details</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2 rounded-full bg-muted/60">
+                      <div className="h-full w-0 rounded-full bg-primary" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground max-[380px]:text-[9px]">Documents</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Text & Button */}
+              <div className="flex flex-1 flex-col items-start gap-2 text-left max-[380px]:gap-1.5">
+                <div className="break-words text-base font-semibold text-foreground sm:text-lg max-[380px]:text-sm max-[380px]:leading-tight">
+                  Medical History Setup
+                </div>
+                <div className="mb-2 break-words text-sm text-muted-foreground max-[380px]:mb-1 max-[380px]:text-xs max-[380px]:leading-tight">
+                  Help Neo Synapse personalize AI guidance, improve symptom analysis, and keep your records accurate over time.
+                </div>
+                <button
+                  onClick={() => navigate("/patient/medical-history")}
+                  className="inline-flex h-10 items-center justify-center gap-1 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98] w-full sm:w-fit whitespace-nowrap max-[480px]:px-2.5 max-[480px]:text-xs max-[380px]:h-9 max-[380px]:px-2 max-[380px]:text-[11px]"
+                >
+                  Complete Medical History
+                  <ChevronRight className="ml-1 h-4 w-4 max-[380px]:h-3.5 max-[380px]:w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Current Health Status Preview */}
+        <div className="rounded-2xl border border-border/20 bg-gradient-to-b from-card to-card/95 p-6 shadow-lg shadow-black/5 dark:shadow-black/20 max-[380px]:rounded-[20px] max-[380px]:p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-base font-semibold text-foreground sm:text-lg max-[380px]:text-sm">
+                <HeartPulse className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
+                Current Health Status Preview
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground max-[380px]:text-xs">
+                Quick summary from your saved medical history.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/patient/medical-history")}
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-primary/30 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+            >
+              Update
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border/30 bg-background/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Conditions</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{conditions.length}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {conditionPreview.length > 0 ? conditionPreview.join(", ") : "No conditions listed"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border/30 bg-background/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Allergies</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{allergies.length}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {allergyPreview.length > 0 ? allergyPreview.join(", ") : "No allergies listed"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border/30 bg-background/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Medications</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{medications.length}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {medicationPreview.length > 0 ? medicationPreview.join(", ") : "No medications listed"}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Quick Actions */}

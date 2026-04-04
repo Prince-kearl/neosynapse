@@ -43,6 +43,36 @@ export interface PatientProfile {
   updated_at: string;
 }
 
+export interface MedicalHistory {
+  id: string;
+  user_id: string;
+  existing_conditions: string[];
+  allergies: string[];
+  current_medications: string[];
+  past_surgeries: string[];
+  family_medical_history: string | null;
+  notes: string | null;
+  onboarding_completed: boolean;
+  privacy_acknowledged_at: string | null;
+  completed_at: string | null;
+  last_reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MedicalHistoryFile {
+  id: string;
+  medical_history_id: string;
+  user_id: string;
+  storage_bucket: string;
+  file_path: string;
+  file_name: string;
+  mime_type: string | null;
+  file_size: number | null;
+  document_type: string;
+  created_at: string;
+}
+
 // ─── Professional Profile ───────────────────────────────────────
 export interface ProfessionalProfile {
   id: string;

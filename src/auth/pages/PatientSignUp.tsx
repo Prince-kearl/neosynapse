@@ -72,15 +72,17 @@ export default function PatientSignUp() {
         emergency_contact_phone: emergencyContactPhone || null,
         preferred_language: preferredLanguage || "en",
       };
-      const { error } = await signUp(email, password, metadata);
+      const { error, session } = await signUp(email, password, metadata);
       if (error) {
         if (error.message.includes("already registered")) {
           setError("An account with this email already exists");
         } else {
           setError(error.message);
         }
+      } else if (session) {
+        navigate("/patient/onboarding/medical-history", { replace: true });
       } else {
-        setSuccessMessage("Check your email to confirm your account before signing in");
+        setSuccessMessage("Check your email to confirm your account before signing in. You will complete your medical history setup right after your first login.");
       }
     } finally {
       setIsSubmitting(false);

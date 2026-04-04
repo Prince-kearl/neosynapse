@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   profileService,
   patientProfileService,
+  medicalHistoryService,
   professionalProfileService,
   facilityService,
   appointmentService,
@@ -50,6 +51,60 @@ export function usePatientProfile() {
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useMedicalHistory() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["medical-history", user?.id],
+    queryFn: async () => {
+      const { data, error } = await medicalHistoryService.get(user!.id);
+      if (error && (error as any).code !== "PGRST116") throw error;
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useMedicalHistoryFiles() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["medical-history-files", user?.id],
+    queryFn: async () => {
+      const { data, error } = await medicalHistoryService.listFiles(user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useMedicalHistoryForAssignedPatient(patientUserId?: string) {
+  return useQuery({
+    queryKey: ["medical-history-assigned", patientUserId],
+    queryFn: async () => {
+      const { data, error } = await medicalHistoryService.getForAssignedPatient(patientUserId!);
+      if (error && (error as any).code !== "PGRST116") throw error;
+      return data;
+    },
+    enabled: !!patientUserId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useMedicalHistoryFilesForAssignedPatient(patientUserId?: string) {
+  return useQuery({
+    queryKey: ["medical-history-files-assigned", patientUserId],
+    queryFn: async () => {
+      const { data, error } = await medicalHistoryService.listFilesForAssignedPatient(patientUserId!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!patientUserId,
+    staleTime: 60 * 1000,
   });
 }
 

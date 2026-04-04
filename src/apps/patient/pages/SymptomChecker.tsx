@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { MedicalReportTools } from "./MedicalReportTools";
 import { medicalReportService } from "@/shared/services/healthcare";
+import { useMedicalHistory } from "@/shared/hooks/useHealthcare";
+import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
 
 interface TriageResult {
   urgency: "non-urgent" | "needs-attention" | "urgent" | "emergency";
@@ -275,6 +277,7 @@ This report is triage guidance only and is not a medical diagnosis. Please consu
 export default function PatientSymptomChecker() {
   const { user } = useAuth();
   const { language } = useLanguage();
+  const { data: medicalHistory } = useMedicalHistory();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"input" | "loading" | "result">("input");
@@ -285,6 +288,7 @@ export default function PatientSymptomChecker() {
   const [result, setResult] = useState<TriageResult | null>(null);
   const savedReportSignaturesRef = useRef<Set<string>>(new Set());
   const copy = symptomCheckerCopy[language] || symptomCheckerCopy.en;
+  const medicalHistoryContext = buildMedicalHistoryContext(medicalHistory, null);
   const commonSymptoms = localizedCommonSymptoms[language] || localizedCommonSymptoms.en;
   const parsedSymptoms = parseSymptoms(selectedSymptoms, symptoms);
 
@@ -327,7 +331,7 @@ export default function PatientSymptomChecker() {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-        body: { symptoms: allSymptoms, age, gender, language },
+        body: { symptoms: allSymptoms, age, gender, language, medicalHistoryContext },
       });
 
       if (error) {

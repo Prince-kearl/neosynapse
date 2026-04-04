@@ -66,7 +66,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, language } = await req.json();
+    const { messages, language, medicalHistoryContext } = await req.json();
     const provider = resolveProvider();
 
     const languageInstruction =
@@ -223,6 +223,12 @@ It is **not a medical diagnosis** and does not replace consultation with a quali
 **End of Report**
 
 ${languageInstruction}
+${medicalHistoryContext ? `
+
+PATIENT MEDICAL HISTORY CONTEXT:
+${medicalHistoryContext}
+
+Use this context to personalize the response, but do not invent facts beyond it.` : ""}
 `;
 
     console.log(`[medical-chat] Using provider: ${provider.tag}, model: ${provider.model}`);

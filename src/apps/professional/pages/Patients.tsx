@@ -1,5 +1,4 @@
 import { Users, Search, Loader2, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -43,7 +42,8 @@ export default function ProfessionalPatients() {
             {filteredPatients.map((patient) => (
               <div
                 key={patient.patient_id}
-                className="bg-card rounded-2xl p-4 border border-border hover:border-primary/50 transition-colors"
+                className="bg-card rounded-2xl p-4 border border-border hover:border-primary/50 transition-colors cursor-pointer"
+                onClick={() => navigate(`/professional/patient/${patient.patient_id}`)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -58,13 +58,7 @@ export default function ProfessionalPatients() {
                       <Badge variant="outline" className="mt-1 text-xs">{patient.lastType}</Badge>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate(`/professional/encounters?encounterId=${patient.lastEncounterId}`)}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </Button>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
             ))}

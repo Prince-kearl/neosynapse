@@ -1,16 +1,18 @@
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/medical-chat`;
 
 export async function streamMedicalChat({
   messages,
   language,
+  medicalHistoryContext,
   onDelta,
   onDone,
   onError,
 }: {
   messages: Msg[];
   language?: string;
+  medicalHistoryContext?: string;
   onDelta: (text: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -22,7 +24,7 @@ export async function streamMedicalChat({
         "Content-Type": "application/json",
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
       },
-      body: JSON.stringify({ messages, language }),
+      body: JSON.stringify({ messages, language, medicalHistoryContext }),
     });
 
     if (!resp.ok) {

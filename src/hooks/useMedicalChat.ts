@@ -26,6 +26,7 @@ export type ChatSyncStatus = "idle" | "syncing" | "synced" | "retry";
 type UseMedicalChatOptions = {
   storageKey?: string;
   userId?: string;
+  contextMessage?: string | null;
 };
 
 type PersistedChatStore = {
@@ -350,6 +351,7 @@ async function persistRemoteSessions(userId: string, localSessions: ChatSession[
 export function useMedicalChat(options?: UseMedicalChatOptions) {
   const storageKey = options?.storageKey || DEFAULT_STORAGE_KEY;
   const userId = options?.userId;
+  const contextMessage = options?.contextMessage?.trim() || null;
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -660,6 +662,7 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
     await streamMedicalChat({
       messages: apiMessages as any,
       language,
+      medicalHistoryContext: contextMessage || undefined,
       onDelta: (chunk) => {
         if (abortRef.current) return;
         assistantSoFar += chunk;
@@ -698,7 +701,7 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
         toast({ title: "AI Error", description: error, variant: "destructive" });
       },
     });
-  }, [language, ensureActiveSession, upsertSession]);
+  }, [language, ensureActiveSession, upsertSession, contextMessage]);
 
   const messages = useMemo(() => {
     const active = sessions.find((session) => session.id === activeSessionId);

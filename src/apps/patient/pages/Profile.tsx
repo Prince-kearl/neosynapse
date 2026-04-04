@@ -796,65 +796,7 @@ export default function PatientProfile() {
                     </p>
                   </div>
                 </div>
-                <Dialog open={medicalHistoryDialogOpen} onOpenChange={setMedicalHistoryDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={initializeMedicalHistoryForm}>Edit</Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Edit Medical History</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="conditions">Conditions</Label>
-                        <Textarea
-                          id="conditions"
-                          placeholder="e.g. Hypertension, Asthma"
-                          value={medicalHistoryData.conditions}
-                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, conditions: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="allergies">Allergies</Label>
-                        <Textarea
-                          id="allergies"
-                          placeholder="e.g. Penicillin, Peanuts"
-                          value={medicalHistoryData.allergies}
-                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, allergies: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="medications">Current Medications</Label>
-                        <Textarea
-                          id="medications"
-                          placeholder="e.g. Metformin 500mg"
-                          value={medicalHistoryData.medications}
-                          onChange={(e) => setMedicalHistoryData({ ...medicalHistoryData, medications: e.target.value })}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">Separate multiple items with commas.</p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => clearMedicalHistoryMutation.mutate()}
-                          disabled={clearMedicalHistoryMutation.isPending || saveMedicalHistoryMutation.isPending}
-                        >
-                          {clearMedicalHistoryMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                          Clear
-                        </Button>
-                        <Button
-                          className="flex-1"
-                          onClick={() => saveMedicalHistoryMutation.mutate(medicalHistoryData)}
-                          disabled={saveMedicalHistoryMutation.isPending || clearMedicalHistoryMutation.isPending}
-                        >
-                          {saveMedicalHistoryMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <Button variant="outline" size="sm" onClick={() => navigate("/patient/medical-history")}>Manage</Button>
               </div>
               
               <Separator />

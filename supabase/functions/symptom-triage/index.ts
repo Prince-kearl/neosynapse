@@ -97,7 +97,7 @@ serve(async (req) => {
   }
 
   try {
-    const { symptoms, age, gender, language } = await req.json();
+    const { symptoms, age, gender, language, medicalHistoryContext } = await req.json();
     const provider = resolveProvider();
 
     const systemPrompt = `You are Neo Synapse Triage Engine. Analyze patient symptoms and provide structured triage assessment.
@@ -116,7 +116,8 @@ Respond using this exact JSON structure via tool call:
 - warning_signs: Array of red-flag symptoms to watch for`;
 
     const userMessage = `Patient Info: Age ${age || "unknown"}, Gender ${gender || "unknown"}
-Reported Symptoms: ${symptoms}`;
+  ${medicalHistoryContext ? `Medical History: ${medicalHistoryContext}
+  ` : ""}Reported Symptoms: ${symptoms}`;
 
     console.log(`[symptom-triage] Using provider: ${provider.tag}, model: ${provider.model}`);
 

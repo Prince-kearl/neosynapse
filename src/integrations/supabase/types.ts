@@ -466,6 +466,104 @@ export type Database = {
         }
         Relationships: [
           {
+      medical_history: {
+        Row: {
+          allergies: string[]
+          completed_at: string | null
+          created_at: string
+          current_medications: string[]
+          existing_conditions: string[]
+          family_medical_history: string | null
+          id: string
+          last_reviewed_at: string | null
+          notes: string | null
+          onboarding_completed: boolean
+          past_surgeries: string[]
+          privacy_acknowledged_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allergies?: string[]
+          completed_at?: string | null
+          created_at?: string
+          current_medications?: string[]
+          existing_conditions?: string[]
+          family_medical_history?: string | null
+          id?: string
+          last_reviewed_at?: string | null
+          notes?: string | null
+          onboarding_completed?: boolean
+          past_surgeries?: string[]
+          privacy_acknowledged_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allergies?: string[]
+          completed_at?: string | null
+          created_at?: string
+          current_medications?: string[]
+          existing_conditions?: string[]
+          family_medical_history?: string | null
+          id?: string
+          last_reviewed_at?: string | null
+          notes?: string | null
+          onboarding_completed?: boolean
+          past_surgeries?: string[]
+          privacy_acknowledged_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      medical_history_files: {
+        Row: {
+          created_at: string
+          document_type: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          medical_history_id: string
+          mime_type: string | null
+          storage_bucket: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_type?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          medical_history_id: string
+          mime_type?: string | null
+          storage_bucket?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          medical_history_id?: string
+          mime_type?: string | null
+          storage_bucket?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_history_files_medical_history_id_fkey"
+            columns: ["medical_history_id"]
+            isOneToOne: false
+            referencedRelation: "medical_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
             foreignKeyName: "order_items_meal_id_fkey"
             columns: ["meal_id"]
             isOneToOne: false

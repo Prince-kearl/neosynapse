@@ -28,7 +28,6 @@ export default function SignIn() {
 
   useEffect(() => {
     if (user && !isLoading && !roleLoading && role) {
-      // Redirect based on role
       if (from) {
         navigate(from, { replace: true });
       } else if (role === "patient") {

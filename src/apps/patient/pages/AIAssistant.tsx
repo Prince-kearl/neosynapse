@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Send, Mic, MicOff, Image, FileUp, Trash2, Bot, User, Loader2, Volume2,
   Languages, Sparkles, MessageSquareText, Square, Play, Plus, Pencil, Pin, Search,
-  CheckCircle2, AlertCircle, RefreshCw, MoreHorizontal
+  CheckCircle2, AlertCircle, RefreshCw, MoreHorizontal, X
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,6 +21,8 @@ import { useLanguage, SUPPORTED_LANGUAGES, type LanguageCode } from "@/contexts/
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMedicalHistory, useMedicalHistoryFiles } from "@/shared/hooks/useHealthcare";
+import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
 import ReactMarkdown from "react-markdown";
 import {
   Select,
@@ -67,6 +69,17 @@ const SPEECH_LANGUAGE_MAP = {
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const DOC_MIME = "application/msword";
+
+class UploadCancelledError extends Error {
+  constructor() {
+    super("Upload processing cancelled.");
+    this.name = "UploadCancelledError";
+  }
+}
+
+function isUploadCancelledError(error: unknown): error is UploadCancelledError {
+  return error instanceof UploadCancelledError || (error instanceof Error && error.name === "UploadCancelledError");
+}
 
 const OCR_LANGUAGE_MAP: Record<LanguageCode, string> = {
   en: "eng",
@@ -370,7 +383,10 @@ const AI_ASSISTANT_COPY = {
 function AIAssistant() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { data: medicalHistory } = useMedicalHistory();
+  const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
   const chatStorageKey = `neo-synapse-ai-chat:${user?.id || "guest"}`;
+  const medicalHistoryContext = buildMedicalHistoryContext(medicalHistory, medicalHistoryFiles);
   const {
     messages,
     sessions,
@@ -385,7 +401,7 @@ function AIAssistant() {
     toggleSessionPinned,
     deleteSession,
     retrySync,
-  } = useMedicalChat({ storageKey: chatStorageKey, userId: user?.id });
+  } = useMedicalChat({ storageKey: chatStorageKey, userId: user?.id, contextMessage: medicalHistoryContext });
   const [searchParams, setSearchParams] = useSearchParams();
   const { language, setLanguage } = useLanguage();
   const copy = AI_ASSISTANT_COPY[language] || AI_ASSISTANT_COPY.en;
@@ -393,6 +409,7 @@ function AIAssistant() {
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   // Voice mode: manual listen/respond
   const [autoVoice, setAutoVoice] = useState(false); // auto-play TTS for voice-initiated msgs
@@ -412,6 +429,8 @@ function AIAssistant() {
   const stopRequestedRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadCancelRef = useRef(false);
+  const ocrWorkerRef = useRef<any | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speakRequestIdRef = useRef(0);
@@ -494,6 +513,21 @@ function AIAssistant() {
     deleteSession(sessionId);
   };
 
+  const cancelUploadProcessing = useCallback(async () => {
+    uploadCancelRef.current = true;
+    setUploadStatus("Canceling PDF extraction...");
+
+    if (ocrWorkerRef.current) {
+      try {
+        await ocrWorkerRef.current.terminate();
+      } catch {
+        // Ignore worker shutdown errors.
+      } finally {
+        ocrWorkerRef.current = null;
+      }
+    }
+  }, []);
+
   const handleChipClick = (chipText: string, idx: number) => {
     setInput(chipText);
     setHighlightedChip(idx);
@@ -560,6 +594,11 @@ function AIAssistant() {
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
+      uploadCancelRef.current = true;
+      if (ocrWorkerRef.current) {
+        void ocrWorkerRef.current.terminate().catch(() => undefined);
+        ocrWorkerRef.current = null;
+      }
     };
   }, []);
 
@@ -615,6 +654,7 @@ function AIAssistant() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    uploadCancelRef.current = false;
     if (file.size > 10 * 1024 * 1024) {
       toast({ title: copy.fileTooLargeTitle, description: copy.fileTooLargeDescription, variant: "destructive" });
       e.target.value = "";
@@ -638,11 +678,23 @@ function AIAssistant() {
     } else if (file.type === "application/pdf") {
       // Extract text from PDF and send to AI
       try {
-        const text = await extractPdfText(file);
+        setUploadStatus("Extracting text from PDF...");
+        const text = await extractPdfText(file, {
+          language,
+          onProgress: (status) => setUploadStatus(status),
+          shouldCancel: () => uploadCancelRef.current,
+          workerRef: ocrWorkerRef,
+        });
         const preview = text.slice(0, 6000);
         sendMessage(copy.uploadedPdfPrompt(file.name, preview));
       } catch (err) {
-        toast({ title: copy.pdfFailedTitle, description: copy.pdfFailedDescription, variant: "destructive" });
+        if (!isUploadCancelledError(err)) {
+          toast({ title: copy.pdfFailedTitle, description: copy.pdfFailedDescription, variant: "destructive" });
+        }
+      } finally {
+        uploadCancelRef.current = false;
+        ocrWorkerRef.current = null;
+        setUploadStatus(null);
       }
     } else {
       try {
@@ -1343,6 +1395,28 @@ function AIAssistant() {
             </div>
           )}
 
+          {/* Upload Processing Indicator */}
+          {uploadStatus && (
+            <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
+              <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">{uploadStatus}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => void cancelUploadProcessing()}
+                >
+                  <X className="w-3 h-3" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Input - Redesigned Search Box UI */}
           <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
             <div className="max-w-2xl mx-auto">
@@ -1448,7 +1522,22 @@ function extractReportAndJson(messages: ChatMessage[]) {
 }
 
 // --- PDF text extraction helper ---
-  async function extractPdfText(file: File): Promise<string> {
+  async function extractPdfText(
+    file: File,
+    options: {
+      language: LanguageCode;
+      onProgress?: (status: string) => void;
+      shouldCancel?: () => boolean;
+      workerRef?: { current: any | null };
+    }
+  ): Promise<string> {
+    const assertNotCancelled = () => {
+      if (options.shouldCancel?.()) {
+        throw new UploadCancelledError();
+      }
+    };
+
+    assertNotCancelled();
     const arrayBuffer = await file.arrayBuffer();
     if (!pdfjsLib) {
       pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
@@ -1456,11 +1545,71 @@ function extractReportAndJson(messages: ChatMessage[]) {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let text = "";
     for (let i = 1; i <= pdf.numPages; i++) {
+      assertNotCancelled();
+      options.onProgress?.(`Extracting text from PDF... Page ${i} of ${pdf.numPages}`);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      text += content.items.map((item: any) => item.str).join(" ") + "\n";
+      const pageText = content.items
+        .map((item: any) => (typeof item?.str === "string" ? item.str : ""))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (pageText) {
+        text += `${pageText}\n`;
+        continue;
+      }
+
+      assertNotCancelled();
+      options.onProgress?.(`Scanning PDF page ${i} of ${pdf.numPages}...`);
+      const pageBlob = await renderPdfPageToImageBlob(page);
+      const ocrText = await extractImageText(
+        new File([pageBlob], `pdf-page-${i}.png`, { type: "image/png" }),
+        options.language,
+        {
+          shouldCancel: options.shouldCancel,
+          workerRef: options.workerRef,
+        }
+      );
+      assertNotCancelled();
+      if (ocrText.trim()) {
+        text += `${ocrText.trim()}\n`;
+      }
     }
-    return text;
+
+    const normalized = text.replace(/\n{3,}/g, "\n\n").trim();
+    if (!normalized || normalized.replace(/\s/g, "").length < 20) {
+      throw new Error("Could not extract readable text from this PDF.");
+    }
+
+    return normalized;
+  }
+
+  async function renderPdfPageToImageBlob(page: any): Promise<Blob> {
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Could not render PDF page.");
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    await page.render({ canvasContext: context, viewport }).promise;
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        reject(new Error("Could not export rendered PDF page."));
+      }, "image/png");
+    });
   }
 
 // --- OCR image preprocessing ---
@@ -1597,7 +1746,20 @@ function extractReportAndJson(messages: ChatMessage[]) {
   }
 
 // --- OCR helper for images ---
-  async function extractImageText(file: File, language: LanguageCode): Promise<string> {
+  async function extractImageText(
+    file: File,
+    language: LanguageCode,
+    options?: {
+      shouldCancel?: () => boolean;
+      workerRef?: { current: any | null };
+    }
+  ): Promise<string> {
+    const assertNotCancelled = () => {
+      if (options?.shouldCancel?.()) {
+        throw new UploadCancelledError();
+      }
+    };
+
     const ocrLanguage = OCR_LANGUAGE_MAP[language] || "eng";
 
     let inputFile: File | Blob = file;
@@ -1608,21 +1770,42 @@ function extractReportAndJson(messages: ChatMessage[]) {
       inputFile = file;
     }
 
-    try {
-      const { data: { text } } = await Tesseract.recognize(inputFile, ocrLanguage, {
+    const recognizeWithLanguage = async (lang: string): Promise<string> => {
+      assertNotCancelled();
+      const worker = await (Tesseract as any).createWorker(lang, 1, {
         logger: () => {},
-        tessedit_pageseg_mode: "3",   // AUTO — detect page layout automatically
-        tessedit_ocr_engine_mode: "1", // LSTM only
-      } as any);
-      return text;
-    } catch (error) {
-      if (ocrLanguage !== "eng") {
-        const { data: { text } } = await Tesseract.recognize(inputFile, "eng", {
-          logger: () => {},
+      });
+      options?.workerRef && (options.workerRef.current = worker);
+
+      try {
+        assertNotCancelled();
+        await worker.setParameters({
           tessedit_pageseg_mode: "3",
           tessedit_ocr_engine_mode: "1",
         } as any);
+        const { data: { text } } = await worker.recognize(inputFile);
+        assertNotCancelled();
         return text;
+      } finally {
+        try {
+          await worker.terminate();
+        } catch {
+          // Ignore worker termination errors.
+        }
+        if (options?.workerRef?.current === worker) {
+          options.workerRef.current = null;
+        }
+      }
+    };
+
+    try {
+      return await recognizeWithLanguage(ocrLanguage);
+    } catch (error) {
+      if (isUploadCancelledError(error) || options?.shouldCancel?.()) {
+        throw new UploadCancelledError();
+      }
+      if (ocrLanguage !== "eng") {
+        return await recognizeWithLanguage("eng");
       }
       throw error;
     }

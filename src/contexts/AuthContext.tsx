@@ -10,7 +10,7 @@ interface AuthContextType {
     email: string,
     password: string,
     metadata?: Record<string, unknown>
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ error: Error | null; session: Session | null; user: User | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -58,7 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
     
-    return { error: error as Error | null };
+    return {
+      error: error as Error | null,
+      session: data.session,
+      user: data.user,
+    };
   };
 
   const signIn = async (email: string, password: string) => {
