@@ -1,16 +1,34 @@
 import { FileText, Loader2, Eye } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProfessionalTranscripts, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { useAuth } from "@/contexts/AuthContext";
+import { clinicalNoteService, auditLogService } from "@/shared/services/healthcare";
+import { toast } from "@/hooks/use-toast";
+import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
 
 export default function ProfessionalTranscripts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { transcriptId } = useParams<{ transcriptId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: transcripts = [], isLoading } = useProfessionalTranscripts();
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const { data: ownAuditLogs = [] } = useQuery({
+    queryKey: ["own-audit-logs", user?.id],
+    queryFn: async () => {
+      const { data, error } = await auditLogService.getOwn();
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && !!transcriptId,
+  });
   const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
   const filteredTranscripts = encounterFilterId
@@ -20,8 +38,105 @@ export default function ProfessionalTranscripts() {
   const patientIds = filteredTranscripts.map((t: any) => t.encounters?.patient_id).filter(Boolean);
   const { data: nameMap = {} } = useProfileNames(patientIds);
   const selectedTranscript = transcriptId ? transcripts.find((t: any) => t.id === transcriptId) : null;
+  const selectedTranscriptAuditTimeline = selectedTranscript
+    ? ownAuditLogs.filter((log: any) =>
+      (log.entity_type === "transcript" && log.entity_id === selectedTranscript.id) ||
+      log.metadata?.transcript_id === selectedTranscript.id ||
+      log.metadata?.encounter_id === selectedTranscript.encounter_id
+    )
+    : [];
 
   const hasContent = (json: any) => json && Object.keys(json).length > 0;
+
+  const generateNoteDraftFromTranscript = async () => {
+    if (!selectedTranscript || !user?.id) return;
+
+    const draftPayload = {
+      source: "transcript_review",
+      transcript_id: selectedTranscript.id,
+      encounter_id: selectedTranscript.encounter_id,
+      generated_at: new Date().toISOString(),
+      transcript_json: selectedTranscript.transcript_json ?? {},
+      speaker_map: selectedTranscript.speaker_map ?? {},
+      sections: {
+        chief_complaint: "",
+        history_of_present_illness: "",
+        assessment: "",
+        plan: "",
+        follow_up: "",
+      },
+    };
+
+    setIsGeneratingDraft(true);
+    const { data: encounterNotes, error: existingError } = await clinicalNoteService.getForEncounter(selectedTranscript.encounter_id);
+    if (existingError) {
+      setIsGeneratingDraft(false);
+      toast({ title: "Could not check existing notes", description: existingError.message, variant: "destructive" });
+      return;
+    }
+
+    const existingNote = (encounterNotes || [])[0];
+
+    if (existingNote && existingNote.status !== "finalized") {
+      const { error: updateError } = await clinicalNoteService.updateDraft(existingNote.id, draftPayload);
+      setIsGeneratingDraft(false);
+      if (updateError) {
+        toast({ title: "Failed to update note draft", description: updateError.message, variant: "destructive" });
+        return;
+      }
+
+      await auditLogService.log({
+        actor_id: user.id,
+        action: "transcript_to_note_draft_updated",
+        entity_type: "clinical_note",
+        entity_id: existingNote.id,
+        metadata: {
+          transcript_id: selectedTranscript.id,
+          encounter_id: selectedTranscript.encounter_id,
+        },
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+      toast({ title: "Draft note updated from transcript" });
+      navigate(`/professional/notes/${existingNote.id}/edit?encounterId=${selectedTranscript.encounter_id}`);
+      return;
+    }
+
+    const { data: createdNotes, error: createError } = await clinicalNoteService.create({
+      encounter_id: selectedTranscript.encounter_id,
+      draft_json: draftPayload,
+    });
+    setIsGeneratingDraft(false);
+
+    if (createError) {
+      toast({ title: "Failed to create note draft", description: createError.message, variant: "destructive" });
+      return;
+    }
+
+    const createdNote = Array.isArray(createdNotes) ? createdNotes[0] : createdNotes;
+    const createdId = (createdNote as any)?.id;
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: "transcript_to_note_draft_created",
+      entity_type: "clinical_note",
+      entity_id: createdId,
+      metadata: {
+        transcript_id: selectedTranscript.id,
+        encounter_id: selectedTranscript.encounter_id,
+      },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    toast({ title: "Draft note created from transcript" });
+
+    if (createdId) {
+      navigate(`/professional/notes/${createdId}/edit?encounterId=${selectedTranscript.encounter_id}`);
+      return;
+    }
+
+    navigate(`/professional/notes?encounterId=${selectedTranscript.encounter_id}`);
+  };
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -73,7 +188,20 @@ export default function ProfessionalTranscripts() {
                   >
                     Open Notes Queue
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={generateNoteDraftFromTranscript}
+                    disabled={isGeneratingDraft}
+                  >
+                    {isGeneratingDraft ? "Generating..." : "Generate Draft Note"}
+                  </Button>
                 </div>
+                <TransitionTimeline
+                  title="Transcript Transition History"
+                  events={selectedTranscriptAuditTimeline}
+                  emptyLabel="No transcript-related transitions recorded yet."
+                />
               </>
             )}
           </div>

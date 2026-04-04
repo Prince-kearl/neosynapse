@@ -88,6 +88,7 @@ const App = () => (
                   <Route path="appointments" element={<PatientAppointments />} />
                   <Route path="telemedicine" element={<PatientTelemedicine />} />
                   <Route path="reports" element={<PatientReports />} />
+                  <Route path="reports/:reportId" element={<PatientReports />} />
                   <Route path="profile" element={<PatientProfile />} />
                   <Route path="settings" element={<PatientSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />

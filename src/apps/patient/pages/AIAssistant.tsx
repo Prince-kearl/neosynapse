@@ -1,8 +1,20 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Send, Mic, MicOff, Image, FileUp, Trash2, Bot, User, Loader2, Volume2,
-  Languages, Sparkles, MessageSquareText, Square, Play
+  Languages, Sparkles, MessageSquareText, Square, Play, Plus, Pencil, Pin, Search,
+  CheckCircle2, AlertCircle, RefreshCw, MoreHorizontal
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useMedicalChat, type ChatMessage } from "@/hooks/useMedicalChat";
 import { useLanguage, SUPPORTED_LANGUAGES, type LanguageCode } from "@/contexts/LanguageContext";
@@ -355,7 +367,22 @@ const AI_ASSISTANT_COPY = {
 function AIAssistant() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { messages, isLoading, sendMessage, clearChat } = useMedicalChat();
+  const chatStorageKey = `neo-synapse-ai-chat:${user?.id || "guest"}`;
+  const {
+    messages,
+    sessions,
+    activeSessionId,
+    isLoading,
+    syncStatus,
+    sendMessage,
+    clearChat,
+    setActiveSessionId,
+    createNewSession,
+    renameSession,
+    toggleSessionPinned,
+    deleteSession,
+    retrySync,
+  } = useMedicalChat({ storageKey: chatStorageKey, userId: user?.id });
   const [searchParams, setSearchParams] = useSearchParams();
   const { language, setLanguage } = useLanguage();
   const copy = AI_ASSISTANT_COPY[language] || AI_ASSISTANT_COPY.en;
@@ -374,6 +401,7 @@ function AIAssistant() {
   });
   // Always default to text mode when opening the AI Assistant
   const [mode, setMode] = useState("text");
+  const [sessionSearch, setSessionSearch] = useState("");
   // Remove continuous voice loop
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -391,6 +419,77 @@ function AIAssistant() {
   const [highlightedChip, setHighlightedChip] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewText = VOICE_PREVIEW_TEXT[language] || VOICE_PREVIEW_TEXT.en;
+  const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
+  const orderedSessions = useMemo(() => {
+    const filtered = sessions.filter((session) => {
+      if (!normalizedSessionSearch) return true;
+
+      if (session.name.toLowerCase().includes(normalizedSessionSearch)) return true;
+
+      return session.messages.some((message) =>
+        message.content.toLowerCase().includes(normalizedSessionSearch)
+      );
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return b.updatedAt.getTime() - a.updatedAt.getTime();
+    });
+  }, [sessions, normalizedSessionSearch]);
+
+  const formatSessionTimestamp = (timestamp: Date) =>
+    timestamp.toLocaleString("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const renderSyncIndicator = () => {
+    if (!user?.id) return null;
+
+    if (syncStatus === "syncing") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-background/80 px-2.5 py-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Syncing
+        </span>
+      );
+    }
+
+    if (syncStatus === "retry") {
+      return (
+        <button
+          type="button"
+          onClick={retrySync}
+          className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/20"
+        >
+          <AlertCircle className="h-3.5 w-3.5" />
+          Retry
+          <RefreshCw className="h-3 w-3" />
+        </button>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Synced
+      </span>
+    );
+  };
+
+  const handleRenameSession = (sessionId: string, currentName: string) => {
+    const nextName = window.prompt("Rename conversation", currentName);
+    if (!nextName || !nextName.trim()) return;
+    renameSession(sessionId, nextName.trim());
+  };
+
+  const handleDeleteSession = (sessionId: string, sessionName: string) => {
+    const confirmed = window.confirm(`Delete conversation \"${sessionName}\"?`);
+    if (!confirmed) return;
+    deleteSession(sessionId);
+  };
 
   const handleChipClick = (chipText: string, idx: number) => {
     setInput(chipText);
@@ -884,11 +983,12 @@ function AIAssistant() {
   };
   return (
     <div className="flex-1 min-h-screen bg-background flex flex-col">
-      {/* Top Bar with Mode Toggle */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 p-4 backdrop-blur">
+      {/* Top Bar */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 px-4 py-2.5 backdrop-blur">
+        {/* Language selector — always visible */}
         <Select value={language} onValueChange={(v: any) => setLanguage(v)}>
-          <SelectTrigger className="w-[120px] h-10 text-base bg-background/80 border-none shadow-none">
-            <Languages className="w-4 h-4 mr-1" />
+          <SelectTrigger className="w-[120px] h-9 text-sm bg-background/80 border-none shadow-none">
+            <Languages className="w-4 h-4 mr-1 shrink-0" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -900,168 +1000,291 @@ function AIAssistant() {
           </SelectContent>
         </Select>
 
-        <Select value={voiceStyle} onValueChange={(v: VoiceStyle) => setVoiceStyle(v)}>
-          <SelectTrigger className="w-[128px] h-10 text-sm bg-background/80 border-none shadow-none">
-            <Volume2 className="w-4 h-4 mr-1" />
-            <SelectValue placeholder={styleLabels.label} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="natural">{styleLabels.natural}</SelectItem>
-            <SelectItem value="balanced">{styleLabels.balanced}</SelectItem>
-            <SelectItem value="fast">{styleLabels.fast}</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* More options dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-full border-primary/40 bg-background/80"
+              aria-label="More options"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuLabel>Voice</DropdownMenuLabel>
+            {/* Voice style sub-menu */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Volume2 className="mr-2 h-4 w-4" />
+                {styleLabels.label}: {styleLabels[voiceStyle]}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {(["natural", "balanced", "fast"] as VoiceStyle[]).map((vs) => (
+                  <DropdownMenuItem
+                    key={vs}
+                    onClick={() => setVoiceStyle(vs)}
+                    className={voiceStyle === vs ? "font-semibold" : ""}
+                  >
+                    {styleLabels[vs]}
+                    {voiceStyle === vs && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="h-10 w-10 rounded-full border-primary/40 bg-background/80"
-          onClick={() => (isSpeaking ? stopSpeaking() : speakText(previewText))}
-          aria-label={isSpeaking ? copy.stop : "Preview voice style"}
-          title={isSpeaking ? copy.stop : "Preview voice style"}
-        >
-          {isSpeaking ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </Button>
+            {/* Preview voice */}
+            <DropdownMenuItem
+              onClick={() => (isSpeaking ? stopSpeaking() : speakText(previewText))}
+            >
+              {isSpeaking ? (
+                <><Square className="mr-2 h-4 w-4" />{copy.stop}</>
+              ) : (
+                <><Play className="mr-2 h-4 w-4" />Preview voice</>
+              )}
+            </DropdownMenuItem>
 
-        <div className="ml-auto">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="h-10 w-10 rounded-full border-primary/40 bg-background/80"
-          onClick={() => setMode(mode === "text" ? "voice" : "text")}
-          aria-label={mode === "text" ? copy.switchToVoice : copy.switchToText}
-          title={mode === "text" ? copy.voiceChat : copy.textChat}
-        >
-          {mode === "text" ? <Mic className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
-        </Button>
+            <DropdownMenuSeparator />
+
+            {/* Clear current chat */}
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => {
+                clearChat();
+                toast({ title: "Chat cleared", description: "Saved assistant history has been removed." });
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear chat
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Right-side controls */}
+        <div className="ml-auto flex items-center gap-2">
+          {renderSyncIndicator()}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 rounded-full border-primary/40 bg-background/80"
+            onClick={() => setMode(mode === "text" ? "voice" : "text")}
+            aria-label={mode === "text" ? copy.switchToVoice : copy.switchToText}
+            title={mode === "text" ? copy.voiceChat : copy.textChat}
+          >
+            {mode === "text" ? <Mic className="h-4 w-4" /> : <MessageSquareText className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
-      {/* Main Content: Text or Voice Mode */}
-      {mode === "text" ? (
-        <>
-          {/* Welcome & Suggestions */}
-          {messages.length === 0 && (
-            <div className="flex-1 flex flex-col items-center justify-center px-4">
-              <h2 className="text-2xl md:text-3xl font-bold text-primary mb-2 text-center mt-8">{copy.welcomeTitle}</h2>
-              <p className="text-base text-muted-foreground mb-6 text-center max-w-xl">
-                {copy.welcomeDescription}
-              </p>
-              <div className="flex flex-wrap gap-3 w-full max-w-lg mb-8 justify-center">
-                {copy.suggestions.map((chip, idx) => (
-                  <Button
-                    key={chip}
-                    variant="outline"
-                    className={`rounded-xl py-3 px-4 text-base font-medium border-primary/30 bg-background/80 whitespace-normal break-words text-center h-auto leading-snug transition-colors duration-200 ${highlightedChip === idx ? 'ring-2 ring-primary/70 bg-primary/10' : ''}`}
-                    style={{ wordBreak: 'break-word', whiteSpace: 'normal', width: 'auto', minWidth: 0, maxWidth: '100%' }}
-                    onClick={() => handleChipClick(chip, idx)}
-                  >
-                    {chip}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-          {messages.length > 0 && (
-            <div className="flex-1 overflow-y-auto">
-              <div className="max-w-3xl mx-auto p-4 space-y-4">
-                {messages.map((msg) => (
-                  <MessageBubble key={msg.id} msg={msg} />
-                ))}
-                {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-                      <Bot className="w-4 h-4 text-accent" />
-                    </div>
-                    <div className="bg-card border border-border rounded-2xl p-3">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    </div>
-                  </div>
-                )}
-
-                {generatedReportMarkdown && (
-                  <MedicalReportTools
-                    markdown={generatedReportMarkdown}
-                    json={generatedReportJson}
-                  />
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        // Voice Chat Mode
-        <div className="flex-1 flex flex-col items-center justify-center px-4">
-          <div className="flex flex-col items-center justify-center w-full">
-            {/* Animated orb/visualizer */}
-            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/60 to-primary/30 shadow-lg flex items-center justify-center mb-8 animate-pulse">
-              {/* Optionally add SVG or canvas animation here */}
-              <div className="w-40 h-40 rounded-full bg-background/80 shadow-inner" />
-            </div>
-            <div className="text-xl font-semibold text-primary mb-2">{isRecording ? copy.listening : copy.voiceChat}</div>
-            <div className="text-base text-muted-foreground mb-4 min-h-[32px] max-w-lg text-center">
-              {isRecording && (liveTranscript || <span className="opacity-60">{copy.saySomething}</span>)}
-              {!isRecording && <span className="opacity-60">{copy.pressMic}</span>}
-            </div>
-            <Button
-              size="icon"
-              className={`h-20 w-20 rounded-full ${isRecording ? "bg-destructive" : "bg-primary"} text-primary-foreground shadow-lg flex items-center justify-center text-4xl ${isRecording ? "animate-pulse" : ""}`}
-              onClick={isRecording ? stopRecording : startRecording}
-              aria-label={isRecording ? copy.stopRecording : copy.startVoiceInput}
-            >
-              {isRecording ? <MicOff className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
+      <div className="flex-1 min-h-0 flex">
+        <aside className="hidden md:flex w-72 border-r border-border bg-muted/20 flex-col">
+          <div className="p-3 border-b border-border flex items-center justify-between">
+            <p className="text-sm font-semibold">Conversations</p>
+            <Button size="sm" variant="outline" onClick={() => createNewSession()}>
+              <Plus className="w-4 h-4 mr-1" /> New
             </Button>
-            {isRecording && (
-              <div className="mt-2 text-xs text-muted-foreground">{copy.duration}: {formatDuration(recordingDuration)}</div>
+          </div>
+          <div className="p-3 border-b border-border">
+            <label className="flex items-center rounded-lg border border-border bg-background px-2 h-9">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={sessionSearch}
+                onChange={(event) => setSessionSearch(event.target.value)}
+                placeholder="Search conversations"
+                className="ml-2 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </label>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {orderedSessions.length === 0 && (
+              <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+                No conversations match your search.
+              </div>
             )}
+            {orderedSessions.map((session) => (
+              <div
+                key={session.id}
+                className={`rounded-xl border p-2 ${activeSessionId === session.id ? "border-primary bg-primary/5" : "border-border bg-card"}`}
+              >
+                <button
+                  className="w-full text-left"
+                  onClick={() => setActiveSessionId(session.id)}
+                >
+                  <p className="text-sm font-medium truncate flex items-center gap-1">
+                    {session.name}
+                    {session.isPinned && <Pin className="w-3 h-3 text-primary" />}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{formatSessionTimestamp(session.updatedAt)}</p>
+                </button>
+                <div className="flex items-center gap-1 mt-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2"
+                    onClick={() => toggleSessionPinned(session.id)}
+                    title={session.isPinned ? "Unpin conversation" : "Pin conversation"}
+                    aria-label={session.isPinned ? "Unpin conversation" : "Pin conversation"}
+                  >
+                    <Pin className={`w-3 h-3 ${session.isPinned ? "text-primary" : ""}`} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleRenameSession(session.id, session.name)}>
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleDeleteSession(session.id, session.name)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        </aside>
 
-      {/* Recording Indicator */}
-      {isRecording && (
-        <div className="bg-destructive/10 border-t border-destructive/30 px-4 py-3">
-          <div className="max-w-3xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
-              </span>
-              <span className="text-sm font-medium text-destructive">
-                {copy.listeningIndicator} {formatDuration(recordingDuration)}
-              </span>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={stopRecording}
-              className="h-8 gap-1.5"
-            >
-              <Square className="w-3 h-3" />
-              {copy.stop}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="md:hidden p-3 border-b border-border bg-muted/20 flex items-center gap-2">
+            <Select value={activeSessionId || ""} onValueChange={(v) => setActiveSessionId(v)}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select conversation" />
+              </SelectTrigger>
+              <SelectContent>
+                {orderedSessions.map((session) => (
+                  <SelectItem key={session.id} value={session.id}>
+                    {session.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={() => createNewSession()}>
+              <Plus className="w-4 h-4" />
             </Button>
           </div>
-        </div>
-      )}
 
-      {/* Transcribing Indicator */}
-      {isTranscribing && (
-        <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
-          <div className="max-w-3xl mx-auto flex items-center gap-3">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">{copy.transcribing}</span>
-          </div>
-        </div>
-      )}
+          {/* Main Content: Text or Voice Mode */}
+          {mode === "text" ? (
+            <>
+              {/* Welcome & Suggestions */}
+              {messages.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                  <h2 className="text-2xl md:text-3xl font-bold text-primary mb-2 text-center mt-8">{copy.welcomeTitle}</h2>
+                  <p className="text-base text-muted-foreground mb-6 text-center max-w-xl">
+                    {copy.welcomeDescription}
+                  </p>
+                  <div className="flex flex-wrap gap-3 w-full max-w-lg mb-8 justify-center">
+                    {copy.suggestions.map((chip, idx) => (
+                      <Button
+                        key={chip}
+                        variant="outline"
+                        className={`rounded-xl py-3 px-4 text-base font-medium border-primary/30 bg-background/80 whitespace-normal break-words text-center h-auto leading-snug transition-colors duration-200 ${highlightedChip === idx ? 'ring-2 ring-primary/70 bg-primary/10' : ''}`}
+                        style={{ wordBreak: 'break-word', whiteSpace: 'normal', width: 'auto', minWidth: 0, maxWidth: '100%' }}
+                        onClick={() => handleChipClick(chip, idx)}
+                      >
+                        {chip}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.length > 0 && (
+                <div className="flex-1 overflow-y-auto">
+                  <div className="max-w-3xl mx-auto p-4 space-y-4">
+                    {messages.map((msg) => (
+                      <MessageBubble key={msg.id} msg={msg} />
+                    ))}
+                    {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
+                          <Bot className="w-4 h-4 text-accent" />
+                        </div>
+                        <div className="bg-card border border-border rounded-2xl p-3">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        </div>
+                      </div>
+                    )}
 
-      {/* Input - Redesigned Search Box UI */}
-      <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center w-full rounded-full bg-white border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}>
+                    {generatedReportMarkdown && (
+                      <MedicalReportTools
+                        markdown={generatedReportMarkdown}
+                        json={generatedReportJson}
+                      />
+                    )}
+
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            // Voice Chat Mode
+            <div className="flex-1 flex flex-col items-center justify-center px-4">
+              <div className="flex flex-col items-center justify-center w-full">
+                {/* Animated orb/visualizer */}
+                <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/60 to-primary/30 shadow-lg flex items-center justify-center mb-8 animate-pulse">
+                  {/* Optionally add SVG or canvas animation here */}
+                  <div className="w-40 h-40 rounded-full bg-background/80 shadow-inner" />
+                </div>
+                <div className="text-xl font-semibold text-primary mb-2">{isRecording ? copy.listening : copy.voiceChat}</div>
+                <div className="text-base text-muted-foreground mb-4 min-h-[32px] max-w-lg text-center">
+                  {isRecording && (liveTranscript || <span className="opacity-60">{copy.saySomething}</span>)}
+                  {!isRecording && <span className="opacity-60">{copy.pressMic}</span>}
+                </div>
+                <Button
+                  size="icon"
+                  className={`h-20 w-20 rounded-full ${isRecording ? "bg-destructive" : "bg-primary"} text-primary-foreground shadow-lg flex items-center justify-center text-4xl ${isRecording ? "animate-pulse" : ""}`}
+                  onClick={isRecording ? stopRecording : startRecording}
+                  aria-label={isRecording ? copy.stopRecording : copy.startVoiceInput}
+                >
+                  {isRecording ? <MicOff className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
+                </Button>
+                {isRecording && (
+                  <div className="mt-2 text-xs text-muted-foreground">{copy.duration}: {formatDuration(recordingDuration)}</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Recording Indicator */}
+          {isRecording && (
+            <div className="bg-destructive/10 border-t border-destructive/30 px-4 py-3">
+              <div className="max-w-3xl mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive" />
+                  </span>
+                  <span className="text-sm font-medium text-destructive">
+                    {copy.listeningIndicator} {formatDuration(recordingDuration)}
+                  </span>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={stopRecording}
+                  className="h-8 gap-1.5"
+                >
+                  <Square className="w-3 h-3" />
+                  {copy.stop}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Transcribing Indicator */}
+          {isTranscribing && (
+            <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
+              <div className="max-w-3xl mx-auto flex items-center gap-3">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">{copy.transcribing}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Input - Redesigned Search Box UI */}
+          <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
+            <div className="max-w-2xl mx-auto">
+              <div className="flex items-center w-full rounded-full bg-white border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}>
 
             {/* Plus icon (left) for upload */}
             <>
@@ -1140,6 +1363,8 @@ function AIAssistant() {
             >
               <Send className="w-5 h-5 text-white" />
             </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

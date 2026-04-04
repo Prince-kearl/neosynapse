@@ -1,17 +1,44 @@
 import { FileCheck, Download, Eye, Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProfessionalReports } from "@/shared/hooks/useHealthcare";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { useAuth } from "@/contexts/AuthContext";
+import { medicalReportService, auditLogService } from "@/shared/services/healthcare";
+import { toast } from "@/hooks/use-toast";
+import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
 
 export default function ProfessionalReports() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { reportId } = useParams<{ reportId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: reports = [], isLoading } = useProfessionalReports();
   const selectedReport = reportId ? reports.find((r: any) => r.id === reportId) : null;
+  const [reportEditorText, setReportEditorText] = useState("{}");
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const { data: ownAuditLogs = [] } = useQuery({
+    queryKey: ["own-audit-logs", user?.id],
+    queryFn: async () => {
+      const { data, error } = await auditLogService.getOwn();
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && !!selectedReport,
+  });
+
+  const selectedReportAuditTimeline = selectedReport
+    ? ownAuditLogs.filter((log: any) =>
+      (log.entity_type === "medical_report" && log.entity_id === selectedReport.id) ||
+      log.metadata?.encounter_id === selectedReport.encounter_id
+    )
+    : [];
 
   const getReportStatus = (report: any) => {
     const status = report?.report_json?.status;
@@ -46,6 +73,76 @@ export default function ProfessionalReports() {
     setSearchParams({}, { replace: true });
   }, [searchParams, selectedReport, setSearchParams]);
 
+  useEffect(() => {
+    if (!selectedReport) return;
+    setReportEditorText(JSON.stringify(selectedReport.report_json ?? {}, null, 2));
+  }, [selectedReport?.id, selectedReport?.created_at]);
+
+  const parseReportEditorJson = () => {
+    try {
+      return JSON.parse(reportEditorText || "{}");
+    } catch {
+      toast({ title: "Invalid report JSON", description: "Please fix JSON formatting before saving.", variant: "destructive" });
+      return null;
+    }
+  };
+
+  const persistReportStatus = async (toStatus: "draft" | "review" | "finalized", setPending: (value: boolean) => void) => {
+    if (!selectedReport || !user?.id) return;
+
+    const currentStatus = getReportStatus(selectedReport);
+    if (toStatus === "review" && currentStatus !== "draft") {
+      toast({ title: "Invalid transition", description: "Only draft reports can be submitted for review.", variant: "destructive" });
+      return;
+    }
+    if (toStatus === "finalized" && currentStatus !== "review") {
+      toast({ title: "Invalid transition", description: "Only reports in review can be finalized.", variant: "destructive" });
+      return;
+    }
+    if (currentStatus === "finalized" && toStatus !== "finalized") {
+      toast({ title: "Finalized report is read-only", description: "Create a revision to make changes." });
+      return;
+    }
+
+    const parsed = parseReportEditorJson();
+    if (!parsed) return;
+    if ((toStatus === "review" || toStatus === "finalized") && Object.keys(parsed).length === 0) {
+      toast({ title: "Report is empty", description: "Add report content before moving status.", variant: "destructive" });
+      return;
+    }
+
+    const mergedJson = {
+      ...parsed,
+      status: toStatus,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+    };
+
+    setPending(true);
+    const { error } = await medicalReportService.update(selectedReport.id, { report_json: mergedJson });
+    setPending(false);
+
+    if (error) {
+      toast({ title: "Failed to update report", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: `medical_report_${toStatus === "review" ? "submitted_for_review" : toStatus === "finalized" ? "finalized" : "saved_draft"}`,
+      entity_type: "medical_report",
+      entity_id: selectedReport.id,
+      metadata: {
+        encounter_id: selectedReport.encounter_id,
+        from_status: getReportStatus(selectedReport),
+        to_status: toStatus,
+      },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-reports", user.id] });
+    toast({ title: `Report ${toStatus === "review" ? "submitted for review" : toStatus}` });
+  };
+
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
@@ -73,14 +170,45 @@ export default function ProfessionalReports() {
             {selectedReport && (
               <>
                 <div className="text-sm text-muted-foreground">Type: {selectedReport.report_type}</div>
-                <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
-                  {JSON.stringify(selectedReport.report_json ?? {}, null, 2)}
-                </pre>
+                <textarea
+                  value={reportEditorText}
+                  onChange={(e) => setReportEditorText(e.target.value)}
+                  rows={14}
+                  className="w-full resize-y rounded-xl border border-border bg-muted/30 p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                />
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => downloadReportJson(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Export JSON
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => persistReportStatus("draft", setIsSavingDraft)}
+                    disabled={isSavingDraft || getReportStatus(selectedReport) === "finalized"}
+                  >
+                    {isSavingDraft ? "Saving..." : "Save Draft"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => persistReportStatus("review", setIsSubmittingReview)}
+                    disabled={isSubmittingReview || getReportStatus(selectedReport) !== "draft"}
+                  >
+                    {isSubmittingReview ? "Submitting..." : "Submit Review"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => persistReportStatus("finalized", setIsFinalizing)}
+                    disabled={isFinalizing || getReportStatus(selectedReport) !== "review"}
+                  >
+                    {isFinalizing ? "Finalizing..." : "Finalize Report"}
+                  </Button>
                 </div>
+                <TransitionTimeline
+                  title="Report Transition History"
+                  events={selectedReportAuditTimeline}
+                  emptyLabel="No report transitions recorded yet."
+                />
               </>
             )}
           </div>

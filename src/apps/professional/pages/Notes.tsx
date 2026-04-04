@@ -1,10 +1,16 @@
 import { PenTool, Clock, CheckCircle, Edit, Loader2 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
+import { useAuth } from "@/contexts/AuthContext";
+import { clinicalNoteService, medicalReportService, auditLogService } from "@/shared/services/healthcare";
+import { toast } from "@/hooks/use-toast";
+import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -14,6 +20,8 @@ const statusConfig: Record<string, string> = {
 
 export default function ProfessionalNotes() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { noteId } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: notes = [], isLoading } = useProfessionalNotes();
@@ -32,6 +40,203 @@ export default function ProfessionalNotes() {
   const finalizedNotes = filteredNotes.filter((n: any) => n.status === "finalized");
   const selectedNote = noteId ? notes.find((n: any) => n.id === noteId) : null;
   const defaultTab = encounterFilterId && reviewNotes.length > 0 && draftNotes.length === 0 ? "review" : "draft";
+  const [noteEditorText, setNoteEditorText] = useState("{}");
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const { data: ownAuditLogs = [] } = useQuery({
+    queryKey: ["own-audit-logs", user?.id],
+    queryFn: async () => {
+      const { data, error } = await auditLogService.getOwn();
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && !!selectedNote,
+  });
+
+  const selectedNoteAuditTimeline = selectedNote
+    ? ownAuditLogs.filter((log: any) =>
+      (log.entity_type === "clinical_note" && log.entity_id === selectedNote.id) ||
+      (log.entity_type === "medical_report" && log.metadata?.note_id === selectedNote.id) ||
+      log.metadata?.encounter_id === selectedNote.encounter_id
+    )
+    : [];
+
+  useEffect(() => {
+    if (!selectedNote) return;
+    setNoteEditorText(JSON.stringify(selectedNote.final_json ?? selectedNote.draft_json ?? {}, null, 2));
+  }, [selectedNote?.id, selectedNote?.updated_at]);
+
+  const parseNoteEditorJson = () => {
+    try {
+      return JSON.parse(noteEditorText || "{}");
+    } catch {
+      toast({ title: "Invalid note JSON", description: "Please fix JSON formatting before saving.", variant: "destructive" });
+      return null;
+    }
+  };
+
+  const syncReportFromFinalizedNote = async (note: any, finalJson: Record<string, unknown>) => {
+    const patientId = note?.encounters?.patient_id;
+    if (!patientId) return;
+
+    const reportPayload = {
+      status: "finalized",
+      source: "clinical_note_finalized",
+      note_id: note.id,
+      encounter_id: note.encounter_id,
+      generated_at: new Date().toISOString(),
+      clinical_note: finalJson,
+    };
+
+    const { data: existingReports, error: existingError } = await medicalReportService.getForEncounter(note.encounter_id);
+    if (existingError) {
+      console.error("Failed checking existing report for encounter:", existingError);
+      return;
+    }
+
+    if (existingReports && existingReports.length > 0) {
+      const targetReport = existingReports[0];
+      const { error } = await medicalReportService.update(targetReport.id, {
+        report_json: {
+          ...(targetReport.report_json as Record<string, unknown> | null),
+          ...reportPayload,
+        },
+      });
+      if (!error && user?.id) {
+        await auditLogService.log({
+          actor_id: user.id,
+          action: "medical_report_updated_from_note",
+          entity_type: "medical_report",
+          entity_id: targetReport.id,
+          metadata: { encounter_id: note.encounter_id, note_id: note.id },
+        });
+      }
+      return;
+    }
+
+    const { data: created, error: createError } = await medicalReportService.create({
+      patient_id: patientId,
+      encounter_id: note.encounter_id,
+      report_type: "clinical_summary",
+      report_json: reportPayload,
+    });
+
+    if (!createError && user?.id) {
+      const createdReport = Array.isArray(created) ? created[0] : created;
+      await auditLogService.log({
+        actor_id: user.id,
+        action: "medical_report_created_from_note",
+        entity_type: "medical_report",
+        entity_id: (createdReport as any)?.id,
+        metadata: { encounter_id: note.encounter_id, note_id: note.id },
+      });
+    }
+  };
+
+  const saveDraft = async () => {
+    if (!selectedNote || !user?.id) return;
+    if (selectedNote.status === "finalized") {
+      toast({ title: "Finalized note is read-only", description: "Create a new note revision to continue." });
+      return;
+    }
+
+    const parsed = parseNoteEditorJson();
+    if (!parsed) return;
+
+    setIsSavingDraft(true);
+    const { error } = await clinicalNoteService.updateDraft(selectedNote.id, parsed);
+    setIsSavingDraft(false);
+
+    if (error) {
+      toast({ title: "Failed to save draft", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: "clinical_note_saved_draft",
+      entity_type: "clinical_note",
+      entity_id: selectedNote.id,
+      metadata: { encounter_id: selectedNote.encounter_id, from_status: selectedNote.status, to_status: "draft" },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    toast({ title: "Draft saved" });
+  };
+
+  const submitForReview = async () => {
+    if (!selectedNote || !user?.id) return;
+    if (selectedNote.status !== "draft") {
+      toast({ title: "Invalid transition", description: "Only draft notes can be submitted for review.", variant: "destructive" });
+      return;
+    }
+
+    const parsed = parseNoteEditorJson();
+    if (!parsed) return;
+    if (Object.keys(parsed).length === 0) {
+      toast({ title: "Draft is empty", description: "Add note content before submitting for review.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    const { error } = await clinicalNoteService.submitForReview(selectedNote.id);
+    setIsSubmittingReview(false);
+
+    if (error) {
+      toast({ title: "Failed to submit note", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: "clinical_note_submitted_for_review",
+      entity_type: "clinical_note",
+      entity_id: selectedNote.id,
+      metadata: { encounter_id: selectedNote.encounter_id, from_status: selectedNote.status, to_status: "review" },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    toast({ title: "Submitted for review" });
+  };
+
+  const finalizeNote = async () => {
+    if (!selectedNote || !user?.id) return;
+    if (selectedNote.status !== "review") {
+      toast({ title: "Invalid transition", description: "Only notes in review can be finalized.", variant: "destructive" });
+      return;
+    }
+
+    const parsed = parseNoteEditorJson();
+    if (!parsed) return;
+    if (Object.keys(parsed).length === 0) {
+      toast({ title: "Final note is empty", description: "Add note content before finalizing.", variant: "destructive" });
+      return;
+    }
+
+    setIsFinalizing(true);
+    const { error } = await clinicalNoteService.finalize(selectedNote.id, user.id, parsed);
+    if (!error) {
+      await syncReportFromFinalizedNote(selectedNote, parsed);
+      await auditLogService.log({
+        actor_id: user.id,
+        action: "clinical_note_finalized",
+        entity_type: "clinical_note",
+        entity_id: selectedNote.id,
+        metadata: { encounter_id: selectedNote.encounter_id, from_status: selectedNote.status, to_status: "finalized" },
+      });
+    }
+    setIsFinalizing(false);
+
+    if (error) {
+      toast({ title: "Failed to finalize note", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    queryClient.invalidateQueries({ queryKey: ["pro-reports", user.id] });
+    toast({ title: "Note finalized and report synced" });
+  };
 
   const NoteCard = ({ note }: { note: any }) => {
     const patientId = note.encounters?.patient_id;
@@ -109,9 +314,28 @@ export default function ProfessionalNotes() {
                   <span>•</span>
                   <span>Status: {selectedNote.status}</span>
                 </div>
-                <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
-                  {JSON.stringify(selectedNote.final_json ?? selectedNote.draft_json ?? {}, null, 2)}
-                </pre>
+                <textarea
+                  value={noteEditorText}
+                  onChange={(e) => setNoteEditorText(e.target.value)}
+                  rows={14}
+                  className="w-full resize-y rounded-xl border border-border bg-muted/30 p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={saveDraft} disabled={isSavingDraft || selectedNote.status === "finalized"}>
+                    {isSavingDraft ? "Saving..." : "Save Draft"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={submitForReview} disabled={isSubmittingReview || selectedNote.status !== "draft"}>
+                    {isSubmittingReview ? "Submitting..." : "Submit For Review"}
+                  </Button>
+                  <Button size="sm" onClick={finalizeNote} disabled={isFinalizing || selectedNote.status !== "review"}>
+                    {isFinalizing ? "Finalizing..." : "Finalize Note"}
+                  </Button>
+                </div>
+                <TransitionTimeline
+                  title="Note Transition History"
+                  events={selectedNoteAuditTimeline}
+                  emptyLabel="No note transitions recorded yet."
+                />
                 <div className="flex gap-2">
                   <Button
                     variant="outline"

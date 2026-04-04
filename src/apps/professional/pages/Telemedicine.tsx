@@ -286,6 +286,11 @@ export default function ProfessionalTelemedicine() {
     refetch();
   }, [refetch]);
 
+  const getEncounterContextPath = useCallback((basePath: string) => {
+    if (!selectedEncounterRef.current) return basePath;
+    return `${basePath}?encounterId=${selectedEncounterRef.current}`;
+  }, []);
+
   // ─── Active call view ──────────────────────────────────────────
   if (callState === "active" || (callState === "joining" && connectionState === "connected")) {
     return (
@@ -304,8 +309,8 @@ export default function ProfessionalTelemedicine() {
           onToggleAudio={handleToggleAudio}
           onToggleVideo={handleToggleVideo}
           onEndCall={handleEndCall}
-          onOpenChat={() => navigate("/professional/transcripts")}
-          onOpenNotes={() => navigate("/professional/notes")}
+          onOpenChat={() => navigate(getEncounterContextPath("/professional/transcripts"))}
+          onOpenNotes={() => navigate(getEncounterContextPath("/professional/notes"))}
         />
       </div>
     );
@@ -363,8 +368,11 @@ export default function ProfessionalTelemedicine() {
             <Button variant="outline" onClick={handleBackToList}>
               Back to Waiting List
             </Button>
-            <Button onClick={() => navigate("/professional/notes")}>
+            <Button onClick={() => navigate(getEncounterContextPath("/professional/notes"))}>
               Write Notes
+            </Button>
+            <Button variant="secondary" onClick={() => navigate(getEncounterContextPath("/professional/transcripts"))}>
+              Review Transcript
             </Button>
           </div>
         </div>

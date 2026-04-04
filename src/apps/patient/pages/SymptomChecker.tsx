@@ -39,10 +39,141 @@ const urgencyConfig = {
   "emergency": { color: "bg-destructive/10 text-destructive border-destructive/20", icon: AlertTriangle, label: "Emergency" },
 };
 
-const commonSymptoms = [
-  "Headache", "Fever", "Cough", "Chest pain", "Fatigue",
-  "Nausea", "Dizziness", "Shortness of breath", "Joint pain", "Abdominal pain",
-];
+const symptomCheckerCopy = {
+  en: {
+    loadingTitle: "Analyzing Symptoms",
+    loadingBody: "Neo Synapse is assessing your symptoms...",
+    triageTitle: "Triage Assessment",
+    newCheck: "New Check",
+    possibleConditions: "Possible Conditions",
+    recommendedAction: "Recommended Action",
+    warningSignsTitle: "Warning Signs to Watch",
+    doctorQuestions: "Questions for Your Doctor",
+    disclaimer: "This is not a medical diagnosis. Please consult a healthcare professional.",
+    checkerTitle: "Symptom Checker",
+    checkerSubtitle: "Select or describe your symptoms for an AI-powered triage assessment",
+    patientInformation: "Patient Information",
+    age: "Age",
+    agePlaceholder: "e.g. 35",
+    gender: "Gender",
+    select: "Select",
+    commonSymptoms: "Common Symptoms",
+    selected: "selected",
+    clearAll: "Clear all",
+    additionalSymptoms: "Describe Additional Symptoms",
+    additionalPlaceholder: "e.g. Persistent dry cough for 3 days, mild chest tightness when breathing...",
+    commaHint: "Separate multiple symptoms with commas.",
+    analyze: "Analyze Symptoms",
+  },
+  tw: {
+    loadingTitle: "Yerehwehwɛ nsɛnkyerɛnne no",
+    loadingBody: "Neo Synapse repɛ mu nsɛmpɔw no...",
+    triageTitle: "Triage Nhwehwemu",
+    newCheck: "San hwehwɛ bio",
+    possibleConditions: "Yare a ebetumi ayɛ",
+    recommendedAction: "Anamɔn a ɛfata",
+    warningSignsTitle: "Nsɛnkyerɛnne a ɛsɛ sɛ wode ani to so",
+    doctorQuestions: "Nsɛmmisa ma Dokita",
+    disclaimer: "Eyi nyɛ ayaresa mu diagnosis. Fa wo ho to oduruyɛfoɔ so.",
+    checkerTitle: "Yare Nsɛnkyerɛnne Checker",
+    checkerSubtitle: "Yi anaa kyerɛkyerɛ wo nsɛnkyerɛnne ma AI triage nhwehwemu",
+    patientInformation: "Yarefo Ho Nsɛm",
+    age: "Mfe",
+    agePlaceholder: "sɛe 35",
+    gender: "Bɔbeasu",
+    select: "Yi",
+    commonSymptoms: "Nsɛnkyerɛnne a ɛtaa ba",
+    selected: "wɔayi",
+    clearAll: "Popa nyinaa",
+    additionalSymptoms: "Kyerɛkyerɛ nsɛnkyerɛnne foforo",
+    additionalPlaceholder: "sɛe, kuruwa a ɛkɔ so nnansa yi, na ahome mu den kakra...",
+    commaHint: "Fa koma hyehyɛ nsɛnkyerɛnne pii ntam.",
+    analyze: "Hwehwɛ Nsɛnkyerɛnne mu",
+  },
+  ga: {
+    loadingTitle: "Mihe nileee niyɔŋmɔi",
+    loadingBody: "Neo Synapse ebaakɛ niyɔŋmɔi lɛ mli...",
+    triageTitle: "Triage Hweɛmɔ",
+    newCheck: "Kɛ amli bio",
+    possibleConditions: "Hewalɛi si wɔba",
+    recommendedAction: "Ninɔŋmɔ ni baa",
+    warningSignsTitle: "Nitsumɔi ni ohe kɛ se",
+    doctorQuestions: "Biabii ma Dokita",
+    disclaimer: "Ehe nyɛ diagnosis. Tsake dokita kɛ faa ni.",
+    checkerTitle: "Niyɔŋmɔ Checker",
+    checkerSubtitle: "Lɛ niyɔŋmɔi lɛ ko ekɛ shishi amɛ AI triage",
+    patientInformation: "Yarefo Nsɛm",
+    age: "Mfe",
+    agePlaceholder: "sɛe 35",
+    gender: "Bɔbeasu",
+    select: "Yi",
+    commonSymptoms: "Niyɔŋmɔi ni taa ba",
+    selected: "a wɔayi",
+    clearAll: "Popa nyinaa",
+    additionalSymptoms: "Kasa hewalɛi ahefo",
+    additionalPlaceholder: "sɛe, kuruwa ni eko bo nnansa, ahome mu den kakra...",
+    commaHint: "Fa comma hyehyɛ niyɔŋmɔi pii ntam.",
+    analyze: "Hweɛ Niyɔŋmɔi",
+  },
+  ee: {
+    loadingTitle: "Mele dzesi to dzodzo me",
+    loadingBody: "Neo Synapse le wo dzodzoewo me kpɔm...",
+    triageTitle: "Triage Ŋutinyanya",
+    newCheck: "Wɔwɔ ake",
+    possibleConditions: "Nudzɔdzɔ siwo ate ŋu",
+    recommendedAction: "Nusi wowɔa o",
+    warningSignsTitle: "Dzesi siwo nèle kpɔ o",
+    doctorQuestions: "Biabia na dokita",
+    disclaimer: "Esi menye diagnosis o. Taflatse kpe ɖe dokita ŋu.",
+    checkerTitle: "Dzodzo Checker",
+    checkerSubtitle: "Tia alo gblɔ wo dzodzoewo na AI triage",
+    patientInformation: "Dɔlila Nyatakakawo",
+    age: "Xexe",
+    agePlaceholder: "le 35",
+    gender: "Sɔŋli",
+    select: "Tia",
+    commonSymptoms: "Dzodzo siwo wɔa vaa",
+    selected: "wo tia",
+    clearAll: "Tutui katã",
+    additionalSymptoms: "Gblɔ dzodzo bubuawo",
+    additionalPlaceholder: "le kpɔe, kuku geɖe le ŋkeke etɔ̃ me...",
+    commaHint: "Tsɔ koma mae le dzodzo geɖewo dome.",
+    analyze: "Le Dzodzoewo Kpɔm",
+  },
+  ha: {
+    loadingTitle: "Ana nazarin alamomi",
+    loadingBody: "Neo Synapse na tantance alamominka...",
+    triageTitle: "Binciken Triage",
+    newCheck: "Sabon bincike",
+    possibleConditions: "Yiwuwa cututtuka",
+    recommendedAction: "Matakin da aka ba da shawara",
+    warningSignsTitle: "Alamomin gargadi",
+    doctorQuestions: "Tambayoyi ga likita",
+    disclaimer: "Wannan ba tantancewa ta likita ba ce. Tuntuɓi ƙwararren likita.",
+    checkerTitle: "Mai duba alamomi",
+    checkerSubtitle: "Zaɓi ko rubuta alamominka domin AI triage",
+    patientInformation: "Bayanin mara lafiya",
+    age: "Shekaru",
+    agePlaceholder: "misali 35",
+    gender: "Jinsi",
+    select: "Zaɓi",
+    commonSymptoms: "Alamomin da suka fi yawa",
+    selected: "an zaɓa",
+    clearAll: "Goge duka",
+    additionalSymptoms: "Bayyana ƙarin alamomi",
+    additionalPlaceholder: "misali tari busasshe na kwanaki 3...",
+    commaHint: "Raba alamomi da wakafi.",
+    analyze: "Nazarin Alamomi",
+  },
+} as const;
+
+const localizedCommonSymptoms: Record<string, string[]> = {
+  en: ["Headache", "Fever", "Cough", "Chest pain", "Fatigue", "Nausea", "Dizziness", "Shortness of breath", "Joint pain", "Abdominal pain"],
+  tw: ["Ti yare", "Atiridii", "Watiridii", "Koko mu yaw", "Brɛ", "Fom", "Tiritiri", "Ahomegye mu den", "Nnompe mu yaw", "Yafunu mu yaw"],
+  ga: ["Ntsu yɔɔ", "Atidii", "Sɛɛ", "Koko mu yɛmɔ", "Brɛ", "Fom", "Tsɛtsɛ", "Ahomgye mu den", "Nnompe mu yɛmɔ", "Yafunum yɛmɔ"],
+  ee: ["Ta nu veve", "Asra", "Xexe", "Aƒoƒome veve", "Gbɔdzɔdzɔ", "Nududu", "Amevivina", "Gbɔgbɔtsitsi sesẽ", "Aƒɔveve", "Dɔmeveve"],
+  ha: ["Ciwon kai", "Zazzabi", "Tari", "Ciwon kirji", "Gajiya", "Tashin zuciya", "Jiri", "Wahalar numfashi", "Ciwon gabobi", "Ciwon ciki"],
+};
 
 function parseSymptoms(selectedSymptoms: string[], additionalSymptoms: string): string[] {
   const fromText = additionalSymptoms
@@ -153,6 +284,8 @@ export default function PatientSymptomChecker() {
   const [gender, setGender] = useState("");
   const [result, setResult] = useState<TriageResult | null>(null);
   const savedReportSignaturesRef = useRef<Set<string>>(new Set());
+  const copy = symptomCheckerCopy[language] || symptomCheckerCopy.en;
+  const commonSymptoms = localizedCommonSymptoms[language] || localizedCommonSymptoms.en;
   const parsedSymptoms = parseSymptoms(selectedSymptoms, symptoms);
 
   const toggleSymptom = (s: string) => {
@@ -300,8 +433,8 @@ export default function PatientSymptomChecker() {
           <div className="w-20 h-20 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center">
             <Brain className="w-10 h-10 text-primary animate-pulse" />
           </div>
-          <h2 className="font-display text-xl font-bold">Analyzing Symptoms</h2>
-          <p className="text-muted-foreground text-sm">Neo Synapse is assessing your symptoms...</p>
+          <h2 className="font-display text-xl font-bold">{copy.loadingTitle}</h2>
+          <p className="text-muted-foreground text-sm">{copy.loadingBody}</p>
           <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
         </div>
       </div>
@@ -323,9 +456,9 @@ export default function PatientSymptomChecker() {
       <div className="flex-1 min-h-screen bg-background">
         <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <h1 className="font-display text-2xl font-bold">Triage Assessment</h1>
+            <h1 className="font-display text-2xl font-bold">{copy.triageTitle}</h1>
             <Button variant="outline" size="sm" onClick={resetChecker}>
-              New Check
+              {copy.newCheck}
             </Button>
           </div>
 
@@ -348,7 +481,7 @@ export default function PatientSymptomChecker() {
           <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
             <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
               <Stethoscope className="w-5 h-5 text-primary" />
-              Possible Conditions
+              {copy.possibleConditions}
             </h3>
             <div className="space-y-3">
               {result.possible_conditions.map((c) => (
@@ -370,7 +503,7 @@ export default function PatientSymptomChecker() {
           <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
             <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
               <Heart className="w-5 h-5 text-primary" />
-              Recommended Action
+              {copy.recommendedAction}
             </h3>
             <p className="text-sm text-muted-foreground">{result.recommended_action}</p>
           </div>
@@ -380,7 +513,7 @@ export default function PatientSymptomChecker() {
             <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
               <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-destructive" />
-                Warning Signs to Watch
+                {copy.warningSignsTitle}
               </h3>
               <ul className="space-y-2">
                 {result.warning_signs.map((w, i) => (
@@ -396,7 +529,7 @@ export default function PatientSymptomChecker() {
           {/* Follow-up Questions */}
           {result.questions.length > 0 && (
             <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-              <h3 className="font-display font-semibold mb-3">Questions for Your Doctor</h3>
+              <h3 className="font-display font-semibold mb-3">{copy.doctorQuestions}</h3>
               <ul className="space-y-2">
                 {result.questions.map((q, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
@@ -414,7 +547,7 @@ export default function PatientSymptomChecker() {
           />
 
           <p className="text-xs text-muted-foreground text-center">
-            This is not a medical diagnosis. Please consult a healthcare professional.
+            {copy.disclaimer}
           </p>
         </div>
       </div>
@@ -429,30 +562,30 @@ export default function PatientSymptomChecker() {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
             <Thermometer className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="font-display text-2xl font-bold mb-2">Symptom Checker</h1>
+          <h1 className="font-display text-2xl font-bold mb-2">{copy.checkerTitle}</h1>
           <p className="text-muted-foreground text-sm">
-            Select or describe your symptoms for an AI-powered triage assessment
+            {copy.checkerSubtitle}
           </p>
         </div>
 
         {/* Patient Info */}
         <div className="space-y-4 rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-          <h3 className="font-semibold">Patient Information</h3>
+          <h3 className="font-semibold">{copy.patientInformation}</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Age</label>
+              <label className="text-sm text-muted-foreground mb-1 block">{copy.age}</label>
               <Input
                 type="number"
-                placeholder="e.g. 35"
+                placeholder={copy.agePlaceholder}
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
               />
             </div>
             <div>
-              <label className="text-sm text-muted-foreground mb-1 block">Gender</label>
+              <label className="text-sm text-muted-foreground mb-1 block">{copy.gender}</label>
               <Select value={gender} onValueChange={setGender}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder={copy.select} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="male">Male</SelectItem>
@@ -467,9 +600,9 @@ export default function PatientSymptomChecker() {
         {/* Common Symptoms */}
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="font-semibold">Common Symptoms</h3>
+            <h3 className="font-semibold">{copy.commonSymptoms}</h3>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{parsedSymptoms.length} selected</span>
+              <span className="text-xs text-muted-foreground">{parsedSymptoms.length} {copy.selected}</span>
               {(selectedSymptoms.length > 0 || symptoms.trim()) && (
                 <Button
                   variant="ghost"
@@ -480,7 +613,7 @@ export default function PatientSymptomChecker() {
                     setSymptoms("");
                   }}
                 >
-                  Clear all
+                  {copy.clearAll}
                 </Button>
               )}
             </div>
@@ -504,16 +637,16 @@ export default function PatientSymptomChecker() {
 
         {/* Additional Symptoms */}
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-          <h3 className="font-semibold mb-3">Describe Additional Symptoms</h3>
+          <h3 className="font-semibold mb-3">{copy.additionalSymptoms}</h3>
           <textarea
             value={symptoms}
             onChange={(e) => setSymptoms(e.target.value)}
-            placeholder="e.g. Persistent dry cough for 3 days, mild chest tightness when breathing..."
+            placeholder={copy.additionalPlaceholder}
             rows={3}
             className="w-full resize-none rounded-xl bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
           />
           <p className="mt-2 text-xs text-muted-foreground">
-            Separate multiple symptoms with commas.
+            {copy.commaHint}
           </p>
         </div>
 
@@ -523,7 +656,7 @@ export default function PatientSymptomChecker() {
           disabled={parsedSymptoms.length === 0}
         >
           <Activity className="w-5 h-5 mr-2" />
-          Analyze Symptoms
+          {copy.analyze}
         </Button>
 
         <p className="text-xs text-muted-foreground text-center">
