@@ -65,6 +65,9 @@ const SPEECH_LANGUAGE_MAP = {
   ha: "ha",
 } as const;
 
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOC_MIME = "application/msword";
+
 const OCR_LANGUAGE_MAP: Record<LanguageCode, string> = {
   en: "eng",
   tw: "eng",
@@ -617,35 +620,89 @@ function AIAssistant() {
       e.target.value = "";
       return;
     }
-    // For images, use the image pipeline
+    // For images, run OCR + vision prompt pipeline.
     if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
+      try {
+        const ocrText = await extractImageText(file, language);
+        const base64 = await fileToBase64(file);
+
+        if (ocrText && ocrText.replace(/\s/g, "").length > 20) {
+          sendMessage(copy.imageWithOcrPrompt(ocrText), base64);
+        } else {
+          sendMessage(copy.uploadedReportImagePrompt(file.name), base64);
+        }
+      } catch {
+        const base64 = await fileToBase64(file);
         sendMessage(copy.uploadedReportImagePrompt(file.name), base64);
-      };
-      reader.readAsDataURL(file);
+      }
     } else if (file.type === "application/pdf") {
       // Extract text from PDF and send to AI
       try {
         const text = await extractPdfText(file);
-        const preview = text.slice(0, 3000);
+        const preview = text.slice(0, 6000);
         sendMessage(copy.uploadedPdfPrompt(file.name, preview));
       } catch (err) {
         toast({ title: copy.pdfFailedTitle, description: copy.pdfFailedDescription, variant: "destructive" });
       }
     } else {
-      // For text-based files, read as text
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = reader.result as string;
-        const preview = text.slice(0, 3000);
+      try {
+        const text = await extractDocumentText(file);
+        const preview = text.slice(0, 6000);
+        if (!preview.trim()) {
+          throw new Error("No readable text content found.");
+        }
         sendMessage(copy.uploadedReportPrompt(file.name, preview));
-      };
-      reader.readAsText(file);
+      } catch (error) {
+        const description = error instanceof Error
+          ? error.message
+          : "Unsupported or unreadable file. Use PDF, DOCX, TXT, CSV, or image files.";
+        toast({
+          title: "File could not be analyzed",
+          description,
+          variant: "destructive",
+        });
+      }
     }
     e.target.value = "";
   };
+
+  async function extractDocumentText(file: File): Promise<string> {
+    const name = file.name.toLowerCase();
+    const isDocx = file.type === DOCX_MIME || name.endsWith(".docx");
+    const isDoc = file.type === DOC_MIME || name.endsWith(".doc");
+
+    if (isDoc) {
+      throw new Error("Legacy .doc files are not supported in-browser. Please upload a .docx or PDF.");
+    }
+
+    if (isDocx) {
+      const mammoth = await import("mammoth/mammoth.browser");
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return (result.value || "").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    const text = await file.text();
+    if (isLikelyBinaryText(text)) {
+      throw new Error("This file looks binary/unreadable. Please upload a PDF, DOCX, TXT, CSV, or image.");
+    }
+    return text;
+  }
+
+  function isLikelyBinaryText(text: string): boolean {
+    if (!text) return false;
+    const sample = text.slice(0, 2500);
+    let suspicious = 0;
+
+    for (let i = 0; i < sample.length; i++) {
+      const code = sample.charCodeAt(i);
+      const isControl = code < 9 || (code > 13 && code < 32);
+      const isReplacement = sample[i] === "�";
+      if (isControl || isReplacement) suspicious++;
+    }
+
+    return suspicious / sample.length > 0.08;
+  }
 
   // ---- Voice recording ----
   // Manual voice mode: only start listening when user triggers
@@ -985,21 +1042,6 @@ function AIAssistant() {
     <div className="flex-1 min-h-screen bg-background flex flex-col">
       {/* Top Bar */}
       <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 px-4 py-2.5 backdrop-blur">
-        {/* Language selector — always visible */}
-        <Select value={language} onValueChange={(v: any) => setLanguage(v)}>
-          <SelectTrigger className="w-[120px] h-9 text-sm bg-background/80 border-none shadow-none">
-            <Languages className="w-4 h-4 mr-1 shrink-0" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SUPPORTED_LANGUAGES.map((l) => (
-              <SelectItem key={l.code} value={l.code}>
-                {l.nativeName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         {/* More options dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1014,7 +1056,29 @@ function AIAssistant() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
-            <DropdownMenuLabel>Voice</DropdownMenuLabel>
+            {/* Language sub-menu */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Languages className="mr-2 h-4 w-4" />
+                {SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeName ?? "Language"}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <DropdownMenuItem
+                    key={l.code}
+                    onClick={() => setLanguage(l.code as any)}
+                    className={language === l.code ? "font-semibold" : ""}
+                  >
+                    {l.nativeName}
+                    {language === l.code && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Voice</DropdownMenuLabel>
+
             {/* Voice style sub-menu */}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
@@ -1036,9 +1100,7 @@ function AIAssistant() {
             </DropdownMenuSub>
 
             {/* Preview voice */}
-            <DropdownMenuItem
-              onClick={() => (isSpeaking ? stopSpeaking() : speakText(previewText))}
-            >
+            <DropdownMenuItem onClick={() => (isSpeaking ? stopSpeaking() : speakText(previewText))}>
               {isSpeaking ? (
                 <><Square className="mr-2 h-4 w-4" />{copy.stop}</>
               ) : (
@@ -1095,7 +1157,7 @@ function AIAssistant() {
                 value={sessionSearch}
                 onChange={(event) => setSessionSearch(event.target.value)}
                 placeholder="Search conversations"
-                className="ml-2 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                className="ml-2 w-full bg-transparent text-sm text-foreground caret-foreground outline-none placeholder:text-muted-foreground"
               />
             </label>
           </div>
@@ -1284,7 +1346,7 @@ function AIAssistant() {
           {/* Input - Redesigned Search Box UI */}
           <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
             <div className="max-w-2xl mx-auto">
-              <div className="flex items-center w-full rounded-full bg-white border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.04)' }}>
+              <div className="flex items-center w-full rounded-full bg-card text-foreground border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.12)' }}>
 
             {/* Plus icon (left) for upload */}
             <>
@@ -1336,7 +1398,7 @@ function AIAssistant() {
               }}
               placeholder={isRecording ? copy.inputListeningPlaceholder : isTranscribing ? copy.inputTranscribingPlaceholder : copy.inputPlaceholder}
               disabled={inputDisabled || isRecording}
-              className="flex-1 bg-transparent border-none outline-none text-base px-2 placeholder:text-muted-foreground disabled:opacity-50"
+              className="flex-1 bg-transparent border-none outline-none text-base text-foreground caret-foreground px-2 placeholder:text-muted-foreground disabled:opacity-50"
               style={{ minWidth: 0 }}
             />
 

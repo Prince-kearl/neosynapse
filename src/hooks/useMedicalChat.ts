@@ -165,6 +165,29 @@ function deriveSessionNameFromPrompt(prompt: string): string {
   return words.length > 48 ? `${words.slice(0, 45)}...` : words;
 }
 
+function isEmptyDraftSession(session: ChatSession): boolean {
+  return session.name === "New Conversation" && session.messages.length === 0;
+}
+
+function dedupeEmptyDraftSessions(
+  sessions: ChatSession[],
+  preferredSessionId?: string | null
+): ChatSession[] {
+  const draftSessions = sessions.filter(isEmptyDraftSession);
+  if (draftSessions.length <= 1) return sessions;
+
+  const preferredDraft =
+    preferredSessionId && draftSessions.find((session) => session.id === preferredSessionId)
+      ? preferredSessionId
+      : null;
+
+  const keepDraftId =
+    preferredDraft ||
+    [...draftSessions].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0].id;
+
+  return sessions.filter((session) => !isEmptyDraftSession(session) || session.id === keepDraftId);
+}
+
 function makeSyncSignature(sessions: ChatSession[]): string {
   return JSON.stringify(
     sessions.map((session) => ({
@@ -399,7 +422,10 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
       const remoteSessions = await loadRemoteSessions(userId);
       if (cancelled) return;
 
-      const resolvedSessions = mergeSessionsByUpdatedAt(sessionsRef.current, remoteSessions);
+      const resolvedSessions = dedupeEmptyDraftSessions(
+        mergeSessionsByUpdatedAt(sessionsRef.current, remoteSessions),
+        activeSessionIdRef.current
+      );
 
       if (resolvedSessions.length > 0) {
         setSessions(resolvedSessions);
@@ -507,6 +533,18 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
   }, []);
 
   const createNewSession = useCallback((name?: string) => {
+    // Reuse an existing empty "New Conversation" instead of duplicating.
+    if (!name) {
+      const existing = sessionsRef.current.find(
+        (s) => s.name === "New Conversation" && s.messages.length === 0
+      );
+      if (existing) {
+        setActiveSessionId(existing.id);
+        activeSessionIdRef.current = existing.id;
+        return existing.id;
+      }
+    }
+
     const session = createSession(name || "New Conversation");
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
@@ -547,17 +585,37 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
     });
   }, []);
 
-  const clearChat = useCallback(() => {
+  const clearChat = useCallback(async () => {
     abortRef.current = true;
     setIsLoading(false);
 
-    const sessionId = ensureActiveSession();
-    upsertSession(sessionId, (session) => ({
-      ...session,
-      messages: [],
-      updatedAt: new Date(),
-    }));
-  }, [ensureActiveSession, upsertSession]);
+    // Explicitly clear remote history to prevent merged sync from restoring old sessions.
+    if (userId) {
+      setSyncStatus("syncing");
+      const sb: any = supabase;
+      const { error } = await sb.from("ai_chat_sessions").delete().eq("user_id", userId);
+      if (error) {
+        setSyncStatus("retry");
+        toast({
+          title: "Failed to clear remote history",
+          description: "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const fallback = createSession();
+    setSessions([fallback]);
+    sessionsRef.current = [fallback];
+    setActiveSessionId(fallback.id);
+    activeSessionIdRef.current = fallback.id;
+    lastSyncedSignatureRef.current = "";
+
+    if (userId) {
+      setSyncStatus("synced");
+    }
+  }, [userId]);
 
   const sendMessage = useCallback(async (content: string, imageUrl?: string) => {
     const sessionId = ensureActiveSession();
