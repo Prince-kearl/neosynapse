@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useMyAppointments } from "@/shared/hooks/useHealthcare";
 import type { Appointment } from "@/shared/types/healthcare";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
@@ -142,20 +143,14 @@ export default function PatientAppointments() {
                 ))}
               </div>
             ) : (
-              <div className="bg-card rounded-2xl p-8 lg:p-12 shadow-food-card text-center">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-accent/10 flex items-center justify-center">
-                  <Calendar className="w-10 h-10 text-accent" />
-                </div>
-                <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-                  No Upcoming Appointments
-                </h2>
-                <p className="text-muted-foreground max-w-md mx-auto mb-4">
-                  Book a consultation with a healthcare professional.
-                </p>
-                <Button onClick={() => navigate("/patient/telemedicine")} variant="outline">
-                  Book Consultation
-                </Button>
-              </div>
+              <EmptyStateCard
+                icon={Calendar}
+                title="No Upcoming Appointments"
+                description="Book a consultation with a healthcare professional."
+                actionLabel="Book Consultation"
+                onAction={() => navigate("/patient/telemedicine")}
+                iconContainerClassName="bg-accent/10"
+              />
             )}
           </TabsContent>
 
@@ -171,17 +166,11 @@ export default function PatientAppointments() {
                 ))}
               </div>
             ) : (
-              <div className="bg-card rounded-2xl p-8 lg:p-12 shadow-food-card text-center">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <CheckCircle className="w-10 h-10 text-primary" />
-                </div>
-                <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-                  No Past Appointments
-                </h2>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Your appointment history will appear here.
-                </p>
-              </div>
+              <EmptyStateCard
+                icon={CheckCircle}
+                title="No Past Appointments"
+                description="Your appointment history will appear here."
+              />
             )}
           </TabsContent>
         </Tabs>

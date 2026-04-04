@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 export default function AdminFacilities() {
   const queryClient = useQueryClient();
@@ -133,10 +134,7 @@ export default function AdminFacilities() {
             ))}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No facilities configured yet</p>
-          </div>
+          <EmptyStateCard icon={Building2} title="No facilities configured yet" compact />
         )}
       </div>
     </div>

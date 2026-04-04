@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAssignedPatients } from "@/shared/hooks/useHealthcare";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 export default function ProfessionalPatients() {
   const navigate = useNavigate();
@@ -69,15 +70,12 @@ export default function ProfessionalPatients() {
             ))}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              {search ? "No patients matching your search" : "No patients assigned yet"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Patients will appear here once encounters are created.
-            </p>
-          </div>
+          <EmptyStateCard
+            icon={Users}
+            title={search ? "No patients matching your search" : "No patients assigned yet"}
+            description="Patients will appear here once encounters are created."
+            compact
+          />
         )}
       </div>
     </div>

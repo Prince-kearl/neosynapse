@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -75,22 +76,14 @@ export default function ProfessionalNotes() {
         </div>
 
         {encounterFilterId && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.delete("encounterId");
-                setSearchParams(next, { replace: true });
-              }}
-            >
-              Clear Filter
-            </Button>
-          </div>
+          <EncounterFilterBanner
+            encounterId={encounterFilterId}
+            onClear={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete("encounterId");
+              setSearchParams(next, { replace: true });
+            }}
+          />
         )}
 
         {noteId && (
@@ -98,7 +91,7 @@ export default function ProfessionalNotes() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Edit Note</h2>
-                <p className="text-sm text-muted-foreground">Route: /professional/notes/{noteId}/edit</p>
+                <p className="text-sm text-muted-foreground">Note ID: {noteId}</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => navigate("/professional/notes")}>
                 Back to Notes

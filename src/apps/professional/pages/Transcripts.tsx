@@ -3,6 +3,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProfessionalTranscripts, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 export default function ProfessionalTranscripts() {
   const navigate = useNavigate();
@@ -30,22 +32,14 @@ export default function ProfessionalTranscripts() {
         </div>
 
         {encounterFilterId && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.delete("encounterId");
-                setSearchParams(next, { replace: true });
-              }}
-            >
-              Clear Filter
-            </Button>
-          </div>
+          <EncounterFilterBanner
+            encounterId={encounterFilterId}
+            onClear={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete("encounterId");
+              setSearchParams(next, { replace: true });
+            }}
+          />
         )}
 
         {transcriptId && (
@@ -53,7 +47,7 @@ export default function ProfessionalTranscripts() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Transcript Review</h2>
-                <p className="text-sm text-muted-foreground">Route: /professional/transcripts/{transcriptId}</p>
+                <p className="text-sm text-muted-foreground">Transcript ID: {transcriptId}</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => navigate("/professional/transcripts")}>
                 Back to Transcripts
@@ -132,13 +126,12 @@ export default function ProfessionalTranscripts() {
             })}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No transcripts available</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Transcripts are generated after recorded consultations.
-            </p>
-          </div>
+          <EmptyStateCard
+            icon={FileText}
+            title="No transcripts available"
+            description="Transcripts are generated after recorded consultations."
+            compact
+          />
         )}
       </div>
     </div>

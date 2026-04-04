@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useProfessionalEncounters, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const statusConfig: Record<string, string> = {
   pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -67,22 +69,14 @@ export default function ProfessionalEncounters() {
         </div>
 
         {encounterFilterId && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                next.delete("encounterId");
-                setSearchParams(next, { replace: true });
-              }}
-            >
-              Clear Filter
-            </Button>
-          </div>
+          <EncounterFilterBanner
+            encounterId={encounterFilterId}
+            onClear={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete("encounterId");
+              setSearchParams(next, { replace: true });
+            }}
+          />
         )}
 
         <Tabs defaultValue={defaultTab}>
@@ -107,10 +101,7 @@ export default function ProfessionalEncounters() {
                 <EncounterCard key={enc.id} enc={enc} isActive />
               ))
             ) : (
-              <div className="bg-card rounded-2xl p-8 shadow-food-card text-center">
-                <ClipboardList className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No active encounters</p>
-              </div>
+              <EmptyStateCard icon={ClipboardList} title="No active encounters" compact />
             )}
           </TabsContent>
 
@@ -124,10 +115,7 @@ export default function ProfessionalEncounters() {
                 <EncounterCard key={enc.id} enc={enc} isActive={false} />
               ))
             ) : (
-              <div className="bg-card rounded-2xl p-8 shadow-food-card text-center">
-                <ClipboardList className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No completed encounters</p>
-              </div>
+              <EmptyStateCard icon={ClipboardList} title="No completed encounters" compact />
             )}
           </TabsContent>
         </Tabs>

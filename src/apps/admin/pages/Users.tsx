@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const roleStyles: Record<string, string> = {
   patient: "border-blue-500/50 text-blue-500",
@@ -130,10 +131,7 @@ export default function AdminUsers() {
             ))}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No users found</p>
-          </div>
+          <EmptyStateCard icon={Users} title="No users found" compact />
         )}
       </div>
     </div>

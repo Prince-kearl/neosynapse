@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const statusStyles: Record<string, string> = {
   pending: "border-yellow-500/50 text-yellow-500",
@@ -272,11 +273,12 @@ export default function AdminInvitations() {
         )}
 
         {invitations.length === 0 && !isLoading && (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <Mail className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No invitations yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Click "New Invitation" to invite professionals or admins.</p>
-          </div>
+          <EmptyStateCard
+            icon={Mail}
+            title="No invitations yet"
+            description="Click New Invitation to invite professionals or admins."
+            compact
+          />
         )}
       </div>
     </div>

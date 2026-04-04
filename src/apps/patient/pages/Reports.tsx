@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useMyReports } from "@/shared/hooks/useHealthcare";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -27,12 +28,16 @@ export default function PatientReports() {
   if (!user) {
     return (
       <div className="flex-1 min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mb-6">
-          <FileText className="w-10 h-10 text-muted-foreground" />
+        <div className="w-full max-w-xl">
+          <EmptyStateCard
+            icon={FileText}
+            title="Sign in to view reports"
+            description="Access your medical reports and clinical documentation"
+            actionLabel="Sign In"
+            onAction={() => navigate("/auth/sign-in")}
+            iconContainerClassName="bg-muted"
+          />
         </div>
-        <h1 className="font-display text-2xl font-bold mb-2">Sign in to view reports</h1>
-        <p className="text-muted-foreground mb-6">Access your medical reports and clinical documentation</p>
-        <Button onClick={() => navigate("/auth/sign-in")}>Sign In</Button>
       </div>
     );
   }
@@ -98,20 +103,13 @@ export default function PatientReports() {
             })}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 lg:p-12 shadow-food-card text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <FileText className="w-10 h-10 text-primary" />
-            </div>
-            <h2 className="font-display text-xl font-semibold text-foreground mb-3">
-              No Reports Yet
-            </h2>
-            <p className="text-muted-foreground max-w-md mx-auto mb-4">
-              Your medical reports will appear here after consultations.
-            </p>
-            <Button onClick={() => navigate("/patient/telemedicine")} variant="outline">
-              Book Consultation
-            </Button>
-          </div>
+          <EmptyStateCard
+            icon={FileText}
+            title="No Reports Yet"
+            description="Your medical reports will appear here after consultations."
+            actionLabel="Book Consultation"
+            onAction={() => navigate("/patient/telemedicine")}
+          />
         )}
 
         <div className="bg-secondary/30 rounded-2xl p-5 border border-border">

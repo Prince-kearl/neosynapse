@@ -13,6 +13,8 @@ import {
   useAssignedPatients,
   useProfileNames,
 } from "@/shared/hooks/useHealthcare";
+import { MetricCard } from "@/components/common/MetricCard";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 export default function ProfessionalDashboard() {
   const navigate = useNavigate();
@@ -65,42 +67,10 @@ export default function ProfessionalDashboard() {
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Users className="w-5 h-5 text-primary" />
-              </div>
-              <span className="text-2xl font-bold">{patients.length}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">Assigned Patients</p>
-          </div>
-          <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-accent" />
-              </div>
-              <span className="text-2xl font-bold">{activeEncounters.length}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">Active Encounters</p>
-          </div>
-          <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center">
-                <PenTool className="w-5 h-5 text-yellow-500" />
-              </div>
-              <span className="text-2xl font-bold">{draftNoteCount}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">Pending Notes</p>
-          </div>
-          <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-              </div>
-              <span className="text-2xl font-bold">{completedEncounters}</span>
-            </div>
-            <p className="text-sm text-muted-foreground">Completed</p>
-          </div>
+          <MetricCard label="Assigned Patients" value={patients.length} icon={Users} iconWrapClassName="bg-primary/10" iconClassName="text-primary" />
+          <MetricCard label="Active Encounters" value={activeEncounters.length} icon={Clock} iconWrapClassName="bg-accent/10" iconClassName="text-accent" />
+          <MetricCard label="Pending Notes" value={draftNoteCount} icon={PenTool} iconWrapClassName="bg-yellow-500/10" iconClassName="text-yellow-500" />
+          <MetricCard label="Completed" value={completedEncounters} icon={CheckCircle} iconWrapClassName="bg-green-500/10" iconClassName="text-green-500" />
         </div>
 
         {/* Today's Queue */}
@@ -142,10 +112,7 @@ export default function ProfessionalDashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <ClipboardList className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">No active encounters</p>
-            </div>
+            <EmptyStateCard icon={ClipboardList} title="No active encounters" compact />
           )}
         </section>
 

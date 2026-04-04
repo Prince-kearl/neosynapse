@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProfessionalReports } from "@/shared/hooks/useHealthcare";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 export default function ProfessionalReports() {
   const navigate = useNavigate();
@@ -11,6 +12,18 @@ export default function ProfessionalReports() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: reports = [], isLoading } = useProfessionalReports();
   const selectedReport = reportId ? reports.find((r: any) => r.id === reportId) : null;
+
+  const getReportStatus = (report: any) => {
+    const status = report?.report_json?.status;
+    return typeof status === "string" && status.trim().length > 0 ? status : "finalized";
+  };
+
+  const getReportStatusClass = (status: string) => {
+    if (status === "approved" || status === "finalized") return "border-emerald-500/50 text-emerald-500";
+    if (status === "review" || status === "in_review") return "border-yellow-500/50 text-yellow-500";
+    if (status === "draft") return "border-blue-500/50 text-blue-500";
+    return "border-primary/50 text-primary";
+  };
 
   const downloadReportJson = (report: any) => {
     const payload = JSON.stringify(report.report_json ?? {}, null, 2);
@@ -46,7 +59,7 @@ export default function ProfessionalReports() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Report Detail</h2>
-                <p className="text-sm text-muted-foreground">Route: /professional/reports/{reportId}</p>
+                <p className="text-sm text-muted-foreground">Report ID: {reportId}</p>
               </div>
               <Button variant="outline" size="sm" onClick={() => navigate("/professional/reports")}>
                 Back to Reports
@@ -96,8 +109,8 @@ export default function ProfessionalReports() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="border-emerald-500/50 text-emerald-500">
-                      approved
+                    <Badge variant="outline" className={getReportStatusClass(getReportStatus(report))}>
+                      {getReportStatus(report)}
                     </Badge>
                     <Button variant="ghost" size="sm" onClick={() => navigate(`/professional/reports/${report.id}`)}>
                       <Eye className="w-4 h-4 mr-1" /> View
@@ -115,13 +128,12 @@ export default function ProfessionalReports() {
             ))}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <FileCheck className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No reports yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Reports are generated after encounters are completed and notes finalized.
-            </p>
-          </div>
+          <EmptyStateCard
+            icon={FileCheck}
+            title="No reports yet"
+            description="Reports are generated after encounters are completed and notes finalized."
+            compact
+          />
         )}
       </div>
     </div>

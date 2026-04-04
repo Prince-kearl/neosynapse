@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
+import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 
 const actionStyles: Record<string, string> = {
   create: "border-emerald-500/50 text-emerald-500",
@@ -106,12 +107,11 @@ export default function AdminAudit() {
             })}
           </div>
         ) : (
-          <div className="bg-card rounded-2xl p-8 text-center border border-border">
-            <ScrollText className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              {search || entityFilter ? "No matching audit log entries" : "No audit log entries yet"}
-            </p>
-          </div>
+          <EmptyStateCard
+            icon={ScrollText}
+            title={search || entityFilter ? "No matching audit log entries" : "No audit log entries yet"}
+            compact
+          />
         )}
       </div>
     </div>
