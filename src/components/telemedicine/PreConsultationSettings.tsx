@@ -9,6 +9,7 @@ interface PreConsultationSettingsProps {
   onVideoChange: (v: boolean) => void;
   onAudioChange: (v: boolean) => void;
   onConsentChange: (v: boolean) => void;
+  showConsent?: boolean;
 }
 
 export function PreConsultationSettings({
@@ -18,6 +19,7 @@ export function PreConsultationSettings({
   onVideoChange,
   onAudioChange,
   onConsentChange,
+  showConsent = true,
 }: PreConsultationSettingsProps) {
   return (
     <>
@@ -40,21 +42,23 @@ export function PreConsultationSettings({
           <Switch checked={audioEnabled} onCheckedChange={onAudioChange} />
         </div>
         <Separator />
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Shield className="w-5 h-5 text-muted-foreground" />
-            <div>
-              <span className="text-sm block">Consent to Record</span>
-              <span className="text-xs text-muted-foreground">
-                Allow recording for AI report generation
-              </span>
+        {showConsent ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <span className="text-sm block">Consent to Record</span>
+                <span className="text-xs text-muted-foreground">
+                  Allow recording for AI report generation
+                </span>
+              </div>
             </div>
+            <Switch checked={consentRecording} onCheckedChange={onConsentChange} />
           </div>
-          <Switch checked={consentRecording} onCheckedChange={onConsentChange} />
-        </div>
+        ) : null}
       </div>
 
-      {consentRecording && (
+      {showConsent && consentRecording && (
         <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
           <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />

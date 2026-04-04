@@ -21,6 +21,9 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Tracks the active room ID set by startCall/joinCall regardless of whether it came
+  // from the prop or an explicit argument — used for cleanup on unmount.
+  const activeRoomIdRef = useRef<string | null>(null);
 
   const updateState = useCallback((state: ConnectionState) => {
     setConnectionState(state);
@@ -47,7 +50,8 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     }
   }, []);
 
-  const createPeerConnection = useCallback((stream: MediaStream | null) => {
+  const createPeerConnection = useCallback((stream: MediaStream | null, explicitRoomId?: string) => {
+    const activeRoomId = explicitRoomId || roomId;
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     const remote = new MediaStream();
     setRemoteStream(remote);
@@ -64,9 +68,9 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     };
 
     pc.onicecandidate = async (event) => {
-      if (event.candidate && roomId) {
+      if (event.candidate && activeRoomId) {
         await supabase.from("ice_candidates").insert({
-          room_id: roomId,
+          room_id: activeRoomId,
           sender: userId,
           candidate: event.candidate.toJSON() as any,
         });
@@ -86,16 +90,17 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
   }, [roomId, userId, onRemoteStream, updateState]);
 
   /** Subscribe to realtime signaling events for a given room */
-  const subscribeToRoom = useCallback((pc: RTCPeerConnection) => {
-    if (!roomId) return;
+  const subscribeToRoom = useCallback((pc: RTCPeerConnection, explicitRoomId?: string) => {
+    const activeRoomId = explicitRoomId || roomId;
+    if (!activeRoomId) return;
 
     const channel = supabase
-      .channel(`room-${roomId}`)
+      .channel(`room-${activeRoomId}`)
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
         table: "consultation_rooms",
-        filter: `id=eq.${roomId}`,
+        filter: `id=eq.${activeRoomId}`,
       }, async (payload) => {
         const data = payload.new as any;
         // Caller: receive answer
@@ -111,7 +116,7 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
         event: "INSERT",
         schema: "public",
         table: "ice_candidates",
-        filter: `room_id=eq.${roomId}`,
+        filter: `room_id=eq.${activeRoomId}`,
       }, async (payload) => {
         const data = payload.new as any;
         if (data.sender !== userId && data.candidate) {
@@ -128,12 +133,14 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
   }, [roomId, userId]);
 
   /** Patient/caller: create offer and wait for answer */
-  const startCall = useCallback(async (video: boolean, audio: boolean) => {
-    if (!roomId) return;
+  const startCall = useCallback(async (video: boolean, audio: boolean, explicitRoomId?: string) => {
+    const activeRoomId = explicitRoomId || roomId;
+    if (!activeRoomId) return;
+    activeRoomIdRef.current = activeRoomId;
     updateState("connecting");
 
     const stream = await getMediaStream(video, audio);
-    const pc = createPeerConnection(stream);
+    const pc = createPeerConnection(stream, activeRoomId);
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -141,25 +148,27 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     await supabase.from("consultation_rooms").update({
       offer: { type: offer.type, sdp: offer.sdp } as any,
       status: "waiting",
-    }).eq("id", roomId);
+    }).eq("id", activeRoomId);
 
-    subscribeToRoom(pc);
+    subscribeToRoom(pc, activeRoomId);
   }, [roomId, getMediaStream, createPeerConnection, updateState, subscribeToRoom]);
 
   /** Professional/callee: read offer, create answer, subscribe to ICE */
-  const joinCall = useCallback(async (video: boolean, audio: boolean) => {
-    if (!roomId) return;
+  const joinCall = useCallback(async (video: boolean, audio: boolean, explicitRoomId?: string) => {
+    const activeRoomId = explicitRoomId || roomId;
+    if (!activeRoomId) return;
+    activeRoomIdRef.current = activeRoomId;
     updateState("connecting");
 
     // 1. Get media
     const stream = await getMediaStream(video, audio);
-    const pc = createPeerConnection(stream);
+    const pc = createPeerConnection(stream, activeRoomId);
 
     // 2. Read the existing offer from the room
     const { data: room, error } = await supabase
       .from("consultation_rooms")
       .select("offer, status")
-      .eq("id", roomId)
+      .eq("id", activeRoomId)
       .single();
 
     if (error || !room?.offer) {
@@ -183,27 +192,29 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     await supabase.from("consultation_rooms").update({
       answer: { type: answer.type, sdp: answer.sdp } as any,
       status: "active",
-    }).eq("id", roomId);
+    }).eq("id", activeRoomId);
 
-    // 6. Add any existing ICE candidates that arrived before we subscribed
+    // 6. Subscribe to Realtime BEFORE fetching the ICE batch so no candidates
+    //    are missed in the window between the two operations. Any duplicates
+    //    from the overlap are harmless (addIceCandidate ignores them).
+    subscribeToRoom(pc, activeRoomId);
+
+    // 7. Add ICE candidates that arrived before the subscription was active
     const { data: existingCandidates } = await supabase
       .from("ice_candidates")
       .select("*")
-      .eq("room_id", roomId)
+      .eq("room_id", activeRoomId)
       .neq("sender", userId);
 
     if (existingCandidates) {
       for (const c of existingCandidates) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(c.candidate as any));
-        } catch (err) {
-          console.error("Error adding existing ICE candidate:", err);
+        } catch {
+          // Duplicate from overlap window — safe to ignore
         }
       }
     }
-
-    // 7. Subscribe to future signaling events
-    subscribeToRoom(pc);
   }, [roomId, userId, getMediaStream, createPeerConnection, updateState, subscribeToRoom]);
 
   const toggleVideo = useCallback((enabled: boolean) => {
@@ -215,6 +226,8 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
   }, [localStream]);
 
   const endCall = useCallback(async () => {
+    const roomToEnd = activeRoomIdRef.current || roomId;
+    activeRoomIdRef.current = null;
     localStream?.getTracks().forEach(track => track.stop());
     peerConnection.current?.close();
     peerConnection.current = null;
@@ -224,17 +237,27 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     channelRef.current = null;
     updateState("idle");
 
-    if (roomId) {
-      await supabase.from("consultation_rooms").update({ status: "ended" }).eq("id", roomId);
+    if (roomToEnd) {
+      await supabase.from("consultation_rooms").update({ status: "ended" }).eq("id", roomToEnd);
     }
   }, [localStream, roomId, updateState]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount — also marks the room ended so the professional's
+  // waiting list does not show a ghost encounter if the patient navigates away.
   useEffect(() => {
     return () => {
       localStream?.getTracks().forEach(track => track.stop());
       peerConnection.current?.close();
       channelRef.current?.unsubscribe();
+      const roomToEnd = activeRoomIdRef.current;
+      if (roomToEnd) {
+        // Fire-and-forget: browser delivers the fetch before the page unloads.
+        supabase
+          .from("consultation_rooms")
+          .update({ status: "ended" })
+          .eq("id", roomToEnd)
+          .then(() => {});
+      }
     };
   }, []);
 

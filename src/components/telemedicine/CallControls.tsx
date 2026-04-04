@@ -7,6 +7,8 @@ interface CallControlsProps {
   onToggleAudio: () => void;
   onToggleVideo: () => void;
   onEndCall: () => void;
+  onOpenChat?: () => void;
+  onOpenNotes?: () => void;
 }
 
 export function CallControls({
@@ -15,6 +17,8 @@ export function CallControls({
   onToggleAudio,
   onToggleVideo,
   onEndCall,
+  onOpenChat,
+  onOpenNotes,
 }: CallControlsProps) {
   return (
     <div className="p-4">
@@ -43,10 +47,10 @@ export function CallControls({
         >
           <PhoneOff className="w-6 h-6" />
         </Button>
-        <Button variant="outline" size="icon" className="rounded-full w-12 h-12">
+        <Button variant="outline" size="icon" className="rounded-full w-12 h-12" onClick={onOpenChat}>
           <MessageSquare className="w-5 h-5" />
         </Button>
-        <Button variant="outline" size="icon" className="rounded-full w-12 h-12">
+        <Button variant="outline" size="icon" className="rounded-full w-12 h-12" onClick={onOpenNotes}>
           <FileText className="w-5 h-5" />
         </Button>
       </div>

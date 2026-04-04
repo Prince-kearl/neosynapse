@@ -115,25 +115,21 @@ export default function ProfessionalTelemedicine() {
         return;
       }
 
-      // Look for an active consultation room created by this patient for this professional
-      // TODO: For a production system, link consultation_rooms to encounters via encounter_id column
+      // Look for an active consultation room for this exact encounter
       const { data: rooms, error: roomErr } = await supabase
         .from("consultation_rooms")
         .select("*")
+        .eq("encounter_id", encounter.id)
         .eq("doctor_id", user.id)
-        .eq("created_by", encounter.patient_id)
         .in("status", ["waiting", "active"])
         .order("created_at", { ascending: false })
         .limit(1);
 
       if (roomErr || !rooms || rooms.length === 0) {
-        // No room yet — the patient hasn't started the call
-        // Create a room and wait for the patient to connect
-        // TODO: In production, the patient should initiate the room. For now, show a clear message.
+        // No room yet — patient has not initiated this encounter's telemedicine room.
         setCallState("error");
         setErrorMessage(
-          "No active session found. The patient needs to start the video call first. " +
-          "Please ask the patient to initiate the telemedicine session from their portal."
+          "No session found for this encounter. Ask the patient to start the telemedicine call from their portal first."
         );
         return;
       }
@@ -148,22 +144,13 @@ export default function ProfessionalTelemedicine() {
         .eq("id", selectedEncounterId);
 
       // Join the WebRTC call (answer the offer)
-      // Small delay to allow roomId state to propagate
-      setTimeout(async () => {
-        await joinCall(videoEnabled, audioEnabled);
-      }, 100);
+      await joinCall(videoEnabled, audioEnabled, room.id);
     } catch (err) {
       console.error("Error joining call:", err);
       setCallState("error");
       setErrorMessage("Failed to join the call. Please try again.");
     }
   }, [user, selectedEncounterId, waitingEncounters, videoEnabled, audioEnabled, joinCall]);
-
-  // Need roomId to be set before joinCall runs — use effect-based approach
-  const handleJoinWithRoom = useCallback(async () => {
-    if (!roomId) return;
-    await joinCall(videoEnabled, audioEnabled);
-  }, [roomId, videoEnabled, audioEnabled, joinCall]);
 
   const handleEndCall = useCallback(async () => {
     await endCall();
@@ -216,6 +203,8 @@ export default function ProfessionalTelemedicine() {
           onToggleAudio={handleToggleAudio}
           onToggleVideo={handleToggleVideo}
           onEndCall={handleEndCall}
+          onOpenChat={() => navigate("/professional/transcripts")}
+          onOpenNotes={() => navigate("/professional/notes")}
         />
       </div>
     );
@@ -301,6 +290,7 @@ export default function ProfessionalTelemedicine() {
             onVideoChange={setVideoEnabled}
             onAudioChange={setAudioEnabled}
             onConsentChange={() => {}}
+            showConsent={false}
           />
 
           <div className="flex gap-3">

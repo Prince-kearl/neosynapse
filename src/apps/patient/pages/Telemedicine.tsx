@@ -1,5 +1,6 @@
 // Patient Telemedicine - uses existing WebRTC infrastructure
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Video, Phone, Clock, Shield, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,15 +11,9 @@ import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { DoctorCard } from "@/components/telemedicine/DoctorCard";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
+import { toast } from "@/hooks/use-toast";
 
 type ConsultationState = "lobby" | "waiting" | "active" | "ended";
-
-const mockDoctors = [
-  { id: "1", name: "Dr. Ama Mensah", specialty: "General Practice", rating: 4.8, available: true },
-  { id: "2", name: "Dr. Kwame Asante", specialty: "Internal Medicine", rating: 4.9, available: true },
-  { id: "3", name: "Dr. Efua Owusu", specialty: "Pediatrics", rating: 4.7, available: false },
-  { id: "4", name: "Dr. Kofi Boateng", specialty: "Cardiology", rating: 4.9, available: true },
-];
 
 export default function PatientTelemedicine() {
   const { user } = useAuth();
@@ -29,6 +24,46 @@ export default function PatientTelemedicine() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [consentRecording, setConsentRecording] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [encounterId, setEncounterId] = useState<string | null>(null);
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false);
+
+  const { data: professionalProfiles = [], isLoading: providersLoading } = useQuery({
+    queryKey: ["telemedicine-professionals"],
+    queryFn: async () => {
+      const { data: pros, error: proErr } = await supabase
+        .from("professional_profiles")
+        .select("user_id, specialty, verification_status");
+      if (proErr) throw proErr;
+
+      const ids = (pros || []).map((p) => p.user_id);
+      if (!ids.length) return [];
+
+      const { data: profiles, error: profileErr } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, full_name, role, status")
+        .in("user_id", ids)
+        .eq("role", "professional");
+      if (profileErr) throw profileErr;
+
+      const profileMap = new Map((profiles || []).map((p) => [p.user_id, p]));
+
+      return (pros || [])
+        .map((pro) => {
+          const profile = profileMap.get(pro.user_id);
+          if (!profile) return null;
+          return {
+            id: pro.user_id,
+            name: profile.full_name || profile.display_name || "Healthcare Professional",
+            specialty: pro.specialty || "General Practice",
+            rating: 4.8,
+            available: pro.verification_status === "verified" && profile.status !== "disabled",
+          };
+        })
+        .filter(Boolean) as Array<{ id: string; name: string; specialty: string; rating: number; available: boolean }>;
+    },
+  });
+
+  const doctors = useMemo(() => professionalProfiles, [professionalProfiles]);
 
   const {
     connectionState,
@@ -48,33 +83,81 @@ export default function PatientTelemedicine() {
   });
 
   const handleStartConsultation = useCallback(async () => {
-    if (!user || !selectedDoctor) return;
+    if (!user || !selectedDoctor || isStartingConsultation) return;
+    setIsStartingConsultation(true);
     setState("waiting");
 
-    const { data, error } = await supabase.from("consultation_rooms").insert({
-      created_by: user.id,
-      doctor_id: selectedDoctor,
-      consent_recording: consentRecording,
-      status: "waiting",
-    }).select("id").single();
+    const { data: encounter, error: encounterError } = await supabase
+      .from("encounters")
+      .insert({
+        patient_id: user.id,
+        professional_id: selectedDoctor,
+        encounter_type: "telemedicine",
+        status: "pending",
+      })
+      .select("id")
+      .single();
 
-    if (error || !data) {
-      console.error("Failed to create room:", error);
+    if (encounterError || !encounter) {
+      console.error("Failed to create encounter:", encounterError);
+      toast({ title: "Unable to start consultation", description: "Please try again.", variant: "destructive" });
       setState("lobby");
+      setIsStartingConsultation(false);
       return;
     }
 
-    setRoomId(data.id);
-    await startCall(videoEnabled, audioEnabled);
+    setEncounterId(encounter.id);
 
-    // Simulate doctor joining after 3s (demo mode)
-    setTimeout(() => setState("active"), 3000);
-  }, [user, selectedDoctor, consentRecording, videoEnabled, audioEnabled, startCall]);
+    const { data: room, error: roomError } = await supabase
+      .from("consultation_rooms")
+      .insert({
+        encounter_id: encounter.id,
+        created_by: user.id,
+        doctor_id: selectedDoctor,
+        consent_recording: consentRecording,
+        status: "waiting",
+      })
+      .select("id")
+      .single();
+
+    if (roomError || !room) {
+      console.error("Failed to create room:", roomError);
+      await supabase.from("encounters").delete().eq("id", encounter.id);
+      toast({ title: "Unable to start consultation", description: "Could not create call room.", variant: "destructive" });
+      setState("lobby");
+      setIsStartingConsultation(false);
+      return;
+    }
+
+    setRoomId(room.id);
+
+    await startCall(videoEnabled, audioEnabled, room.id);
+    setIsStartingConsultation(false);
+  }, [user, selectedDoctor, consentRecording, videoEnabled, audioEnabled, startCall, isStartingConsultation]);
+
+  const handleCancelWaiting = useCallback(async () => {
+    await endCall();
+    if (encounterId) {
+      await supabase
+        .from("encounters")
+        .update({ status: "cancelled", ended_at: new Date().toISOString() })
+        .eq("id", encounterId);
+    }
+    setState("lobby");
+    setEncounterId(null);
+    setRoomId(null);
+  }, [endCall, encounterId]);
 
   const handleEndCall = useCallback(async () => {
     await endCall();
+    if (encounterId) {
+      await supabase
+        .from("encounters")
+        .update({ status: "completed", ended_at: new Date().toISOString() })
+        .eq("id", encounterId);
+    }
     setState("ended");
-  }, [endCall]);
+  }, [endCall, encounterId]);
 
   const handleToggleVideo = useCallback(() => {
     const next = !videoEnabled;
@@ -101,7 +184,7 @@ export default function PatientTelemedicine() {
     );
   }
 
-  const selectedDoctorData = mockDoctors.find((d) => d.id === selectedDoctor);
+  const selectedDoctorData = doctors.find((d) => d.id === selectedDoctor);
 
   // Active call view
   if (state === "active") {
@@ -121,6 +204,8 @@ export default function PatientTelemedicine() {
           onToggleAudio={handleToggleAudio}
           onToggleVideo={handleToggleVideo}
           onEndCall={handleEndCall}
+          onOpenChat={() => navigate("/patient/ai-assistant")}
+          onOpenNotes={() => navigate("/patient/reports")}
         />
       </div>
     );
@@ -136,7 +221,7 @@ export default function PatientTelemedicine() {
           <p className="text-muted-foreground text-sm max-w-sm">
             Waiting for {selectedDoctorData?.name} to join...
           </p>
-          <Button variant="outline" onClick={() => { endCall(); setState("lobby"); }}>
+          <Button variant="outline" onClick={handleCancelWaiting}>
             Cancel
           </Button>
         </div>
@@ -159,7 +244,7 @@ export default function PatientTelemedicine() {
               : "No recording was made."}
           </p>
           <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { setState("lobby"); setSelectedDoctor(null); setRoomId(null); }}>
+            <Button variant="outline" onClick={() => { setState("lobby"); setSelectedDoctor(null); setRoomId(null); setEncounterId(null); }}>
               Back to Lobby
             </Button>
             <Button onClick={() => navigate("/patient/dashboard")}>Go to Dashboard</Button>
@@ -181,16 +266,25 @@ export default function PatientTelemedicine() {
         {/* Available Doctors */}
         <div>
           <h2 className="font-display text-lg font-semibold mb-3">Available Doctors</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {mockDoctors.map((doc) => (
-              <DoctorCard
-                key={doc.id}
-                doctor={doc}
-                selected={selectedDoctor === doc.id}
-                onSelect={() => doc.available && setSelectedDoctor(doc.id)}
-              />
-            ))}
-          </div>
+          {providersLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading available professionals...
+            </div>
+          ) : doctors.length ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {doctors.map((doc) => (
+                <DoctorCard
+                  key={doc.id}
+                  doctor={doc}
+                  selected={selectedDoctor === doc.id}
+                  onSelect={() => doc.available && setSelectedDoctor(doc.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No professionals are available right now. Please check back shortly.</p>
+          )}
         </div>
 
         {selectedDoctor && (
@@ -207,9 +301,10 @@ export default function PatientTelemedicine() {
             <Button
               className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
               onClick={handleStartConsultation}
+              disabled={isStartingConsultation}
             >
-              <Video className="w-5 h-5 mr-2" />
-              Start Live Consultation
+              {isStartingConsultation ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Video className="w-5 h-5 mr-2" />}
+              {isStartingConsultation ? "Starting..." : "Start Live Consultation"}
             </Button>
           </>
         )}

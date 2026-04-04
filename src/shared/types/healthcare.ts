@@ -176,6 +176,7 @@ export interface AuditLog {
 // ─── Consultation Room (WebRTC) ─────────────────────────────────
 export interface ConsultationRoom {
   id: string;
+  encounter_id: string | null;
   created_by: string;
   doctor_id: string;
   status: string;

@@ -156,6 +156,7 @@ export type Database = {
           created_at: string
           created_by: string
           doctor_id: string
+          encounter_id: string | null
           id: string
           offer: Json | null
           status: string
@@ -167,6 +168,7 @@ export type Database = {
           created_at?: string
           created_by: string
           doctor_id: string
+          encounter_id?: string | null
           id?: string
           offer?: Json | null
           status?: string
@@ -178,12 +180,21 @@ export type Database = {
           created_at?: string
           created_by?: string
           doctor_id?: string
+          encounter_id?: string | null
           id?: string
           offer?: Json | null
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "consultation_rooms_encounter_id_fkey"
+            columns: ["encounter_id"]
+            isOneToOne: false
+            referencedRelation: "encounters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       encounters: {
         Row: {
