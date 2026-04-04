@@ -33,10 +33,12 @@ import PatientTelemedicine from "@/apps/patient/pages/Telemedicine";
 import PatientReports from "@/apps/patient/pages/Reports";
 import PatientProfile from "@/apps/patient/pages/Profile";
 import PatientSettings from "@/apps/patient/pages/Settings";
+import PatientMedicalHistorySetup from "@/apps/patient/pages/MedicalHistorySetup";
 
 // Professional pages
 import ProfessionalDashboard from "@/apps/professional/pages/Dashboard";
 import ProfessionalPatients from "@/apps/professional/pages/Patients";
+import ProfessionalPatientDetail from "@/apps/professional/pages/PatientDetail";
 import ProfessionalEncounters from "@/apps/professional/pages/Encounters";
 import ProfessionalTelemedicine from "@/apps/professional/pages/Telemedicine";
 import ProfessionalTranscripts from "@/apps/professional/pages/Transcripts";
@@ -82,6 +84,7 @@ const App = () => (
 
                 {/* Patient routes */}
                 <Route path="/patient" element={<PatientGuard><PatientLayout /></PatientGuard>}>
+                  <Route path="onboarding/medical-history" element={<PatientMedicalHistorySetup />} />
                   <Route path="dashboard" element={<PatientDashboard />} />
                   <Route path="ai-assistant" element={<PatientAIAssistant />} />
                   <Route path="symptom-checker" element={<PatientSymptomChecker />} />
@@ -89,6 +92,7 @@ const App = () => (
                   <Route path="telemedicine" element={<PatientTelemedicine />} />
                   <Route path="reports" element={<PatientReports />} />
                   <Route path="reports/:reportId" element={<PatientReports />} />
+                  <Route path="medical-history" element={<PatientMedicalHistorySetup />} />
                   <Route path="profile" element={<PatientProfile />} />
                   <Route path="settings" element={<PatientSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
@@ -98,6 +102,7 @@ const App = () => (
                 <Route path="/professional" element={<ProfessionalGuard><ProfessionalLayout /></ProfessionalGuard>}>
                   <Route path="dashboard" element={<ProfessionalDashboard />} />
                   <Route path="patients" element={<ProfessionalPatients />} />
+                  <Route path="patient/:patientId" element={<ProfessionalPatientDetail />} />
                   <Route path="encounters" element={<ProfessionalEncounters />} />
                   <Route path="telemedicine" element={<ProfessionalTelemedicine />} />
                   <Route path="transcripts" element={<ProfessionalTranscripts />} />
