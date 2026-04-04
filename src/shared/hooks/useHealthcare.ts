@@ -289,7 +289,7 @@ export function useAssignedPatients() {
     queryFn: async () => {
       const { data: encounters, error } = await supabase
         .from("encounters")
-        .select("patient_id, encounter_type, status, created_at")
+        .select("id, patient_id, encounter_type, status, created_at")
         .eq("professional_id", user!.id)
         .order("created_at", { ascending: false });
 
@@ -298,6 +298,7 @@ export function useAssignedPatients() {
 
       const patientMap = new Map<string, {
         patient_id: string;
+        lastEncounterId: string;
         lastEncounter: string;
         encounterCount: number;
         lastType: string;
@@ -307,6 +308,7 @@ export function useAssignedPatients() {
         if (!patientMap.has(enc.patient_id)) {
           patientMap.set(enc.patient_id, {
             patient_id: enc.patient_id,
+            lastEncounterId: enc.id,
             lastEncounter: enc.created_at,
             encounterCount: 1,
             lastType: enc.encounter_type,

@@ -1,7 +1,7 @@
 import { ClipboardList, Clock, Video, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useProfessionalEncounters, useProfileNames } from "@/shared/hooks/useHealthcare";
 
@@ -14,13 +14,20 @@ const statusConfig: Record<string, string> = {
 
 export default function ProfessionalEncounters() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: encounters = [], isLoading } = useProfessionalEncounters();
+  const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
-  const patientIds = encounters.map((e: any) => e.patient_id);
+  const filteredEncounters = encounterFilterId
+    ? encounters.filter((e: any) => e.id === encounterFilterId)
+    : encounters;
+
+  const patientIds = filteredEncounters.map((e: any) => e.patient_id);
   const { data: nameMap = {} } = useProfileNames(patientIds);
 
-  const activeEncounters = encounters.filter((e: any) => ["pending", "in_progress"].includes(e.status));
-  const completedEncounters = encounters.filter((e: any) => ["completed", "cancelled"].includes(e.status));
+  const activeEncounters = filteredEncounters.filter((e: any) => ["pending", "in_progress"].includes(e.status));
+  const completedEncounters = filteredEncounters.filter((e: any) => ["completed", "cancelled"].includes(e.status));
+  const defaultTab = encounterFilterId && completedEncounters.length > 0 && activeEncounters.length === 0 ? "completed" : "active";
 
   const EncounterCard = ({ enc, isActive }: { enc: any; isActive: boolean }) => (
     <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
@@ -42,7 +49,7 @@ export default function ProfessionalEncounters() {
         <div className="flex items-center gap-3">
           <Badge className={statusConfig[enc.status] || statusConfig.pending}>{enc.status.replace("_", " ")}</Badge>
           {isActive && enc.encounter_type === "telemedicine" && (
-            <Button size="sm" onClick={() => navigate("/professional/telemedicine")}>
+            <Button size="sm" onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
               <Video className="w-4 h-4 mr-1" /> Join
             </Button>
           )}
@@ -59,7 +66,26 @@ export default function ProfessionalEncounters() {
           <p className="text-muted-foreground">Manage patient consultations and encounters</p>
         </div>
 
-        <Tabs defaultValue="active">
+        {encounterFilterId && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("encounterId");
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              Clear Filter
+            </Button>
+          </div>
+        )}
+
+        <Tabs defaultValue={defaultTab}>
           <TabsList className="bg-muted">
             <TabsTrigger value="active" className="gap-2">
               <Clock className="w-4 h-4" />

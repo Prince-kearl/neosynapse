@@ -100,8 +100,11 @@ const App = () => (
                   <Route path="encounters" element={<ProfessionalEncounters />} />
                   <Route path="telemedicine" element={<ProfessionalTelemedicine />} />
                   <Route path="transcripts" element={<ProfessionalTranscripts />} />
+                  <Route path="transcripts/:transcriptId" element={<ProfessionalTranscripts />} />
                   <Route path="notes" element={<ProfessionalNotes />} />
+                  <Route path="notes/:noteId/edit" element={<ProfessionalNotes />} />
                   <Route path="reports" element={<ProfessionalReports />} />
+                  <Route path="reports/:reportId" element={<ProfessionalReports />} />
                   <Route path="settings" element={<ProfessionalSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>

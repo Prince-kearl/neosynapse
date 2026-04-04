@@ -1,13 +1,23 @@
 import { FileText, Loader2, Eye } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProfessionalTranscripts, useProfileNames } from "@/shared/hooks/useHealthcare";
 
 export default function ProfessionalTranscripts() {
+  const navigate = useNavigate();
+  const { transcriptId } = useParams<{ transcriptId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: transcripts = [], isLoading } = useProfessionalTranscripts();
+  const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
-  const patientIds = transcripts.map((t: any) => t.encounters?.patient_id).filter(Boolean);
+  const filteredTranscripts = encounterFilterId
+    ? transcripts.filter((t: any) => t.encounter_id === encounterFilterId)
+    : transcripts;
+
+  const patientIds = filteredTranscripts.map((t: any) => t.encounters?.patient_id).filter(Boolean);
   const { data: nameMap = {} } = useProfileNames(patientIds);
+  const selectedTranscript = transcriptId ? transcripts.find((t: any) => t.id === transcriptId) : null;
 
   const hasContent = (json: any) => json && Object.keys(json).length > 0;
 
@@ -19,13 +29,69 @@ export default function ProfessionalTranscripts() {
           <p className="text-muted-foreground">Review AI-generated consultation transcripts</p>
         </div>
 
+        {encounterFilterId && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("encounterId");
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              Clear Filter
+            </Button>
+          </div>
+        )}
+
+        {transcriptId && (
+          <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Transcript Review</h2>
+                <p className="text-sm text-muted-foreground">Route: /professional/transcripts/{transcriptId}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate("/professional/transcripts")}>
+                Back to Transcripts
+              </Button>
+            </div>
+
+            {!isLoading && !selectedTranscript && (
+              <p className="text-sm text-destructive">Transcript not found for this route parameter.</p>
+            )}
+
+            {selectedTranscript && (
+              <>
+                <div className="text-sm text-muted-foreground">
+                  Encounter: {selectedTranscript.encounter_id}
+                </div>
+                <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
+                  {JSON.stringify(selectedTranscript.transcript_json ?? {}, null, 2)}
+                </pre>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/professional/notes?encounterId=${selectedTranscript.encounter_id}`)}
+                  >
+                    Open Notes Queue
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
-        ) : transcripts.length > 0 ? (
+        ) : filteredTranscripts.length > 0 ? (
           <div className="space-y-3">
-            {transcripts.map((transcript: any) => {
+            {filteredTranscripts.map((transcript: any) => {
               const enc = transcript.encounters;
               const patientName = enc?.patient_id ? (nameMap[enc.patient_id] || "Patient") : "Patient";
               const ready = hasContent(transcript.transcript_json);
@@ -51,7 +117,12 @@ export default function ProfessionalTranscripts() {
                       }>
                         {ready ? "ready" : "processing"}
                       </Badge>
-                      <Button variant="outline" size="sm" disabled={!ready}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!ready}
+                        onClick={() => navigate(`/professional/transcripts/${transcript.id}`)}
+                      >
                         <Eye className="w-4 h-4 mr-1" /> Review
                       </Button>
                     </div>

@@ -1,4 +1,5 @@
 import { PenTool, Clock, CheckCircle, Edit, Loader2 } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -11,15 +12,25 @@ const statusConfig: Record<string, string> = {
 };
 
 export default function ProfessionalNotes() {
+  const navigate = useNavigate();
+  const { noteId } = useParams<{ noteId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: notes = [], isLoading } = useProfessionalNotes();
+  const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
+
+  const filteredNotes = encounterFilterId
+    ? notes.filter((n: any) => n.encounter_id === encounterFilterId)
+    : notes;
 
   // Extract patient IDs from the joined encounter data
-  const patientIds = notes.map((n: any) => n.encounters?.patient_id).filter(Boolean);
+  const patientIds = filteredNotes.map((n: any) => n.encounters?.patient_id).filter(Boolean);
   const { data: nameMap = {} } = useProfileNames(patientIds);
 
-  const draftNotes = notes.filter((n: any) => n.status === "draft");
-  const reviewNotes = notes.filter((n: any) => n.status === "review");
-  const finalizedNotes = notes.filter((n: any) => n.status === "finalized");
+  const draftNotes = filteredNotes.filter((n: any) => n.status === "draft");
+  const reviewNotes = filteredNotes.filter((n: any) => n.status === "review");
+  const finalizedNotes = filteredNotes.filter((n: any) => n.status === "finalized");
+  const selectedNote = noteId ? notes.find((n: any) => n.id === noteId) : null;
+  const defaultTab = encounterFilterId && reviewNotes.length > 0 && draftNotes.length === 0 ? "review" : "draft";
 
   const NoteCard = ({ note }: { note: any }) => {
     const patientId = note.encounters?.patient_id;
@@ -45,7 +56,7 @@ export default function ProfessionalNotes() {
           <div className="flex items-center gap-3">
             <Badge className={statusConfig[note.status] || statusConfig.draft}>{note.status}</Badge>
             {note.status !== "finalized" && (
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => navigate(`/professional/notes/${note.id}/edit`)}>
                 <Edit className="w-4 h-4 mr-1" /> Edit
               </Button>
             )}
@@ -63,7 +74,72 @@ export default function ProfessionalNotes() {
           <p className="text-muted-foreground">Review and finalize AI-generated clinical documentation</p>
         </div>
 
-        <Tabs defaultValue="draft">
+        {encounterFilterId && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Filtered by encounter: <span className="font-mono text-foreground">{encounterFilterId}</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("encounterId");
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              Clear Filter
+            </Button>
+          </div>
+        )}
+
+        {noteId && (
+          <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Edit Note</h2>
+                <p className="text-sm text-muted-foreground">Route: /professional/notes/{noteId}/edit</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate("/professional/notes")}>
+                Back to Notes
+              </Button>
+            </div>
+
+            {!isLoading && !selectedNote && (
+              <p className="text-sm text-destructive">Note not found for this route parameter.</p>
+            )}
+
+            {selectedNote && (
+              <>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Encounter: {selectedNote.encounter_id}</span>
+                  <span>•</span>
+                  <span>Status: {selectedNote.status}</span>
+                </div>
+                <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
+                  {JSON.stringify(selectedNote.final_json ?? selectedNote.draft_json ?? {}, null, 2)}
+                </pre>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/professional/encounters?encounterId=${selectedNote.encounter_id}`)}
+                  >
+                    Open Encounter
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/professional/transcripts?encounterId=${selectedNote.encounter_id}`)}
+                  >
+                    Open Transcript Queue
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <Tabs defaultValue={defaultTab}>
           <TabsList className="bg-muted">
             <TabsTrigger value="draft" className="gap-2">
               <PenTool className="w-4 h-4" />

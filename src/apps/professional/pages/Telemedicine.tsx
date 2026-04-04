@@ -1,12 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Video, Users, Loader2, Phone, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { auditLogService } from "@/shared/services/healthcare";
 import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
@@ -16,6 +17,8 @@ type CallState = "list" | "pre-call" | "joining" | "active" | "ended" | "error";
 export default function ProfessionalTelemedicine() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const ROLLBACK_WINDOW_MS = 10_000;
 
   const [callState, setCallState] = useState<CallState>("list");
   const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(null);
@@ -24,6 +27,45 @@ export default function ProfessionalTelemedicine() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [patientName, setPatientName] = useState("Patient");
+  const selectedEncounterRef = useRef<string | null>(null);
+  const hasMarkedInProgressRef = useRef(false);
+  const connectedAtRef = useRef<number | null>(null);
+  const intentionalEndRef = useRef(false);
+  const consumedDeepLinkRef = useRef<string | null>(null);
+
+  const rollbackEncounterToPending = useCallback((encounterId: string, signalState: "failed" | "disconnected") => {
+    hasMarkedInProgressRef.current = false;
+    connectedAtRef.current = null;
+
+    void supabase
+      .from("encounters")
+      .update({ status: "pending", started_at: null })
+      .eq("id", encounterId)
+      .then(async ({ error }) => {
+        if (error) {
+          console.error("Failed to rollback encounter status:", error);
+          return;
+        }
+
+        if (!user?.id) return;
+
+        const { error: auditError } = await auditLogService.log({
+          actor_id: user.id,
+          action: "encounter_status_rollback",
+          entity_type: "encounter",
+          entity_id: encounterId,
+          metadata: {
+            reason: "rapid_disconnect_after_connect",
+            signal_state: signalState,
+            rolled_back_to: "pending",
+          },
+        });
+
+        if (auditError) {
+          console.error("Failed to write rollback audit log:", auditError);
+        }
+      });
+  }, [user?.id]);
 
   const {
     connectionState,
@@ -37,12 +79,55 @@ export default function ProfessionalTelemedicine() {
     roomId,
     userId: user?.id || "",
     onConnectionStateChange: (s) => {
-      if (s === "connected") setCallState("active");
+      if (s === "connected") {
+        setCallState("active");
+        connectedAtRef.current = Date.now();
+        intentionalEndRef.current = false;
+        const encounterToMark = selectedEncounterRef.current;
+        if (encounterToMark && !hasMarkedInProgressRef.current) {
+          hasMarkedInProgressRef.current = true;
+          void supabase
+            .from("encounters")
+            .update({ status: "in_progress", started_at: new Date().toISOString() })
+            .eq("id", encounterToMark)
+            .then(({ error }) => {
+              if (error) {
+                console.error("Failed to mark encounter in progress:", error);
+              }
+            });
+        }
+      }
       if (s === "failed") {
+        const encounterToRollback = selectedEncounterRef.current;
+        const connectedAt = connectedAtRef.current;
+        const shouldRollback =
+          !!encounterToRollback &&
+          hasMarkedInProgressRef.current &&
+          !intentionalEndRef.current &&
+          !!connectedAt &&
+          Date.now() - connectedAt <= ROLLBACK_WINDOW_MS;
+
+        if (shouldRollback) {
+          rollbackEncounterToPending(encounterToRollback, "failed");
+        }
+
         setCallState("error");
         setErrorMessage("Connection failed. The patient may have left.");
       }
       if (s === "disconnected") {
+        const encounterToRollback = selectedEncounterRef.current;
+        const connectedAt = connectedAtRef.current;
+        const shouldRollback =
+          !!encounterToRollback &&
+          hasMarkedInProgressRef.current &&
+          !intentionalEndRef.current &&
+          !!connectedAt &&
+          Date.now() - connectedAt <= ROLLBACK_WINDOW_MS;
+
+        if (shouldRollback) {
+          rollbackEncounterToPending(encounterToRollback, "disconnected");
+        }
+
         setCallState("ended");
       }
     },
@@ -95,10 +180,27 @@ export default function ProfessionalTelemedicine() {
   /** Open pre-call settings for an encounter */
   const handleSelectEncounter = useCallback((encounterId: string, patientId: string) => {
     setSelectedEncounterId(encounterId);
+    selectedEncounterRef.current = encounterId;
+    hasMarkedInProgressRef.current = false;
+    connectedAtRef.current = null;
+    intentionalEndRef.current = false;
     setPatientName(getPatientName(patientId));
     setCallState("pre-call");
     setErrorMessage(null);
   }, [profiles]);
+
+  useEffect(() => {
+    const deepLinkedEncounterId = searchParams.get("encounterId")?.trim() || null;
+    if (!deepLinkedEncounterId) return;
+    if (callState !== "list") return;
+    if (consumedDeepLinkRef.current === deepLinkedEncounterId) return;
+
+    const targetEncounter = waitingEncounters.find((enc) => enc.id === deepLinkedEncounterId);
+    if (!targetEncounter) return;
+
+    consumedDeepLinkRef.current = deepLinkedEncounterId;
+    handleSelectEncounter(targetEncounter.id, targetEncounter.patient_id);
+  }, [searchParams, callState, waitingEncounters, handleSelectEncounter]);
 
   /** Find the consultation room for this encounter's patient and join */
   const handleJoinCall = useCallback(async () => {
@@ -137,12 +239,6 @@ export default function ProfessionalTelemedicine() {
       const room = rooms[0];
       setRoomId(room.id);
 
-      // Update encounter status to in_progress
-      await supabase
-        .from("encounters")
-        .update({ status: "in_progress", started_at: new Date().toISOString() })
-        .eq("id", selectedEncounterId);
-
       // Join the WebRTC call (answer the offer)
       await joinCall(videoEnabled, audioEnabled, room.id);
     } catch (err) {
@@ -153,6 +249,7 @@ export default function ProfessionalTelemedicine() {
   }, [user, selectedEncounterId, waitingEncounters, videoEnabled, audioEnabled, joinCall]);
 
   const handleEndCall = useCallback(async () => {
+    intentionalEndRef.current = true;
     await endCall();
     setCallState("ended");
 
@@ -180,6 +277,10 @@ export default function ProfessionalTelemedicine() {
   const handleBackToList = useCallback(() => {
     setCallState("list");
     setSelectedEncounterId(null);
+    selectedEncounterRef.current = null;
+    hasMarkedInProgressRef.current = false;
+    connectedAtRef.current = null;
+    intentionalEndRef.current = false;
     setRoomId(null);
     setErrorMessage(null);
     refetch();

@@ -57,7 +57,11 @@ export default function ProfessionalPatients() {
                       <Badge variant="outline" className="mt-1 text-xs">{patient.lastType}</Badge>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/professional/encounters`)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/professional/encounters?encounterId=${patient.lastEncounterId}`)}
+                  >
                     <ChevronRight className="w-5 h-5" />
                   </Button>
                 </div>
