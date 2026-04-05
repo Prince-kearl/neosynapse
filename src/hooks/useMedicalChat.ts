@@ -49,6 +49,99 @@ type PersistedChatStore = {
 };
 
 const DEFAULT_STORAGE_KEY = "neo-synapse-ai-chat";
+const UUID_V4_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function ensureUuid(value: unknown): string {
+  const candidate = typeof value === "string" ? value.trim() : "";
+  return UUID_V4_LIKE.test(candidate) ? candidate : crypto.randomUUID();
+}
+
+function migrateInvalidCachedChatIds(storageKey: string) {
+  if (typeof window === "undefined") return;
+
+  const migrationKey = `${storageKey}:invalid-id-migration:v1`;
+
+  try {
+    if (window.localStorage.getItem(migrationKey) === "1") return;
+
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      window.localStorage.setItem(migrationKey, "1");
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.sessions)) {
+      window.localStorage.setItem(migrationKey, "1");
+      return;
+    }
+
+    let changed = false;
+    const seenSessionIds = new Set<string>();
+    const sessionIdMap = new Map<string, string>();
+
+    const migratedSessions = parsed.sessions.map((session: any) => {
+      const originalSessionId = typeof session?.id === "string" ? session.id : "";
+      let nextSessionId = originalSessionId;
+
+      if (!UUID_V4_LIKE.test(nextSessionId) || seenSessionIds.has(nextSessionId)) {
+        nextSessionId = crypto.randomUUID();
+        changed = true;
+      }
+      seenSessionIds.add(nextSessionId);
+      sessionIdMap.set(originalSessionId, nextSessionId);
+
+      const seenMessageIds = new Set<string>();
+      const migratedMessages = Array.isArray(session?.messages)
+        ? session.messages.map((msg: any) => {
+            const originalMessageId = typeof msg?.id === "string" ? msg.id : "";
+            let nextMessageId = originalMessageId;
+
+            if (!UUID_V4_LIKE.test(nextMessageId) || seenMessageIds.has(nextMessageId)) {
+              nextMessageId = crypto.randomUUID();
+              changed = true;
+            }
+            seenMessageIds.add(nextMessageId);
+
+            return {
+              ...msg,
+              id: nextMessageId,
+            };
+          })
+        : [];
+
+      return {
+        ...session,
+        id: nextSessionId,
+        messages: migratedMessages,
+      };
+    });
+
+    let migratedActiveSessionId = parsed.activeSessionId;
+    if (typeof parsed.activeSessionId === "string") {
+      const mapped = sessionIdMap.get(parsed.activeSessionId);
+      if (mapped && mapped !== parsed.activeSessionId) {
+        migratedActiveSessionId = mapped;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...parsed,
+          sessions: migratedSessions,
+          activeSessionId: migratedActiveSessionId,
+        })
+      );
+    }
+
+    window.localStorage.setItem(migrationKey, "1");
+  } catch {
+    // Ignore migration errors and continue with standard hydration fallback.
+  }
+}
 
 function createSession(name = "New Conversation"): ChatSession {
   const now = new Date();
@@ -77,7 +170,7 @@ function normalizeSession(raw: any): ChatSession | null {
     ? raw.messages
         .filter((msg) => msg && typeof msg === "object" && typeof msg.id === "string")
         .map((msg) => ({
-          id: String(msg.id),
+          id: ensureUuid(msg.id),
           role: msg.role === "assistant" ? "assistant" : "user",
           content: typeof msg.content === "string" ? msg.content : "",
           timestamp: toDate(msg.timestamp),
@@ -86,7 +179,7 @@ function normalizeSession(raw: any): ChatSession | null {
     : [];
 
   return {
-    id: raw.id,
+    id: ensureUuid(raw.id),
     name: typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : "New Conversation",
     isPinned: !!raw.isPinned,
     createdAt: toDate(raw.createdAt),
@@ -100,7 +193,7 @@ function migrateLegacyMessages(raw: unknown): { sessions: ChatSession[]; activeS
     ? raw
         .filter((msg) => msg && typeof msg === "object" && typeof msg.id === "string")
         .map((msg) => ({
-          id: String(msg.id),
+          id: ensureUuid(msg.id),
           role: (msg.role === "assistant" ? "assistant" : "user") as "assistant" | "user",
           content: typeof msg.content === "string" ? msg.content : "",
           timestamp: toDate(msg.timestamp),
@@ -119,6 +212,8 @@ function hydrateStore(storageKey: string): { sessions: ChatSession[]; activeSess
     const fallback = createSession();
     return { sessions: [fallback], activeSessionId: fallback.id };
   }
+
+  migrateInvalidCachedChatIds(storageKey);
 
   try {
     const raw = window.localStorage.getItem(storageKey);
@@ -279,7 +374,7 @@ async function loadRemoteSessions(userId: string): Promise<ChatSession[]> {
   const sessionIds = sessionsRows.map((row: any) => row.id);
   const { data: messagesRows, error: messagesError } = await sb
     .from("ai_chat_messages")
-    .select("id, session_id, role, content, image_url, created_at")
+    .select("id, session_id, role, content, created_at")
     .in("session_id", sessionIds)
     .order("created_at", { ascending: true });
 
@@ -292,7 +387,6 @@ async function loadRemoteSessions(userId: string): Promise<ChatSession[]> {
       id: row.id,
       role: row.role === "assistant" ? "assistant" : "user",
       content: row.content || "",
-      imageUrl: row.image_url || undefined,
       timestamp: toDate(row.created_at),
     });
     groupedMessages.set(row.session_id, list);
@@ -314,7 +408,17 @@ async function persistRemoteSessions(userId: string, localSessions: ChatSession[
   const remoteSessions = await loadRemoteSessions(userId);
   const resolvedSessions = mergeSessionsByUpdatedAt(localSessions, remoteSessions);
 
-  const sessionRows = resolvedSessions.map((session) => ({
+  // Guard against legacy/non-UUID IDs from old localStorage payloads.
+  const normalizedSessions = resolvedSessions.map((session) => ({
+    ...session,
+    id: ensureUuid(session.id),
+    messages: session.messages.map((msg) => ({
+      ...msg,
+      id: ensureUuid(msg.id),
+    })),
+  }));
+
+  const sessionRows = normalizedSessions.map((session) => ({
     id: session.id,
     user_id: userId,
     name: session.name,
@@ -329,7 +433,7 @@ async function persistRemoteSessions(userId: string, localSessions: ChatSession[
 
   if (upsertSessionsError) return { ok: false };
 
-  for (const session of resolvedSessions) {
+  for (const session of normalizedSessions) {
     await sb.from("ai_chat_messages").delete().eq("session_id", session.id);
 
     if (session.messages.length === 0) continue;
@@ -338,14 +442,13 @@ async function persistRemoteSessions(userId: string, localSessions: ChatSession[
       session_id: session.id,
       role: msg.role,
       content: msg.content,
-      image_url: msg.imageUrl || null,
       created_at: msg.timestamp.toISOString(),
     }));
     const { error: messageInsertError } = await sb.from("ai_chat_messages").insert(messageRows);
     if (messageInsertError) return { ok: false };
   }
 
-  return { ok: true, mergedSessions: resolvedSessions };
+  return { ok: true, mergedSessions: normalizedSessions };
 }
 
 export function useMedicalChat(options?: UseMedicalChatOptions) {

@@ -1060,19 +1060,19 @@ function AIAssistant() {
   const MessageBubble = ({ msg }: { msg: ChatMessage }) => {
     const isUser = msg.role === "user";
     return (
-      <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+      <div className={`flex min-w-0 gap-2.5 sm:gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
           isUser ? "bg-primary/20" : "bg-accent/20"
         }`}>
           {isUser ? <User className="w-4 h-4 text-primary" /> : <Bot className="w-4 h-4 text-accent" />}
         </div>
-        <div className={`max-w-[80%] rounded-2xl p-3 ${
+        <div className={`min-w-0 max-w-[92%] sm:max-w-[80%] rounded-2xl p-3 ${
           isUser ? "bg-primary text-primary-foreground" : "bg-card border border-border"
         }`}>
           {msg.imageUrl && (
-            <img src={msg.imageUrl} alt="Uploaded" className="max-w-[200px] rounded-lg mb-2" />
+            <img src={msg.imageUrl} alt="Uploaded" className="mb-2 max-w-full rounded-lg" />
           )}
-          <div className="prose prose-sm prose-invert max-w-none">
+          <div className="prose prose-sm max-w-none break-words [overflow-wrap:anywhere]">
             <ReactMarkdown>{msg.content}</ReactMarkdown>
           </div>
           {!isUser && msg.content.length > 10 && (
@@ -1091,7 +1091,7 @@ function AIAssistant() {
     );
   };
   return (
-    <div className="flex-1 min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-screen flex-1 flex-col overflow-x-hidden bg-background">
       {/* Top Bar */}
       <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 px-4 py-2.5 backdrop-blur">
         {/* More options dropdown */}
@@ -1303,7 +1303,7 @@ function AIAssistant() {
               )}
               {messages.length > 0 && (
                 <div className="flex-1 overflow-y-auto">
-                  <div className="max-w-3xl mx-auto p-4 space-y-4">
+                  <div className="mx-auto w-full max-w-3xl space-y-4 px-3 py-4 sm:px-4">
                     {messages.map((msg) => (
                       <MessageBubble key={msg.id} msg={msg} />
                     ))}
@@ -1361,8 +1361,8 @@ function AIAssistant() {
 
           {/* Recording Indicator */}
           {isRecording && (
-            <div className="bg-destructive/10 border-t border-destructive/30 px-4 py-3">
-              <div className="max-w-3xl mx-auto flex items-center justify-between">
+            <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-3 sm:px-4">
+              <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <span className="relative flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
@@ -1387,8 +1387,8 @@ function AIAssistant() {
 
           {/* Transcribing Indicator */}
           {isTranscribing && (
-            <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
-              <div className="max-w-3xl mx-auto flex items-center gap-3">
+            <div className="border-t border-primary/20 bg-primary/5 px-3 py-3 sm:px-4">
+              <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">{copy.transcribing}</span>
               </div>
@@ -1397,17 +1397,17 @@ function AIAssistant() {
 
           {/* Upload Processing Indicator */}
           {uploadStatus && (
-            <div className="bg-primary/5 border-t border-primary/20 px-4 py-3">
-              <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+            <div className="border-t border-primary/20 bg-primary/5 px-3 py-3 sm:px-4">
+              <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2 sm:gap-3">
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">{uploadStatus}</span>
+                  <span className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">{uploadStatus}</span>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5"
+                  className="h-8 gap-1.5 shrink-0"
                   onClick={() => void cancelUploadProcessing()}
                 >
                   <X className="w-3 h-3" />
@@ -1418,8 +1418,8 @@ function AIAssistant() {
           )}
 
           {/* Input - Redesigned Search Box UI */}
-          <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t border-border p-6">
-            <div className="max-w-2xl mx-auto">
+          <div className="sticky bottom-0 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-6">
+            <div className="mx-auto w-full max-w-2xl">
               <div className="flex items-center w-full rounded-full bg-card text-foreground border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.12)' }}>
 
             {/* Plus icon (left) for upload */}

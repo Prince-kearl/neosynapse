@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Hospital } from "lucide-react";
 import { LocationSelector } from "@/legacy/components/LocationSelector";
-import { GoogleMap, Marker, InfoWindow, useLoadScript } from "@react-google-maps/api";
+import { GoogleMap, OverlayView, InfoWindow, useLoadScript } from "@react-google-maps/api";
 
 const hospitals = [
   { id: "1", name: "Korle Bu Teaching Hospital", lat: 5.5600, lng: -0.1750, status: "Open" },
@@ -136,40 +136,49 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
           >
             {/* User Marker */}
             {location === "Current Location" && gpsCoords && (
-              <Marker
+              <OverlayView
                 position={gpsCoords}
-                icon={{
-                  url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-                  scaledSize: { width: 40, height: 40 }
-                }}
-                title="Your Location"
-              />
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div
+                  title="Your Location"
+                  className="h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500 shadow"
+                />
+              </OverlayView>
             )}
             {/* Hospital Markers */}
             {chosen.map(hospital => (
-              <Marker
+              <OverlayView
                 key={hospital.id}
                 position={{ lat: hospital.lat, lng: hospital.lng }}
-                onClick={() => setSelectedHospitalId(hospital.id)}
-                icon={selectedHospital && selectedHospital.id === hospital.id ? {
-                  url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                  scaledSize: { width: 44, height: 44 }
-                } : {
-                  url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                  scaledSize: { width: 36, height: 36 }
-                }}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
               >
-                {selectedHospital && selectedHospital.id === hospital.id && (
-                  <InfoWindow position={{ lat: hospital.lat, lng: hospital.lng }}>
-                    <div>
-                      <strong>{hospital.name}</strong><br />
-                      {hospital.distance.toFixed(1)} km<br />
-                      <span style={{ color: '#16a34a', fontWeight: 600 }}>{hospital.status}</span>
-                    </div>
-                  </InfoWindow>
-                )}
-              </Marker>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHospitalId(hospital.id)}
+                  aria-label={`Select ${hospital.name}`}
+                  className={`-translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow focus:outline-none focus:ring-2 focus:ring-primary/60 ${
+                    selectedHospital && selectedHospital.id === hospital.id
+                      ? "h-5 w-5 bg-red-500"
+                      : "h-4 w-4 bg-green-500"
+                  }`}
+                />
+              </OverlayView>
             ))}
+
+            {/* Selected hospital info */}
+            {selectedHospital && (
+              <InfoWindow
+                position={{ lat: selectedHospital.lat, lng: selectedHospital.lng }}
+                onCloseClick={() => setSelectedHospitalId(null)}
+              >
+                <div>
+                  <strong>{selectedHospital.name}</strong><br />
+                  {selectedHospital.distance.toFixed(1)} km<br />
+                  <span style={{ color: "#16a34a", fontWeight: 600 }}>{selectedHospital.status}</span>
+                </div>
+              </InfoWindow>
+            )}
           </GoogleMap>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-card/60 to-transparent pointer-events-none" />

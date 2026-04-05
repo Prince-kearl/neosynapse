@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Video, Users, Loader2, Phone, AlertCircle } from "lucide-react";
+import { Video, Users, Loader2, Phone, AlertCircle, Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { auditLogService } from "@/shared/services/healthcare";
 import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
+import { toast } from "@/hooks/use-toast";
 
 type CallState = "list" | "pre-call" | "joining" | "active" | "ended" | "error";
 
@@ -32,6 +33,199 @@ export default function ProfessionalTelemedicine() {
   const connectedAtRef = useRef<number | null>(null);
   const intentionalEndRef = useRef(false);
   const consumedDeepLinkRef = useRef<string | null>(null);
+  const previousPendingEncounterIdsRef = useRef<Set<string>>(new Set());
+  const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const notificationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringAudioContextRef = useRef<AudioContext | null>(null);
+  const audioUnlockListenersAttachedRef = useRef(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const ringingPatientNameRef = useRef<string>("Patient");
+  const [ringingEncounterId, setRingingEncounterId] = useState<string | null>(null);
+  const [snoozeUntil, setSnoozeUntil] = useState<number | null>(null);
+  const isSnoozed = snoozeUntil !== null && snoozeUntil > Date.now();
+  const snoozeRemainingSec = isSnoozed ? Math.max(1, Math.ceil((snoozeUntil! - Date.now()) / 1000)) : 0;
+
+  const ensureAudioContext = useCallback(async () => {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return null;
+
+    if (!ringAudioContextRef.current) {
+      ringAudioContextRef.current = new AudioCtx();
+    }
+
+    const ctx = ringAudioContextRef.current;
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+
+    return ctx;
+  }, []);
+
+  const playRingTone = useCallback(async () => {
+    try {
+      const ctx = await ensureAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const ringBeep = (offset: number, freq: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.34);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.36);
+      };
+
+      ringBeep(0, 880);
+      ringBeep(0.38, 988);
+      setAudioUnlocked(true);
+    } catch {
+      // Some browsers require a user interaction before audio playback.
+    }
+  }, [ensureAudioContext]);
+
+  const stopRinging = useCallback(() => {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (notificationIntervalRef.current) {
+      clearInterval(notificationIntervalRef.current);
+      notificationIntervalRef.current = null;
+    }
+    setRingingEncounterId(null);
+  }, []);
+
+  const pushIncomingNotification = useCallback((encounterId: string, patient: string, persistent: boolean) => {
+    if (!("Notification" in window)) return;
+
+    const show = () => {
+      new Notification("Incoming Telemedicine Call", {
+        body: `${patient} is waiting for consultation.`,
+        tag: `telemedicine-incoming-${encounterId}`,
+        renotify: true,
+        requireInteraction: persistent,
+      });
+    };
+
+    if (Notification.permission === "granted") {
+      show();
+      return;
+    }
+
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          show();
+        }
+      });
+    }
+  }, []);
+
+  const startNotificationLoop = useCallback((encounterId: string, patient: string) => {
+    pushIncomingNotification(encounterId, patient, true);
+
+    if (notificationIntervalRef.current) {
+      clearInterval(notificationIntervalRef.current);
+      notificationIntervalRef.current = null;
+    }
+
+    notificationIntervalRef.current = setInterval(() => {
+      // Keep background alerts noticeable, especially where audio is throttled.
+      pushIncomingNotification(encounterId, patient, true);
+      if ("vibrate" in navigator) {
+        navigator.vibrate?.([220, 100, 220]);
+      }
+    }, 12000);
+  }, [pushIncomingNotification]);
+
+  const startRingingForEncounter = useCallback((encounterId: string, patient: string) => {
+    if (isSnoozed) return;
+
+    setRingingEncounterId(encounterId);
+    ringingPatientNameRef.current = patient;
+
+    void playRingTone();
+    if (!audioUnlocked) {
+      toast({
+        title: "Enable ringtone",
+        description: "Tap anywhere once to allow call ringtone sound.",
+      });
+    }
+    if (!ringIntervalRef.current) {
+      ringIntervalRef.current = setInterval(() => {
+        void playRingTone();
+      }, 2600);
+    }
+
+    if ("vibrate" in navigator) {
+      navigator.vibrate?.([220, 100, 220]);
+    }
+
+    // Notification-first behavior in background tabs.
+    if (document.hidden) {
+      startNotificationLoop(encounterId, patient);
+    } else {
+      pushIncomingNotification(encounterId, patient, false);
+    }
+
+    toast({
+      title: "Incoming call",
+      description: `${patient} started a telemedicine consultation.`,
+    });
+  }, [isSnoozed, playRingTone, pushIncomingNotification, startNotificationLoop, audioUnlocked]);
+
+  const handleSnoozeOneMinute = useCallback(() => {
+    setSnoozeUntil(Date.now() + 60_000);
+    stopRinging();
+    toast({
+      title: "Alerts snoozed",
+      description: "Incoming call alerts paused for 1 minute.",
+    });
+  }, [stopRinging]);
+
+  // One-time audio unlock: browsers often require explicit user interaction before sound playback.
+  useEffect(() => {
+    if (audioUnlockListenersAttachedRef.current) return;
+
+    const unlockAudio = async () => {
+      try {
+        const ctx = await ensureAudioContext();
+        if (ctx) {
+          // Tiny silent buffer to finalize unlock path on iOS/Safari.
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          source.start(0);
+          setAudioUnlocked(true);
+        }
+      } catch {
+        // Ignore unlock errors.
+      }
+    };
+
+    const opts: AddEventListenerOptions = { once: true, passive: true };
+    window.addEventListener("pointerdown", unlockAudio, opts);
+    window.addEventListener("touchstart", unlockAudio, opts);
+    window.addEventListener("keydown", unlockAudio, opts);
+    audioUnlockListenersAttachedRef.current = true;
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      audioUnlockListenersAttachedRef.current = false;
+    };
+  }, [ensureAudioContext]);
 
   const rollbackEncounterToPending = useCallback((encounterId: string, signalState: "failed" | "disconnected") => {
     hasMarkedInProgressRef.current = false;
@@ -151,6 +345,43 @@ export default function ProfessionalTelemedicine() {
     refetchInterval: 10000, // Poll every 10s for new patients
   });
 
+  // Realtime sync so new patient calls appear immediately without waiting for poll.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`pro-tele-sync-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "encounters",
+          filter: `professional_id=eq.${user.id}`,
+        },
+        () => {
+          void refetch();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "consultation_rooms",
+          filter: `doctor_id=eq.${user.id}`,
+        },
+        () => {
+          void refetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user?.id, refetch]);
+
   // Fetch patient names
   const patientIds = [...new Set(waitingEncounters.map((e) => e.patient_id))];
   const { data: profiles = [] } = useQuery({
@@ -166,10 +397,10 @@ export default function ProfessionalTelemedicine() {
     enabled: patientIds.length > 0,
   });
 
-  const getPatientName = (id: string) => {
+  const getPatientName = useCallback((id: string) => {
     const p = profiles.find((pr) => pr.user_id === id);
     return p?.full_name || p?.display_name || "Patient";
-  };
+  }, [profiles]);
 
   const getWaitTime = (createdAt: string) => {
     const diff = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
@@ -179,6 +410,7 @@ export default function ProfessionalTelemedicine() {
 
   /** Open pre-call settings for an encounter */
   const handleSelectEncounter = useCallback((encounterId: string, patientId: string) => {
+    stopRinging();
     setSelectedEncounterId(encounterId);
     selectedEncounterRef.current = encounterId;
     hasMarkedInProgressRef.current = false;
@@ -187,7 +419,7 @@ export default function ProfessionalTelemedicine() {
     setPatientName(getPatientName(patientId));
     setCallState("pre-call");
     setErrorMessage(null);
-  }, [profiles]);
+  }, [getPatientName, stopRinging]);
 
   useEffect(() => {
     const deepLinkedEncounterId = searchParams.get("encounterId")?.trim() || null;
@@ -202,9 +434,78 @@ export default function ProfessionalTelemedicine() {
     handleSelectEncounter(targetEncounter.id, targetEncounter.patient_id);
   }, [searchParams, callState, waitingEncounters, handleSelectEncounter]);
 
+  useEffect(() => {
+    if (!snoozeUntil) return;
+    const timeout = setTimeout(() => {
+      setSnoozeUntil(null);
+    }, Math.max(0, snoozeUntil - Date.now()));
+    return () => clearTimeout(timeout);
+  }, [snoozeUntil]);
+
+  // Ring the professional when new pending encounters arrive.
+  useEffect(() => {
+    const pendingEncounters = waitingEncounters.filter((enc) => enc.status === "pending");
+    const currentIds = new Set(pendingEncounters.map((enc) => enc.id));
+
+    if (callState !== "list") {
+      stopRinging();
+      previousPendingEncounterIdsRef.current = currentIds;
+      return;
+    }
+
+    if (isSnoozed) {
+      previousPendingEncounterIdsRef.current = currentIds;
+      return;
+    }
+
+    const previousIds = previousPendingEncounterIdsRef.current;
+    const incoming = pendingEncounters.find((enc) => !previousIds.has(enc.id));
+    previousPendingEncounterIdsRef.current = currentIds;
+
+    if (incoming) {
+      startRingingForEncounter(incoming.id, getPatientName(incoming.patient_id));
+      return;
+    }
+
+    if (ringingEncounterId && !currentIds.has(ringingEncounterId)) {
+      stopRinging();
+    }
+  }, [waitingEncounters, callState, getPatientName, ringingEncounterId, startRingingForEncounter, stopRinging, isSnoozed]);
+
+  // If snooze ends and there is still a pending patient, alert again.
+  useEffect(() => {
+    if (callState !== "list" || isSnoozed || ringingEncounterId) return;
+    const pending = waitingEncounters.find((enc) => enc.status === "pending");
+    if (!pending) return;
+    startRingingForEncounter(pending.id, getPatientName(pending.patient_id));
+  }, [callState, isSnoozed, ringingEncounterId, waitingEncounters, startRingingForEncounter, getPatientName]);
+
+  // Background tab behavior: prioritize persistent notifications while hidden.
+  useEffect(() => {
+    if (!ringingEncounterId) return;
+
+    const onVisibilityChange = () => {
+      if (!ringingEncounterId) return;
+      if (document.hidden) {
+        startNotificationLoop(ringingEncounterId, ringingPatientNameRef.current);
+      } else if (notificationIntervalRef.current) {
+        clearInterval(notificationIntervalRef.current);
+        notificationIntervalRef.current = null;
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    onVisibilityChange();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [ringingEncounterId, startNotificationLoop]);
+
   /** Find the consultation room for this encounter's patient and join */
   const handleJoinCall = useCallback(async () => {
     if (!user || !selectedEncounterId) return;
+    stopRinging();
     setCallState("joining");
     setErrorMessage(null);
 
@@ -246,7 +547,7 @@ export default function ProfessionalTelemedicine() {
       setCallState("error");
       setErrorMessage("Failed to join the call. Please try again.");
     }
-  }, [user, selectedEncounterId, waitingEncounters, videoEnabled, audioEnabled, joinCall]);
+  }, [user, selectedEncounterId, waitingEncounters, videoEnabled, audioEnabled, joinCall, stopRinging]);
 
   const handleEndCall = useCallback(async () => {
     intentionalEndRef.current = true;
@@ -275,6 +576,7 @@ export default function ProfessionalTelemedicine() {
   }, [audioEnabled, toggleAudio]);
 
   const handleBackToList = useCallback(() => {
+    stopRinging();
     setCallState("list");
     setSelectedEncounterId(null);
     selectedEncounterRef.current = null;
@@ -284,7 +586,17 @@ export default function ProfessionalTelemedicine() {
     setRoomId(null);
     setErrorMessage(null);
     refetch();
-  }, [refetch]);
+  }, [refetch, stopRinging]);
+
+  useEffect(() => {
+    return () => {
+      stopRinging();
+      if (ringAudioContextRef.current) {
+        void ringAudioContextRef.current.close();
+        ringAudioContextRef.current = null;
+      }
+    };
+  }, [stopRinging]);
 
   const getEncounterContextPath = useCallback((basePath: string) => {
     if (!selectedEncounterRef.current) return basePath;
@@ -435,7 +747,30 @@ export default function ProfessionalTelemedicine() {
               <Users className="w-5 h-5 text-primary" />
               Waiting Patients
             </h2>
-            <Badge variant="outline">{waitingEncounters.length} waiting</Badge>
+            <div className="flex items-center gap-2">
+              {ringingEncounterId ? (
+                <>
+                  <Button size="sm" variant="outline" className="h-8" onClick={stopRinging}>
+                    <BellOff className="w-3.5 h-3.5 mr-1" />
+                    Mute Alert
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8" onClick={handleSnoozeOneMinute}>
+                    Snooze 1 min
+                  </Button>
+                </>
+              ) : isSnoozed ? (
+                <Badge variant="outline" className="gap-1">
+                  <BellOff className="w-3.5 h-3.5" />
+                  Snoozed {snoozeRemainingSec}s
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1">
+                  <Bell className="w-3.5 h-3.5" />
+                  Alerts On
+                </Badge>
+              )}
+              <Badge variant="outline">{waitingEncounters.length} waiting</Badge>
+            </div>
           </div>
 
           {isLoading ? (

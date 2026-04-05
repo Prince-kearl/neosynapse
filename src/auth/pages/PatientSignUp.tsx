@@ -32,16 +32,16 @@ export default function PatientSignUp() {
   const [preferredLanguage, setPreferredLanguage] = useState("en");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [configWarning, setConfigWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
-  const { signUp } = useAuth();
+  const { signUp, signIn } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccessMessage(null);
+    setConfigWarning(null);
 
     const validation = signUpSchema.safeParse({
       fullName,
@@ -79,10 +79,25 @@ export default function PatientSignUp() {
         } else {
           setError(error.message);
         }
-      } else if (session) {
-        navigate("/patient/onboarding/medical-history", { replace: true });
       } else {
-        setSuccessMessage("Check your email to confirm your account before signing in. You will complete your medical history setup right after your first login.");
+        if (!session) {
+          const { error: signInError } = await signIn(email, password);
+          if (signInError) {
+            const isEmailConfirmationEnabled = signInError.message.includes("Email not confirmed");
+
+            if (isEmailConfirmationEnabled) {
+              setConfigWarning(
+                "Admin/Dev warning: Supabase email confirmation is enabled. New users must verify email before first login."
+              );
+              setError("Account created. Please verify your email, then sign in.");
+            } else {
+              setError("Account created, but automatic sign-in failed. Please sign in manually.");
+            }
+            return;
+          }
+        }
+
+        navigate("/", { replace: true });
       }
     } finally {
       setIsSubmitting(false);
@@ -118,9 +133,9 @@ export default function PatientSignUp() {
               </div>
             )}
 
-            {successMessage && (
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary text-sm">
-                {successMessage}
+            {configWarning && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                {configWarning}
               </div>
             )}
 

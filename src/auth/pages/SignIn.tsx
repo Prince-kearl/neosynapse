@@ -56,8 +56,6 @@ export default function SignIn() {
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
           setError("Invalid email or password");
-        } else if (error.message.includes("Email not confirmed")) {
-          setError("Please check your email and confirm your account first");
         } else {
           setError(error.message);
         }

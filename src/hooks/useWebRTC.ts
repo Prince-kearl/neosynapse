@@ -69,11 +69,21 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
 
     pc.onicecandidate = async (event) => {
       if (event.candidate && activeRoomId) {
-        await supabase.from("ice_candidates").insert({
+        const { error } = await supabase.from("ice_candidates").insert({
           room_id: activeRoomId,
           sender: userId,
           candidate: event.candidate.toJSON() as any,
         });
+        if (error) {
+          console.error("Failed to insert ICE candidate:", {
+            message: error.message,
+            details: (error as any).details,
+            hint: (error as any).hint,
+            code: (error as any).code,
+            room_id: activeRoomId,
+            sender: userId,
+          });
+        }
       }
     };
 

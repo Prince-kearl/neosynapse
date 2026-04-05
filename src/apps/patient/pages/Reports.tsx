@@ -1,4 +1,4 @@
-import { FileText, Download, Eye, Clock, Loader2 } from "lucide-react";
+import { FileText, Download, Eye, Clock, Loader2, Share2 } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMyReports } from "@/shared/hooks/useHealthcare";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { toast } from "@/hooks/use-toast";
+import html2pdf from "html2pdf.js";
+import { marked } from "marked";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -20,6 +23,92 @@ export default function PatientReports() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: reports = [], isLoading } = useMyReports();
   const selectedReport = reportId ? reports.find((r: any) => r.id === reportId) : null;
+
+  const getReportTitle = (report: any) => {
+    const reportData = report?.report_json as Record<string, unknown> | null;
+    return (reportData?.title as string) || `${report?.report_type || "medical"} report`;
+  };
+
+  const getReportMarkdown = (report: any) => {
+    const reportData = report?.report_json as Record<string, unknown> | null;
+    const markdown = typeof reportData?.markdown === "string" ? reportData.markdown : "";
+    if (markdown.trim()) return markdown;
+    return `# ${getReportTitle(report)}\n\n\`\`\`json\n${JSON.stringify(report?.report_json ?? {}, null, 2)}\n\`\`\``;
+  };
+
+  const toFileName = (report: any) =>
+    `${String(getReportTitle(report)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "medical-report"}-${new Date(report.created_at || Date.now()).toISOString().slice(0, 10)}.pdf`;
+
+  const buildPdfBlob = async (report: any): Promise<Blob> => {
+    const markdown = getReportMarkdown(report);
+    const html = marked.parse(markdown);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    container.style.background = "#ffffff";
+    container.style.color = "#111827";
+    container.style.padding = "24px";
+    container.style.maxWidth = "800px";
+    container.style.margin = "0 auto";
+    document.body.appendChild(container);
+
+    try {
+      return await html2pdf().from(container).set({
+        margin: 0.5,
+        filename: toFileName(report),
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+      }).outputPdf("blob");
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
+  const downloadReportPdf = async (report: any) => {
+    try {
+      const blob = await buildPdfBlob(report);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = toFileName(report);
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast({ title: "PDF downloaded" });
+    } catch (error) {
+      console.error("Failed to download PDF:", error);
+      toast({ title: "Download failed", description: "Could not generate PDF.", variant: "destructive" });
+    }
+  };
+
+  const shareReport = async (report: any) => {
+    try {
+      const blob = await buildPdfBlob(report);
+      const file = new File([blob], toFileName(report), { type: "application/pdf" });
+
+      if (!navigator.share) {
+        toast({ title: "Share unsupported", description: "Downloading PDF instead." });
+        await downloadReportPdf(report);
+        return;
+      }
+
+      const canShare = (navigator as any).canShare?.({ files: [file] }) ?? true;
+      if (!canShare) {
+        toast({ title: "Share unsupported", description: "Downloading PDF instead." });
+        await downloadReportPdf(report);
+        return;
+      }
+
+      await navigator.share({
+        title: getReportTitle(report),
+        text: "Medical report from Neo Synapse",
+        files: [file],
+      });
+    } catch (error) {
+      console.error("Share failed:", error);
+      toast({ title: "Share cancelled or failed" });
+    }
+  };
 
   const downloadReportJson = (report: any) => {
     const payload = JSON.stringify(report.report_json ?? {}, null, 2);
@@ -101,6 +190,12 @@ export default function PatientReports() {
                   <Button size="sm" onClick={() => downloadReportJson(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Export JSON
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => downloadReportPdf(selectedReport)}>
+                    <Download className="w-4 h-4 mr-1" /> Download PDF
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => shareReport(selectedReport)}>
+                    <Share2 className="w-4 h-4 mr-1" /> Share
+                  </Button>
                 </div>
               </>
             )}
@@ -162,6 +257,22 @@ export default function PatientReports() {
                         onClick={() => navigate(`/patient/reports/${report.id}?action=export`)}
                       >
                         <Download className="w-4 h-4 mr-1" /> Export
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => void downloadReportPdf(report)}
+                      >
+                        <Download className="w-4 h-4 mr-1" /> PDF
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => void shareReport(report)}
+                      >
+                        <Share2 className="w-4 h-4 mr-1" /> Share
                       </Button>
                     </div>
                   </div>

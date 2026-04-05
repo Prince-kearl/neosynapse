@@ -18,22 +18,42 @@ export const MedicalReportTools: React.FC<MedicalReportToolsProps> = ({ markdown
 
   const handleDownloadPDF = () => {
     if (!reportRef.current) return;
-    html2pdf().from(reportRef.current).save("AI_Medical_Report.pdf");
+    const fileName = `ai-medical-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    html2pdf().from(reportRef.current).set({ filename: fileName }).save();
   };
 
   const handleShare = async () => {
-    if (!navigator.share) {
-      toast({ title: "Share not supported", description: "Web Share API is not available on this device." });
-      return;
-    }
     if (!reportRef.current) return;
-    const opt = { margin: 0.5, filename: "AI_Medical_Report.pdf", html2canvas: {}, jsPDF: { unit: "in", format: "a4", orientation: "portrait" } };
-    const pdfBlob = await html2pdf().from(reportRef.current).set(opt).outputPdf("blob");
-    const file = new File([pdfBlob], "AI_Medical_Report.pdf", { type: "application/pdf" });
+
+    const fileName = `ai-medical-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const opt = {
+      margin: 0.5,
+      filename: fileName,
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+    };
+
     try {
+      const pdfBlob = await html2pdf().from(reportRef.current).set(opt).outputPdf("blob");
+      const file = new File([pdfBlob], fileName, { type: "application/pdf" });
+
+      if (!navigator.share) {
+        toast({ title: "Share not supported", description: "Downloading PDF instead." });
+        handleDownloadPDF();
+        return;
+      }
+
+      const canShareFile = (navigator as any).canShare?.({ files: [file] }) ?? true;
+      if (!canShareFile) {
+        toast({ title: "Share not supported", description: "Downloading PDF instead." });
+        handleDownloadPDF();
+        return;
+      }
+
       await navigator.share({ title: "AI Medical Report", files: [file] });
-    } catch (e) {
-      toast({ title: "Share cancelled or failed" });
+    } catch {
+      toast({ title: "Share unavailable", description: "Downloading PDF instead." });
+      handleDownloadPDF();
     }
   };
 

@@ -1,5 +1,5 @@
 // Patient Telemedicine - uses existing WebRTC infrastructure
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Video, Phone, Clock, Shield, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,42 @@ import { toast } from "@/hooks/use-toast";
 
 type ConsultationState = "lobby" | "waiting" | "active" | "ended";
 
+type ContactItem = {
+  name: string;
+  phone: string;
+  phoneLabel?: string;
+  email?: string;
+  note?: string;
+};
+
+const emergencyContacts: ContactItem[] = [
+  { name: "Emergency (All Services)", phone: "112", note: "Ambulance, Police, Fire" },
+  { name: "Ambulance Service", phone: "193" },
+  { name: "Police Service", phone: "191" },
+  { name: "Fire Service", phone: "192" },
+  { name: "COVID-19 Information", phone: "311" },
+];
+
+const healthInstitutionContacts: ContactItem[] = [
+  { name: "Ghana Health Service (GHS)", phone: "+233302682709", phoneLabel: "+233 30 268 2709", email: "info@ghs.gov.gh" },
+  { name: "GHS Information Line", phone: "0303982351", phoneLabel: "030 398 2351" },
+  { name: "Ministry of Health (MOH)", phone: "+233302665651", phoneLabel: "+233 302 665651", email: "info@moh.gov.gh" },
+  { name: "NHIS Call Center", phone: "0544446447", phoneLabel: "054 444 6447" },
+];
+
+const hospitalContacts: ContactItem[] = [
+  { name: "Trust/SSNIT Hospital", phone: "+233302761974", phoneLabel: "+233 (0) 302 761 974 / 5" },
+  { name: "North Ridge Clinic", phone: "+233302227328", phoneLabel: "+233 (0) 302 227 328" },
+  { name: "West African Rescue Association (WARA)", phone: "+233302781258", phoneLabel: "+233 (0) 302 781 258", note: "Emergency support" },
+  { name: "Planned Parenthood Association of Ghana (PPAG)", phone: "+233302306104", phoneLabel: "+233 302 306104" },
+];
+
+const regionalContacts: ContactItem[] = [
+  { name: "Ashanti Region", phone: "0322022323", phoneLabel: "0322022323", note: "Alt: 0322025441, 0322022827" },
+  { name: "Brong Ahafo Region", phone: "0352027083", phoneLabel: "0352027083", note: "Alt: 03522027307" },
+  { name: "Northern Region", phone: "0372022889", phoneLabel: "0372022889", note: "Alt: 0372022297" },
+];
+
 export default function PatientTelemedicine() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -27,7 +63,11 @@ export default function PatientTelemedicine() {
   const [encounterId, setEncounterId] = useState<string | null>(null);
   const [isStartingConsultation, setIsStartingConsultation] = useState(false);
 
-  const { data: professionalProfiles = [], isLoading: providersLoading } = useQuery({
+  const {
+    data: professionalProfiles = [],
+    isLoading: providersLoading,
+    error: providersError,
+  } = useQuery({
     queryKey: ["telemedicine-professionals"],
     queryFn: async () => {
       const { data: pros, error: proErr } = await supabase
@@ -56,7 +96,7 @@ export default function PatientTelemedicine() {
             name: profile.full_name || profile.display_name || "Healthcare Professional",
             specialty: pro.specialty || "General Practice",
             rating: 4.8,
-            available: pro.verification_status === "verified" && profile.status !== "disabled",
+            available: pro.verification_status !== "rejected" && profile.status !== "disabled",
           };
         })
         .filter(Boolean) as Array<{ id: string; name: string; specialty: string; rating: number; available: boolean }>;
@@ -171,6 +211,55 @@ export default function PatientTelemedicine() {
     toggleAudio(next);
   }, [audioEnabled, toggleAudio]);
 
+  // Keep patient UI in sync with room and encounter updates from the professional side.
+  useEffect(() => {
+    if (!roomId && !encounterId) return;
+
+    const channel = supabase
+      .channel(`patient-tele-sync-${user?.id || "anon"}-${roomId || "none"}-${encounterId || "none"}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "consultation_rooms",
+          ...(roomId ? { filter: `id=eq.${roomId}` } : {}),
+        },
+        (payload) => {
+          const next = payload.new as { status?: string };
+          if (next?.status === "active") {
+            setState("active");
+          }
+          if (next?.status === "ended" && state !== "ended") {
+            setState("ended");
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "encounters",
+          ...(encounterId ? { filter: `id=eq.${encounterId}` } : {}),
+        },
+        (payload) => {
+          const next = payload.new as { status?: string };
+          if (next?.status === "in_progress") {
+            setState("active");
+          }
+          if (["completed", "cancelled"].includes(next?.status || "") && state !== "ended") {
+            setState("ended");
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [roomId, encounterId, user?.id, state]);
+
   if (!user) {
     return (
       <div className="flex-1 min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
@@ -185,6 +274,44 @@ export default function PatientTelemedicine() {
   }
 
   const selectedDoctorData = doctors.find((d) => d.id === selectedDoctor);
+
+  const ContactGroup = ({
+    title,
+    contacts,
+  }: {
+    title: string;
+    contacts: ContactItem[];
+  }) => (
+    <section className="bg-card rounded-2xl p-4 sm:p-5 border border-border space-y-3">
+      <h3 className="font-display text-base sm:text-lg font-semibold">{title}</h3>
+      <div className="space-y-3">
+        {contacts.map((contact) => (
+          <div key={`${title}-${contact.name}`} className="rounded-xl border border-border/60 p-3 bg-background/30">
+            <p className="font-medium text-sm sm:text-base">{contact.name}</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              {contact.phoneLabel || contact.phone}
+            </p>
+            {contact.note && <p className="text-xs text-muted-foreground mt-1">{contact.note}</p>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild size="sm" className="h-8 sm:h-9">
+                <a href={`tel:${contact.phone}`} aria-label={`Call ${contact.name}`}>
+                  <Phone className="w-3.5 h-3.5 mr-1.5" />
+                  Call
+                </a>
+              </Button>
+              {contact.email && (
+                <Button asChild size="sm" variant="outline" className="h-8 sm:h-9">
+                  <a href={`mailto:${contact.email}`} aria-label={`Email ${contact.name}`}>
+                    Email
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 
   // Active call view
   if (state === "active") {
@@ -271,6 +398,8 @@ export default function PatientTelemedicine() {
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading available professionals...
             </div>
+          ) : providersError ? (
+            <p className="text-sm text-destructive">Unable to load professionals right now. Please try again.</p>
           ) : doctors.length ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {doctors.map((doc) => (
@@ -310,22 +439,37 @@ export default function PatientTelemedicine() {
         )}
 
         {/* Info Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
-            <Clock className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm font-medium">Live Video</p>
-            <p className="text-xs text-muted-foreground">Real-time WebRTC calls</p>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="bg-card rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-food-card text-center">
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary mx-auto mb-1.5 sm:mb-2" />
+            <p className="text-xs sm:text-sm font-medium leading-tight">Live Video</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">Real-time WebRTC calls</p>
           </div>
-          <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
-            <Shield className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm font-medium">End-to-End Encrypted</p>
-            <p className="text-xs text-muted-foreground">Peer-to-peer connection</p>
+          <div className="bg-card rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-food-card text-center">
+            <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-primary mx-auto mb-1.5 sm:mb-2" />
+            <p className="text-xs sm:text-sm font-medium leading-tight">End-to-End Encrypted</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">Peer-to-peer connection</p>
           </div>
-          <div className="bg-card rounded-2xl p-4 shadow-food-card text-center">
-            <FileText className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm font-medium">AI Documentation</p>
-            <p className="text-xs text-muted-foreground">Auto-generated reports</p>
+          <div className="bg-card rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-food-card text-center">
+            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-primary mx-auto mb-1.5 sm:mb-2" />
+            <p className="text-xs sm:text-sm font-medium leading-tight">AI Documentation</p>
+            <p className="text-[11px] sm:text-xs text-muted-foreground leading-tight">Auto-generated reports</p>
           </div>
+        </div>
+
+        {/* Emergency & Health Contacts */}
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Emergency & Health Contacts (Ghana)</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Tap any number below to place an audio call directly from your phone.
+            </p>
+          </div>
+
+          <ContactGroup title="Emergency Numbers" contacts={emergencyContacts} />
+          <ContactGroup title="Health Institution Contacts" contacts={healthInstitutionContacts} />
+          <ContactGroup title="Hospital & Specialized Contacts" contacts={hospitalContacts} />
+          <ContactGroup title="Regional Health Contacts" contacts={regionalContacts} />
         </div>
       </div>
     </div>

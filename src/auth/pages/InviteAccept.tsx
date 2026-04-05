@@ -28,6 +28,7 @@ export default function InviteAccept() {
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [configWarning, setConfigWarning] = useState<string | null>(null);
 
   // Required fields
   const [fullName, setFullName] = useState("");
@@ -81,6 +82,7 @@ export default function InviteAccept() {
     e.preventDefault();
     if (!invitation) return;
     setError(null);
+    setConfigWarning(null);
 
     const validation = acceptSchema.safeParse({ fullName, password, confirmPassword });
     if (!validation.success) {
@@ -119,9 +121,16 @@ export default function InviteAccept() {
       });
 
       if (signInErr) {
-        // Fallback: show success and redirect to sign-in
-        setSuccess(true);
-        setTimeout(() => navigate("/auth/sign-in"), 2000);
+        const isEmailConfirmationEnabled = signInErr.message.includes("Email not confirmed");
+
+        if (isEmailConfirmationEnabled) {
+          setConfigWarning(
+            "Admin/Dev warning: Supabase email confirmation is enabled. New users must verify email before first login."
+          );
+          setError("Account created. Please verify your email, then sign in.");
+        } else {
+          setError("Account created, but automatic sign-in failed. Please sign in manually.");
+        }
         return;
       }
 
@@ -216,6 +225,12 @@ export default function InviteAccept() {
             {error && (
               <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
                 {error}
+              </div>
+            )}
+
+            {configWarning && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                {configWarning}
               </div>
             )}
 
