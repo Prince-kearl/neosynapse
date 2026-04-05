@@ -330,7 +330,7 @@ export const clinicalNoteService = {
     encounter_id: string;
     draft_json: Record<string, unknown>;
   }) =>
-    supabase.from("clinical_notes").insert(data as any),
+    supabase.from("clinical_notes").insert(data as any).select(),
 
   updateDraft: (id: string, draft_json: Record<string, unknown>) =>
     supabase.from("clinical_notes").update({ draft_json: draft_json as any, status: "draft" }).eq("id", id),
@@ -345,6 +345,9 @@ export const clinicalNoteService = {
       approved_by: approvedBy,
       approved_at: new Date().toISOString(),
     }).eq("id", id),
+
+  remove: (id: string) =>
+    supabase.from("clinical_notes").delete().eq("id", id),
 };
 
 // ─── Medical Reports ────────────────────────────────────────────

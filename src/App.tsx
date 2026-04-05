@@ -59,6 +59,7 @@ import AdminAudit from "@/apps/admin/pages/Audit";
 import AdminSettings from "@/apps/admin/pages/Settings";
 import AdminQuickActions from "@/apps/admin/pages/QuickActions";
 import AdminNotifications from "@/apps/admin/pages/Notifications";
+import AdminNotificationTemplates from "@/apps/admin/pages/NotificationTemplates";
 
 // Not Found
 import NotFound from "./pages/NotFound";
@@ -137,6 +138,7 @@ const App = () => (
                   <Route path="templates" element={<AdminTemplates />} />
                   <Route path="audit" element={<AdminAudit />} />
                   <Route path="notifications" element={<AdminNotifications />} />
+                  <Route path="notification-templates" element={<AdminNotificationTemplates />} />
                   <Route path="settings" element={<AdminSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>

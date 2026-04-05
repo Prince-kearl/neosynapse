@@ -1,4 +1,4 @@
-import { PenTool, Clock, CheckCircle, Edit, Loader2 } from "lucide-react";
+import { PenTool, Clock, CheckCircle, Edit, Loader2, Plus, Trash2 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { useProfessionalEncounters, useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { clinicalNoteService, medicalReportService, auditLogService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
+import { supabase } from "@/integrations/supabase/client";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -25,6 +26,7 @@ export default function ProfessionalNotes() {
   const queryClient = useQueryClient();
   const { noteId } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: encounters = [] } = useProfessionalEncounters();
   const { data: notes = [], isLoading } = useProfessionalNotes();
   const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
@@ -32,8 +34,11 @@ export default function ProfessionalNotes() {
     ? notes.filter((n: any) => n.encounter_id === encounterFilterId)
     : notes;
 
-  // Extract patient IDs from the joined encounter data
-  const patientIds = filteredNotes.map((n: any) => n.encounters?.patient_id).filter(Boolean);
+  // Include both note-linked patients and encounter-linked patients so manual note creation can resolve names.
+  const patientIds = Array.from(new Set([
+    ...filteredNotes.map((n: any) => n.encounters?.patient_id),
+    ...encounters.map((enc: any) => enc.patient_id),
+  ].filter(Boolean)));
   const { data: nameMap = {} } = useProfileNames(patientIds);
 
   const draftNotes = filteredNotes.filter((n: any) => n.status === "draft");
@@ -45,6 +50,9 @@ export default function ProfessionalNotes() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
+  const [selectedEncounterId, setSelectedEncounterId] = useState<string>(encounterFilterId ?? "none");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const { data: ownAuditLogs = [] } = useQuery({
     queryKey: ["own-audit-logs", user?.id],
@@ -81,6 +89,25 @@ export default function ProfessionalNotes() {
       log.metadata?.encounter_id === selectedNote.encounter_id
     )
     : [];
+
+  const creatableEncounters = encounters.filter((enc: any) => {
+    if (encounterFilterId && enc.id !== encounterFilterId) return false;
+    return !notes.some((note: any) => note.encounter_id === enc.id);
+  });
+
+  useEffect(() => {
+    if (encounterFilterId && creatableEncounters.some((enc: any) => enc.id === encounterFilterId)) {
+      setSelectedEncounterId(encounterFilterId);
+      return;
+    }
+
+    setSelectedEncounterId((current) => {
+      if (current !== "none" && creatableEncounters.some((enc: any) => enc.id === current)) {
+        return current;
+      }
+      return creatableEncounters[0]?.id ?? "none";
+    });
+  }, [encounterFilterId, creatableEncounters]);
 
   useEffect(() => {
     if (!selectedNote) return;
@@ -296,6 +323,77 @@ export default function ProfessionalNotes() {
     toast({ title: "Note finalized and report synced" });
   };
 
+  const createNote = async () => {
+    if (!user?.id || selectedEncounterId === "none") return;
+
+    const existingNote = notes.find((note: any) => note.encounter_id === selectedEncounterId);
+    if (existingNote) {
+      toast({ title: "Note already exists", description: "Opening the existing note for this encounter." });
+      navigate(`/professional/notes/${existingNote.id}/edit?encounterId=${selectedEncounterId}`);
+      return;
+    }
+
+    setIsCreatingNote(true);
+    const { data, error } = await clinicalNoteService.create({
+      encounter_id: selectedEncounterId,
+      draft_json: {},
+    });
+    setIsCreatingNote(false);
+
+    if (error) {
+      toast({ title: "Failed to create note", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const createdNote = Array.isArray(data) ? data[0] : data;
+    if (!createdNote?.id) {
+      toast({ title: "Note created", description: "Refresh and open the new note if it does not appear immediately." });
+      queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+      return;
+    }
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: "clinical_note_created",
+      entity_type: "clinical_note",
+      entity_id: createdNote.id,
+      metadata: { encounter_id: selectedEncounterId, status: "draft" },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    toast({ title: "Draft note created" });
+    navigate(`/professional/notes/${createdNote.id}/edit?encounterId=${selectedEncounterId}`);
+  };
+
+  const deleteNote = async () => {
+    if (!selectedNote || !user?.id) return;
+
+    if (!window.confirm("Delete this clinical note? This action cannot be undone.")) {
+      return;
+    }
+
+    setIsDeletingNote(true);
+    const { error } = await clinicalNoteService.remove(selectedNote.id);
+    setIsDeletingNote(false);
+
+    if (error) {
+      toast({ title: "Failed to delete note", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    await auditLogService.log({
+      actor_id: user.id,
+      action: "clinical_note_deleted",
+      entity_type: "clinical_note",
+      entity_id: selectedNote.id,
+      metadata: { encounter_id: selectedNote.encounter_id, status: selectedNote.status },
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    toast({ title: "Note deleted" });
+    navigate(encounterFilterId ? `/professional/notes?encounterId=${encounterFilterId}` : "/professional/notes");
+  };
+
   const NoteCard = ({ note }: { note: any }) => {
     const patientId = note.encounters?.patient_id;
     const patientName = patientId ? (nameMap[patientId] || "Patient") : "Patient";
@@ -335,7 +433,46 @@ export default function ProfessionalNotes() {
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Clinical Notes</h1>
-          <p className="text-muted-foreground">Review and finalize AI-generated clinical documentation</p>
+          <p className="text-muted-foreground">Create, review, update, and finalize clinical documentation</p>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <h2 className="font-semibold">Create Clinical Note</h2>
+              <p className="text-sm text-muted-foreground">Start a new draft for an assigned encounter that does not already have a note.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Select value={selectedEncounterId} onValueChange={setSelectedEncounterId}>
+                <SelectTrigger className="w-full sm:w-72">
+                  <SelectValue placeholder="Select encounter" />
+                </SelectTrigger>
+                <SelectContent>
+                  {creatableEncounters.length === 0 ? (
+                    <SelectItem value="none" disabled>No encounters available</SelectItem>
+                  ) : (
+                    creatableEncounters.map((enc: any) => {
+                      const patientName = nameMap[enc.patient_id] || "Patient";
+                      const encounterDate = new Date(enc.created_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      });
+
+                      return (
+                        <SelectItem key={enc.id} value={enc.id}>
+                          {`${patientName} • ${enc.encounter_type} • ${encounterDate}`}
+                        </SelectItem>
+                      );
+                    })
+                  )}
+                </SelectContent>
+              </Select>
+              <Button onClick={createNote} disabled={isCreatingNote || selectedEncounterId === "none"}>
+                <Plus className="w-4 h-4 mr-2" />
+                {isCreatingNote ? "Creating..." : "New Note"}
+              </Button>
+            </div>
+          </div>
         </div>
 
         {encounterFilterId && (
@@ -418,6 +555,10 @@ export default function ProfessionalNotes() {
                   </Button>
                   <Button size="sm" onClick={finalizeNote} disabled={isFinalizing || selectedNote.status !== "review"}>
                     {isFinalizing ? "Finalizing..." : "Finalize Note"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={deleteNote} disabled={isDeletingNote} className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    {isDeletingNote ? "Deleting..." : "Delete Note"}
                   </Button>
                 </div>
                 <TransitionTimeline

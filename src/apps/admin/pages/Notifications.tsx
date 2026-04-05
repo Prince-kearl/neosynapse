@@ -1,6 +1,6 @@
 import { NotificationCenterPage } from "@/components/common/NotificationCenterPage";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,11 +9,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
+type NotificationTemplate = {
+  id: string;
+  name: string;
+  title_template: string;
+  body_template: string;
+  target_role: "patient" | "professional" | "admin" | null;
+  action_url: string | null;
+  category: string;
+};
+
 export default function AdminNotifications() {
   const [targetRole, setTargetRole] = useState<"patient" | "professional" | "admin">("professional");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [actionUrl, setActionUrl] = useState("");
+
+  const { data: templates = [] } = useQuery({
+    queryKey: ["admin-notification-templates-active"],
+    queryFn: async (): Promise<NotificationTemplate[]> => {
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("admin_notification_templates")
+        .select("id, name, title_template, body_template, target_role, action_url, category")
+        .eq("is_active", true)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const applyTemplate = (templateId: string) => {
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    setTitle(tpl.title_template);
+    setBody(tpl.body_template);
+    setActionUrl(tpl.action_url ?? "");
+    if (tpl.target_role) setTargetRole(tpl.target_role);
+  };
 
   const broadcastMutation = useMutation({
     mutationFn: async () => {
@@ -62,6 +95,24 @@ export default function AdminNotifications() {
           Send a system notification to all users with a selected role.
         </p>
         <div className="mt-4 grid gap-3">
+          {templates.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Load from Template <span className="text-muted-foreground">(optional)</span></Label>
+              <Select onValueChange={applyTemplate}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a saved template…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Selecting a template prefills the fields below. You can edit before sending.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Target Role</Label>
             <Select value={targetRole} onValueChange={(value: "patient" | "professional" | "admin") => setTargetRole(value)}>

@@ -33,13 +33,13 @@ export default function ProfessionalEncounters() {
 
   const EncounterCard = ({ enc, isActive }: { enc: any; isActive: boolean }) => (
     <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
           <div className={`w-12 h-12 rounded-full ${isActive ? "bg-primary/10" : "bg-muted"} flex items-center justify-center ${isActive ? "text-primary" : "text-muted-foreground"} font-semibold`}>
             {(nameMap[enc.patient_id] || "P").charAt(0)}
           </div>
-          <div>
-            <p className="font-medium">{nameMap[enc.patient_id] || "Patient"}</p>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{nameMap[enc.patient_id] || "Patient"}</p>
             <p className="text-sm text-muted-foreground">
               {new Date(enc.created_at).toLocaleString("en-GB", { 
                 day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
@@ -48,10 +48,12 @@ export default function ProfessionalEncounters() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge className={statusConfig[enc.status] || statusConfig.pending}>{enc.status.replace("_", " ")}</Badge>
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <Badge className={`whitespace-nowrap ${statusConfig[enc.status] || statusConfig.pending}`}>
+            {enc.status.replace("_", " ")}
+          </Badge>
           {isActive && enc.encounter_type === "telemedicine" && (
-            <Button size="sm" onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
+            <Button size="sm" className="shrink-0" onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
               <Video className="w-4 h-4 mr-1" /> Join
             </Button>
           )}
