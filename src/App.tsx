@@ -33,6 +33,7 @@ import PatientTelemedicine from "@/apps/patient/pages/Telemedicine";
 import PatientReports from "@/apps/patient/pages/Reports";
 import PatientProfile from "@/apps/patient/pages/Profile";
 import PatientSettings from "@/apps/patient/pages/Settings";
+import PatientNotifications from "@/apps/patient/pages/Notifications";
 import PatientMedicalHistorySetup from "@/apps/patient/pages/MedicalHistorySetup";
 
 // Professional pages
@@ -45,6 +46,7 @@ import ProfessionalTranscripts from "@/apps/professional/pages/Transcripts";
 import ProfessionalNotes from "@/apps/professional/pages/Notes";
 import ProfessionalReports from "@/apps/professional/pages/Reports";
 import ProfessionalSettings from "@/apps/professional/pages/Settings";
+import ProfessionalNotifications from "@/apps/professional/pages/Notifications";
 
 // Admin pages
 import AdminDashboard from "@/apps/admin/pages/Dashboard";
@@ -55,6 +57,8 @@ import AdminRoles from "@/apps/admin/pages/Roles";
 import AdminTemplates from "@/apps/admin/pages/Templates";
 import AdminAudit from "@/apps/admin/pages/Audit";
 import AdminSettings from "@/apps/admin/pages/Settings";
+import AdminQuickActions from "@/apps/admin/pages/QuickActions";
+import AdminNotifications from "@/apps/admin/pages/Notifications";
 
 // Not Found
 import NotFound from "./pages/NotFound";
@@ -99,6 +103,7 @@ const App = () => (
                   <Route path="reports/:reportId" element={<PatientReports />} />
                   <Route path="medical-history" element={<PatientMedicalHistorySetup />} />
                   <Route path="profile" element={<PatientProfile />} />
+                  <Route path="notifications" element={<PatientNotifications />} />
                   <Route path="settings" element={<PatientSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>
@@ -116,6 +121,7 @@ const App = () => (
                   <Route path="notes/:noteId/edit" element={<ProfessionalNotes />} />
                   <Route path="reports" element={<ProfessionalReports />} />
                   <Route path="reports/:reportId" element={<ProfessionalReports />} />
+                  <Route path="notifications" element={<ProfessionalNotifications />} />
                   <Route path="settings" element={<ProfessionalSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>
@@ -127,8 +133,10 @@ const App = () => (
                   <Route path="invitations" element={<AdminInvitations />} />
                   <Route path="facilities" element={<AdminFacilities />} />
                   <Route path="roles" element={<AdminRoles />} />
+                  <Route path="quick-actions" element={<AdminQuickActions />} />
                   <Route path="templates" element={<AdminTemplates />} />
                   <Route path="audit" element={<AdminAudit />} />
+                  <Route path="notifications" element={<AdminNotifications />} />
                   <Route path="settings" element={<AdminSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>

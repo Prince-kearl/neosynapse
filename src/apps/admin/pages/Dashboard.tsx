@@ -1,17 +1,67 @@
-import { Users, Mail, Building2, ShieldCheck, ScrollText, Activity, ChevronRight, Loader2 } from "lucide-react";
+import { Users, Mail, Building2, ShieldCheck, ScrollText, Activity, ChevronRight, Loader2, Settings } from "lucide-react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { MetricCard } from "@/components/common/MetricCard";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import type { LucideIcon } from "lucide-react";
+
+type QuickAction = {
+  id: string;
+  label: string;
+  path: string;
+  desc: string;
+  icon: LucideIcon;
+  displayOrder: number;
+};
+
+type QuickActionRow = {
+  id: string;
+  label: string;
+  path: string;
+  description: string;
+  icon: string;
+  is_active: boolean;
+  display_order: number;
+};
+
+const quickActionsQueryKey = ["admin-quick-actions"] as const;
+
+const defaultQuickActions: QuickAction[] = [
+  { id: "default-invite", label: "Invite Professional", path: "/admin/invitations", icon: Mail, desc: "Send invite link", displayOrder: 1 },
+  { id: "default-users", label: "Manage Users", path: "/admin/users", icon: Users, desc: "View all accounts", displayOrder: 2 },
+  { id: "default-facilities", label: "Add Facility", path: "/admin/facilities", icon: Building2, desc: "Register location", displayOrder: 3 },
+  { id: "default-audit", label: "View Audit Log", path: "/admin/audit", icon: ScrollText, desc: "Review activity", displayOrder: 4 },
+];
+
+const quickActionIcons: Record<string, LucideIcon> = {
+  Mail,
+  Users,
+  Building2,
+  ScrollText,
+  ShieldCheck,
+  Activity,
+  Settings,
+};
+
+const mapRowToQuickAction = (row: QuickActionRow): QuickAction => ({
+  id: row.id,
+  label: row.label,
+  path: row.path,
+  desc: row.description,
+  icon: quickActionIcons[row.icon] || ShieldCheck,
+  displayOrder: row.display_order,
+});
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useUserRole();
 
@@ -74,6 +124,78 @@ export default function AdminDashboard() {
     },
   });
 
+  const { data: quickActions = defaultQuickActions } = useQuery({
+    queryKey: quickActionsQueryKey,
+    queryFn: async (): Promise<QuickAction[]> => {
+      // Keep this query loosely typed until generated DB types include admin_quick_actions.
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("admin_quick_actions")
+        .select("id, label, path, description, icon, is_active, display_order")
+        .eq("is_active", true)
+        .order("display_order", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching admin quick actions:", error);
+        return defaultQuickActions;
+      }
+
+      if (!data || data.length === 0) return defaultQuickActions;
+
+      return (data as QuickActionRow[]).map(mapRowToQuickAction);
+    },
+  });
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel("admin-quick-actions-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_quick_actions" },
+        (payload) => {
+          queryClient.setQueryData<QuickAction[]>(quickActionsQueryKey, (current = defaultQuickActions) => {
+            const eventType = payload.eventType;
+
+            if (eventType === "DELETE") {
+              const oldRow = payload.old as Partial<QuickActionRow>;
+              const next = current.filter((item) => item.id !== oldRow.id);
+              return next.length > 0 ? next : defaultQuickActions;
+            }
+
+            const row = payload.new as Partial<QuickActionRow>;
+            if (!row.id) return current;
+
+            const mapped = mapRowToQuickAction({
+              id: row.id,
+              label: row.label || "Untitled",
+              path: row.path || "/admin/dashboard",
+              description: row.description || "Quick action",
+              icon: row.icon || "Settings",
+              is_active: row.is_active ?? true,
+              display_order: row.display_order ?? 999,
+            });
+
+            const withoutCurrent = current.filter((item) => item.id !== row.id);
+            if (row.is_active === false) {
+              return withoutCurrent.length > 0 ? withoutCurrent : defaultQuickActions;
+            }
+
+            return [...withoutCurrent, mapped].sort((a, b) => a.displayOrder - b.displayOrder);
+          });
+
+          // Refetch in background to ensure exact parity after optimistic cache patch.
+          queryClient.invalidateQueries({ queryKey: quickActionsQueryKey });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
+
   const stats = [
     { label: "Total Users", value: userCount, icon: Users, color: "text-primary" },
     { label: "Pending Invites", value: pendingInvites, icon: Mail, color: "text-yellow-400" },
@@ -128,14 +250,9 @@ export default function AdminDashboard() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Quick Actions</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: "Invite Professional", path: "/admin/invitations", icon: Mail, desc: "Send invite link" },
-              { label: "Manage Users", path: "/admin/users", icon: Users, desc: "View all accounts" },
-              { label: "Add Facility", path: "/admin/facilities", icon: Building2, desc: "Register location" },
-              { label: "View Audit Log", path: "/admin/audit", icon: ScrollText, desc: "Review activity" },
-            ].map((action) => (
+            {quickActions.map((action) => (
               <button
-                key={action.label}
+                key={action.id}
                 onClick={() => navigate(action.path)}
                 className="bg-card border border-border rounded-2xl p-4 text-left hover:border-primary/50 transition-colors group"
               >

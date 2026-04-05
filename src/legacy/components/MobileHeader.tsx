@@ -5,6 +5,7 @@ import { FilterChips } from "./FilterChips";
 import { Bell, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { useUnreadNotificationsCount } from "@/shared/hooks/useNotifications";
 
 interface MobileHeaderProps {
   searchQuery?: string;
@@ -40,6 +41,7 @@ export function MobileHeader({
   isLocating
 }: MobileHeaderProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const { unreadCount } = useUnreadNotificationsCount();
 
   const handleSearchChange = (value: string) => {
     setLocalSearch(value);
@@ -65,8 +67,17 @@ export function MobileHeader({
         )}
 
         <div className="flex items-center gap-2 max-[380px]:gap-1.5">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full max-[380px]:h-8 max-[380px]:w-8">
-            <Bell className="h-4 w-4 text-muted-foreground max-[380px]:h-3.5 max-[380px]:w-3.5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full max-[380px]:h-8 max-[380px]:w-8" asChild>
+            <Link to="/patient/notifications">
+              <span className="relative inline-flex">
+                <Bell className="h-4 w-4 text-muted-foreground max-[380px]:h-3.5 max-[380px]:w-3.5" />
+                {unreadCount > 0 ? (
+                  <span className="absolute -right-2 -top-2 inline-flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-semibold text-destructive-foreground">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
+              </span>
+            </Link>
           </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-primary/10 max-[380px]:h-8 max-[380px]:w-8" asChild>
             <Link to="/patient/profile">

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import {
   Loader2, Mail, Lock, Eye, EyeOff, Activity, User,
   CheckCircle, XCircle, Stethoscope, Award, FileText,
@@ -21,6 +22,8 @@ const acceptSchema = z.object({
 });
 
 export default function InviteAccept() {
+  type RequiredField = "fullName" | "password" | "confirmPassword";
+
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const navigate = useNavigate();
@@ -43,6 +46,15 @@ export default function InviteAccept() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const touched = useTouchedFields<RequiredField>();
+
+  const fullNameError = fullName.trim().length < 2 ? "Name must be at least 2 characters" : undefined;
+  const passwordError = password.length < 6 ? "Password must be at least 6 characters" : undefined;
+  const confirmPasswordError = confirmPassword !== password ? "Passwords do not match" : undefined;
+
+  const showFullNameError = touched.isTouched("fullName") && !!fullNameError;
+  const showPasswordError = touched.isTouched("password") && !!passwordError;
+  const showConfirmPasswordError = touched.isTouched("confirmPassword") && !!confirmPasswordError;
 
   useEffect(() => {
     async function verifyInvitation() {
@@ -244,11 +256,17 @@ export default function InviteAccept() {
                   type="text"
                   placeholder="Dr. Jane Smith"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    touched.touch("fullName");
+                  }}
+                  onBlur={() => touched.touch("fullName")}
+                  aria-invalid={showFullNameError}
                   className="pl-10 h-12 rounded-xl"
                   required
                 />
               </div>
+              {showFullNameError && <p className="text-xs text-destructive">{fullNameError}</p>}
             </div>
 
             {/* Password */}
@@ -261,7 +279,12 @@ export default function InviteAccept() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    touched.touch("password");
+                  }}
+                  onBlur={() => touched.touch("password")}
+                  aria-invalid={showPasswordError}
                   className="pl-10 pr-10 h-12 rounded-xl"
                   required
                 />
@@ -273,7 +296,11 @@ export default function InviteAccept() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">At least 6 characters</p>
+              {showPasswordError ? (
+                <p className="text-xs text-destructive">{passwordError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">At least 6 characters</p>
+              )}
             </div>
 
             {/* Confirm Password */}
@@ -286,11 +313,17 @@ export default function InviteAccept() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    touched.touch("confirmPassword");
+                  }}
+                  onBlur={() => touched.touch("confirmPassword")}
+                  aria-invalid={showConfirmPasswordError}
                   className="pl-10 h-12 rounded-xl"
                   required
                 />
               </div>
+              {showConfirmPasswordError && <p className="text-xs text-destructive">{confirmPasswordError}</p>}
             </div>
 
             {/* Optional professional fields */}

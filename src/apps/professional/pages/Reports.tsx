@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfessionalReports } from "@/shared/hooks/useHealthcare";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +24,7 @@ export default function ProfessionalReports() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const { data: ownAuditLogs = [] } = useQuery({
     queryKey: ["own-audit-logs", user?.id],
     queryFn: async () => {
@@ -31,6 +33,24 @@ export default function ProfessionalReports() {
       return data || [];
     },
     enabled: !!user && !!selectedReport,
+  });
+
+  const { data: activeTemplates = [] } = useQuery({
+    queryKey: ["pro-report-templates"],
+    queryFn: async () => {
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("admin_document_templates")
+        .select("id, name, template_type, content, is_active, is_default")
+        .eq("is_active", true)
+        .eq("category", "report")
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedReport,
   });
 
   const selectedReportAuditTimeline = selectedReport
@@ -77,6 +97,55 @@ export default function ProfessionalReports() {
     if (!selectedReport) return;
     setReportEditorText(JSON.stringify(selectedReport.report_json ?? {}, null, 2));
   }, [selectedReport?.id, selectedReport?.created_at]);
+
+  const reportTypeToTemplateType = (reportType: string | null | undefined) => {
+    const value = (reportType || "").toLowerCase();
+    if (value.includes("lab")) return "lab_report";
+    if (value.includes("radiology")) return "radiology_report";
+    if (value.includes("follow")) return "follow_up_report";
+    return "consultation_report";
+  };
+
+  useEffect(() => {
+    if (!selectedReport) return;
+    if (!activeTemplates.length) {
+      setSelectedTemplateId("none");
+      return;
+    }
+
+    const mappedType = reportTypeToTemplateType(selectedReport.report_type);
+    const defaultForType = activeTemplates.find((t: any) => t.is_default && t.template_type === mappedType);
+    const fallbackDefault = activeTemplates.find((t: any) => t.is_default);
+    const chosen = defaultForType || fallbackDefault;
+    setSelectedTemplateId(chosen ? chosen.id : "none");
+  }, [selectedReport?.id, selectedReport?.report_type, activeTemplates]);
+
+  const applySelectedTemplate = () => {
+    if (!selectedReport || selectedTemplateId === "none") return;
+    const template = activeTemplates.find((t: any) => t.id === selectedTemplateId);
+    if (!template) return;
+
+    const currentJson = parseReportEditorJson();
+    if (currentJson === null) return;
+
+    const hasContent = Object.keys(currentJson).length > 0;
+    if (hasContent && !window.confirm("Applying a template will replace current report draft content. Continue?")) {
+      return;
+    }
+
+    const templatedJson = {
+      template_id: template.id,
+      template_name: template.name,
+      template_type: template.template_type,
+      report_type: selectedReport.report_type,
+      content: template.content,
+      status: getReportStatus(selectedReport),
+      generated_from_template: true,
+    };
+
+    setReportEditorText(JSON.stringify(templatedJson, null, 2));
+    toast({ title: "Template applied", description: `${template.name} loaded into report draft.` });
+  };
 
   const parseReportEditorJson = () => {
     try {
@@ -170,6 +239,42 @@ export default function ProfessionalReports() {
             {selectedReport && (
               <>
                 <div className="text-sm text-muted-foreground">Type: {selectedReport.report_type}</div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger className="sm:w-72">
+                      <SelectValue placeholder="Choose report template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No template</SelectItem>
+                      {activeTemplates.map((template: any) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <span>{template.name}</span>
+                            {template.is_default ? (
+                              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                                Default (auto-selected)
+                              </span>
+                            ) : null}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={applySelectedTemplate}
+                    disabled={selectedTemplateId === "none"}
+                  >
+                    Apply Template
+                  </Button>
+                  {selectedReport.report_type && (
+                    <span className="text-xs text-muted-foreground">
+                      Suggested type: {reportTypeToTemplateType(selectedReport.report_type).replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
                 <textarea
                   value={reportEditorText}
                   onChange={(e) => setReportEditorText(e.target.value)}

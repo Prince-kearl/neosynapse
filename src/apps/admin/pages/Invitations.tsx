@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 
 const statusStyles: Record<string, string> = {
   pending: "border-yellow-500/50 text-yellow-500",
@@ -25,6 +26,23 @@ export default function AdminInvitations() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("professional");
   const [facilityId, setFacilityId] = useState<string>("");
+  const touched = useTouchedFields<"email">();
+
+  const emailValue = email.trim();
+  const emailError = !emailValue
+    ? "Email is required"
+    : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)
+    ? undefined
+    : "Enter a valid email address";
+  const showEmailError = touched.isTouched("email") && !!emailError;
+  const isInviteFormValid = !emailError;
+
+  const resetForm = () => {
+    setEmail("");
+    setFacilityId("");
+    setRole("professional");
+    touched.reset();
+  };
 
   const { data: invitations = [], isLoading } = useQuery({
     queryKey: ["admin-invitations"],
@@ -73,8 +91,7 @@ export default function AdminInvitations() {
           navigator.clipboard.writeText(data.invite_link).catch(() => {});
         }
       }
-      setEmail("");
-      setFacilityId("");
+      resetForm();
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
     },
@@ -143,7 +160,14 @@ export default function AdminInvitations() {
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Invitations</h1>
             <p className="text-muted-foreground">Manage professional and admin invitations</p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)}>
+          <Button
+            onClick={() => {
+              if (showForm) {
+                resetForm();
+              }
+              setShowForm(!showForm);
+            }}
+          >
             <Plus className="w-4 h-4 mr-2" /> New Invitation
           </Button>
         </div>
@@ -153,12 +177,20 @@ export default function AdminInvitations() {
           <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
             <h3 className="font-semibold">Create Invitation</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Input
-                placeholder="email@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12 rounded-xl"
-              />
+              <div className="space-y-1">
+                <Input
+                  placeholder="email@example.com"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    touched.touch("email");
+                  }}
+                  onBlur={() => touched.touch("email")}
+                  aria-invalid={showEmailError}
+                  className="h-12 rounded-xl"
+                />
+                {showEmailError && <p className="text-xs text-destructive">{emailError}</p>}
+              </div>
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -175,7 +207,7 @@ export default function AdminInvitations() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={() => createInvite.mutate()} disabled={createInvite.isPending || !email} className="h-12">
+              <Button onClick={() => createInvite.mutate()} disabled={createInvite.isPending || !isInviteFormValid} className="h-12">
                 {createInvite.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" /> Send Invite</>}
               </Button>
             </div>

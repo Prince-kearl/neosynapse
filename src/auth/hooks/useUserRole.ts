@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole, Profile } from "@/shared/types/healthcare";
 
 export function useUserRole() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Fetch profile
   const { data: profile, isLoading: profileLoading } = useQuery({
@@ -26,7 +28,9 @@ export function useUserRole() {
       return data as Profile | null;
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   // Fetch all roles from user_roles table (multi-role support)
@@ -48,8 +52,34 @@ export function useUserRole() {
       return (data || []).map((r) => r.role as UserRole);
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`user-roles-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_roles",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["user-roles", user.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
 
   const roles = userRoles || [];
   // Primary role for backward compatibility (priority: admin > professional > patient)

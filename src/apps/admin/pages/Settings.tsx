@@ -94,7 +94,7 @@ export default function AdminSettings() {
         </section>
 
         {/* Notifications */}
-        <section>
+        <section id="notifications">
           <h2 className="font-display text-lg font-semibold mb-3">Notifications</h2>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
             <div className="flex items-center justify-between p-4">

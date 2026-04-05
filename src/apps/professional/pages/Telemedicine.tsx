@@ -676,14 +676,14 @@ export default function ProfessionalTelemedicine() {
           <p className="text-muted-foreground text-sm">
             The session with {patientName} has ended. You can now write clinical notes for this encounter.
           </p>
-          <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={handleBackToList}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleBackToList}>
               Back to Waiting List
             </Button>
-            <Button onClick={() => navigate(getEncounterContextPath("/professional/notes"))}>
+            <Button className="w-full sm:w-auto" onClick={() => navigate(getEncounterContextPath("/professional/notes"))}>
               Write Notes
             </Button>
-            <Button variant="secondary" onClick={() => navigate(getEncounterContextPath("/professional/transcripts"))}>
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={() => navigate(getEncounterContextPath("/professional/transcripts"))}>
               Review Transcript
             </Button>
           </div>
@@ -742,12 +742,12 @@ export default function ProfessionalTelemedicine() {
 
         {/* Waiting Patients */}
         <section className="bg-card rounded-2xl p-5 border border-border">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-display text-lg font-semibold flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" />
               Waiting Patients
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {ringingEncounterId ? (
                 <>
                   <Button size="sm" variant="outline" className="h-8" onClick={stopRinging}>
@@ -780,28 +780,30 @@ export default function ProfessionalTelemedicine() {
           ) : waitingEncounters.length > 0 ? (
             <div className="space-y-3">
               {waitingEncounters.map((enc) => (
-                <div key={enc.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
-                  <div className="flex items-center gap-4">
+                <div key={enc.id} className="flex flex-col gap-3 rounded-xl bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
                       {getPatientName(enc.patient_id).charAt(0)}
                     </div>
-                    <div>
-                      <p className="font-medium">{getPatientName(enc.patient_id)}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{getPatientName(enc.patient_id)}</p>
                       <p className="text-sm text-muted-foreground">
                         {enc.status === "in_progress" ? "In progress" : "Waiting"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <span className="text-xs text-muted-foreground sm:text-sm">
                       {getWaitTime(enc.created_at)}
                     </span>
                     <Badge variant="outline" className={
-                      enc.status === "in_progress" ? "border-primary/50 text-primary" : "border-yellow-500/50 text-yellow-500"
+                      enc.status === "in_progress"
+                        ? "border-primary/50 text-primary capitalize"
+                        : "border-yellow-500/50 text-yellow-500 capitalize"
                     }>
                       {enc.status.replace("_", " ")}
                     </Badge>
-                    <Button onClick={() => handleSelectEncounter(enc.id, enc.patient_id)}>
+                    <Button className="w-full sm:w-auto" onClick={() => handleSelectEncounter(enc.id, enc.patient_id)}>
                       <Video className="w-4 h-4 mr-2" />
                       Join Call
                     </Button>

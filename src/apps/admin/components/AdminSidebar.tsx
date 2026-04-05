@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Mail, Building2, ShieldCheck, 
-  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, Activity,
+  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, Activity, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ const navItems = [
   { title: "Invitations", url: "/admin/invitations", icon: Mail },
   { title: "Facilities", url: "/admin/facilities", icon: Building2 },
   { title: "Roles", url: "/admin/roles", icon: ShieldCheck },
+  { title: "Quick Actions", url: "/admin/quick-actions", icon: SlidersHorizontal },
   { title: "Templates", url: "/admin/templates", icon: FileCode },
   { title: "Audit Log", url: "/admin/audit", icon: ScrollText },
 ];

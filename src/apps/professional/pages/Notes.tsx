@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
@@ -44,6 +45,7 @@ export default function ProfessionalNotes() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("none");
   const { data: ownAuditLogs = [] } = useQuery({
     queryKey: ["own-audit-logs", user?.id],
     queryFn: async () => {
@@ -52,6 +54,24 @@ export default function ProfessionalNotes() {
       return data || [];
     },
     enabled: !!user && !!selectedNote,
+  });
+
+  const { data: activeTemplates = [] } = useQuery({
+    queryKey: ["pro-note-templates"],
+    queryFn: async () => {
+      const db = supabase as any;
+      const { data, error } = await db
+        .from("admin_document_templates")
+        .select("id, name, template_type, content, is_active, is_default")
+        .eq("is_active", true)
+        .eq("category", "document")
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedNote,
   });
 
   const selectedNoteAuditTimeline = selectedNote
@@ -66,6 +86,44 @@ export default function ProfessionalNotes() {
     if (!selectedNote) return;
     setNoteEditorText(JSON.stringify(selectedNote.final_json ?? selectedNote.draft_json ?? {}, null, 2));
   }, [selectedNote?.id, selectedNote?.updated_at]);
+
+  useEffect(() => {
+    if (!selectedNote) return;
+    if (!activeTemplates.length) {
+      setSelectedTemplateId("none");
+      return;
+    }
+
+    const defaultForType = activeTemplates.find((t: any) => t.is_default && t.template_type === "clinical_note");
+    const fallbackDefault = activeTemplates.find((t: any) => t.is_default);
+    const chosen = defaultForType || fallbackDefault;
+    setSelectedTemplateId(chosen ? chosen.id : "none");
+  }, [selectedNote?.id, activeTemplates]);
+
+  const applySelectedTemplate = () => {
+    if (!selectedNote || selectedTemplateId === "none") return;
+    const template = activeTemplates.find((t: any) => t.id === selectedTemplateId);
+    if (!template) return;
+
+    const currentJson = parseNoteEditorJson();
+    if (currentJson === null) return;
+
+    const hasContent = Object.keys(currentJson).length > 0;
+    if (hasContent && !window.confirm("Applying a template will replace current draft content. Continue?")) {
+      return;
+    }
+
+    const templatedJson = {
+      template_id: template.id,
+      template_name: template.name,
+      template_type: template.template_type,
+      content: template.content,
+      generated_from_template: true,
+    };
+
+    setNoteEditorText(JSON.stringify(templatedJson, null, 2));
+    toast({ title: "Template applied", description: `${template.name} loaded into note draft.` });
+  };
 
   const parseNoteEditorJson = () => {
     try {
@@ -313,6 +371,37 @@ export default function ProfessionalNotes() {
                   <span>Encounter: {selectedNote.encounter_id}</span>
                   <span>•</span>
                   <span>Status: {selectedNote.status}</span>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger className="sm:w-72">
+                      <SelectValue placeholder="Choose note template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No template</SelectItem>
+                      {activeTemplates.map((template: any) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <div className="flex w-full items-center justify-between gap-2">
+                            <span>{template.name}</span>
+                            {template.is_default ? (
+                              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                                Default (auto-selected)
+                              </span>
+                            ) : null}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={applySelectedTemplate}
+                    disabled={selectedTemplateId === "none"}
+                  >
+                    Apply Template
+                  </Button>
                 </div>
                 <textarea
                   value={noteEditorText}

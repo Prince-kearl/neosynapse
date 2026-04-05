@@ -8,6 +8,7 @@ import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 
 export default function AdminFacilities() {
   const queryClient = useQueryClient();
@@ -16,6 +17,28 @@ export default function AdminFacilities() {
   const [facilityType, setFacilityType] = useState("");
   const [location, setLocation] = useState("");
   const [phone, setPhone] = useState("");
+  const touched = useTouchedFields<"name" | "phone">();
+
+  const nameValue = name.trim();
+  const phoneValue = phone.trim();
+  const nameError = !nameValue ? "Facility name is required" : undefined;
+  const phoneError = !phoneValue
+    ? undefined
+    : /^[+()\-\s\d]{7,20}$/.test(phoneValue)
+    ? undefined
+    : "Enter a valid phone number";
+
+  const showNameError = touched.isTouched("name") && !!nameError;
+  const showPhoneError = touched.isTouched("phone") && !!phoneError;
+  const isFacilityFormValid = !nameError && !phoneError;
+
+  const resetForm = () => {
+    setName("");
+    setFacilityType("");
+    setLocation("");
+    setPhone("");
+    touched.reset();
+  };
 
   const { data: facilities = [], isLoading } = useQuery({
     queryKey: ["admin-facilities"],
@@ -53,7 +76,7 @@ export default function AdminFacilities() {
     },
     onSuccess: () => {
       toast({ title: "Facility created" });
-      setName(""); setFacilityType(""); setLocation(""); setPhone("");
+      resetForm();
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["admin-facilities"] });
     },
@@ -70,7 +93,14 @@ export default function AdminFacilities() {
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Facilities</h1>
             <p className="text-muted-foreground">Manage hospitals, clinics, and health centers</p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)}>
+          <Button
+            onClick={() => {
+              if (showForm) {
+                resetForm();
+              }
+              setShowForm(!showForm);
+            }}
+          >
             <Plus className="w-4 h-4 mr-2" /> Add Facility
           </Button>
         </div>
@@ -80,7 +110,20 @@ export default function AdminFacilities() {
           <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
             <h3 className="font-semibold">New Facility</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input placeholder="Facility name" value={name} onChange={(e) => setName(e.target.value)} className="h-12 rounded-xl" />
+              <div className="space-y-1">
+                <Input
+                  placeholder="Facility name"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    touched.touch("name");
+                  }}
+                  onBlur={() => touched.touch("name")}
+                  aria-invalid={showNameError}
+                  className="h-12 rounded-xl"
+                />
+                {showNameError && <p className="text-xs text-destructive">{nameError}</p>}
+              </div>
               <Select value={facilityType} onValueChange={setFacilityType}>
                 <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Type" /></SelectTrigger>
                 <SelectContent>
@@ -92,9 +135,22 @@ export default function AdminFacilities() {
                 </SelectContent>
               </Select>
               <Input placeholder="Location / Address" value={location} onChange={(e) => setLocation(e.target.value)} className="h-12 rounded-xl" />
-              <Input placeholder="Contact phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 rounded-xl" />
+              <div className="space-y-1">
+                <Input
+                  placeholder="Contact phone"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    touched.touch("phone");
+                  }}
+                  onBlur={() => touched.touch("phone")}
+                  aria-invalid={showPhoneError}
+                  className="h-12 rounded-xl"
+                />
+                {showPhoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+              </div>
             </div>
-            <Button onClick={() => createFacility.mutate()} disabled={createFacility.isPending || !name}>
+            <Button onClick={() => createFacility.mutate()} disabled={createFacility.isPending || !isFacilityFormValid}>
               {createFacility.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Facility"}
             </Button>
           </div>

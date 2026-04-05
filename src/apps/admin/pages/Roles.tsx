@@ -3,32 +3,49 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const roleDescriptions: Record<string, string> = {
-  patient: "Self-signup. Access to own health data, appointments, AI assistant, and telemedicine.",
-  professional: "Invite-only. Access to assigned patients, encounters, notes, transcripts, and reports.",
-  admin: "Invite-only. Full system management including users, facilities, invitations, and audit logs.",
-};
-
-const roleAccess: Record<string, string[]> = {
-  patient: ["Dashboard", "AI Assistant", "Symptom Checker", "Appointments", "Telemedicine", "Reports", "Profile", "Settings"],
-  professional: ["Dashboard", "Patients", "Encounters", "Telemedicine", "Transcripts", "Clinical Notes", "Reports", "Settings"],
-  admin: ["Dashboard", "Users", "Invitations", "Facilities", "Roles", "Templates", "Audit Log", "Settings"],
-};
+const rolePriority = ["admin", "professional", "patient"];
 
 export default function AdminRoles() {
-  // Fetch role counts from profiles
-  const { data: roleCounts = { patient: 0, professional: 0, admin: 0 }, isLoading } = useQuery({
-    queryKey: ["admin-role-counts"],
+  const { data: roleStats = [], isLoading } = useQuery({
+    queryKey: ["admin-role-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("role");
-      if (error) return { patient: 0, professional: 0, admin: 0 };
-      const counts: Record<string, number> = { patient: 0, professional: 0, admin: 0 };
-      (data || []).forEach((p: any) => { counts[p.role] = (counts[p.role] || 0) + 1; });
-      return counts;
+      const [{ data: roleRows, error: roleError }, { data: profiles, error: profileError }] = await Promise.all([
+        supabase.from("user_roles").select("user_id, role"),
+        supabase.from("profiles").select("user_id, full_name, display_name"),
+      ]);
+
+      if (roleError) throw roleError;
+      if (profileError) throw profileError;
+
+      const profileMap = new Map<string, { full_name: string | null; display_name: string | null }>();
+      (profiles || []).forEach((p) => {
+        profileMap.set(p.user_id, { full_name: p.full_name, display_name: p.display_name });
+      });
+
+      const byRole = new Map<string, { role: string; count: number; recentUsers: string[] }>();
+      (roleRows || []).forEach((row) => {
+        const entry = byRole.get(row.role) || { role: row.role, count: 0, recentUsers: [] };
+        entry.count += 1;
+
+        const p = profileMap.get(row.user_id);
+        const name = p?.full_name || p?.display_name || row.user_id.slice(0, 8);
+        if (!entry.recentUsers.includes(name) && entry.recentUsers.length < 5) {
+          entry.recentUsers.push(name);
+        }
+
+        byRole.set(row.role, entry);
+      });
+
+      return Array.from(byRole.values()).sort((a, b) => {
+        const aIdx = rolePriority.indexOf(a.role);
+        const bIdx = rolePriority.indexOf(b.role);
+        if (aIdx === -1 && bIdx === -1) return a.role.localeCompare(b.role);
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+        return aIdx - bIdx;
+      });
     },
   });
-
-  const roles = ["patient", "professional", "admin"];
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -44,29 +61,32 @@ export default function AdminRoles() {
           </div>
         ) : (
           <div className="space-y-4">
-            {roles.map((role) => (
-              <div key={role} className="bg-card rounded-2xl p-5 border border-border">
+            {roleStats.map((entry: any) => (
+              <div key={entry.role} className="bg-card rounded-2xl p-5 border border-border">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                     <ShieldCheck className="w-6 h-6 text-primary" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
-                      <p className="font-semibold text-lg capitalize">{role}</p>
+                      <p className="font-semibold text-lg capitalize">{entry.role}</p>
                       <Badge variant="outline" className="flex items-center gap-1">
-                        <Users className="w-3 h-3" /> {(roleCounts as any)[role]} users
+                        <Users className="w-3 h-3" /> {entry.count} users
                       </Badge>
-                      {role !== "patient" && (
+                      {entry.role !== "patient" && (
                         <Badge variant="outline" className="border-yellow-500/50 text-yellow-500">Invite Only</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">{roleDescriptions[role]}</p>
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">Access</p>
+                      <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">Recent Members</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {roleAccess[role].map((page) => (
-                          <span key={page} className="text-xs bg-muted px-2 py-1 rounded-md">{page}</span>
-                        ))}
+                        {entry.recentUsers.length > 0 ? (
+                          entry.recentUsers.map((name: string) => (
+                            <span key={name} className="text-xs bg-muted px-2 py-1 rounded-md">{name}</span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No users assigned yet</span>
+                        )}
                       </div>
                     </div>
                   </div>

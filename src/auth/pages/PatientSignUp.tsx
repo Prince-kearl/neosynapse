@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import { Loader2, Mail, Lock, Eye, EyeOff, Activity, User } from "lucide-react";
 
 const signUpSchema = z.object({
@@ -21,6 +22,8 @@ const signUpSchema = z.object({
 });
 
 export default function PatientSignUp() {
+  type RequiredField = "fullName" | "email" | "password";
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,9 +37,18 @@ export default function PatientSignUp() {
   const [error, setError] = useState<string | null>(null);
   const [configWarning, setConfigWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const touched = useTouchedFields<RequiredField>();
   
   const { signUp, signIn } = useAuth();
   const navigate = useNavigate();
+
+  const fullNameError = fullName.trim().length < 2 ? "Name must be at least 2 characters" : undefined;
+  const emailError = z.string().trim().email().safeParse(email).success ? undefined : "Invalid email address";
+  const passwordError = password.length < 6 ? "Password must be at least 6 characters" : undefined;
+
+  const showFullNameError = touched.isTouched("fullName") && !!fullNameError;
+  const showEmailError = touched.isTouched("email") && !!emailError;
+  const showPasswordError = touched.isTouched("password") && !!passwordError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,11 +160,17 @@ export default function PatientSignUp() {
                   type="text"
                   placeholder="John Doe"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    touched.touch("fullName");
+                  }}
+                  onBlur={() => touched.touch("fullName")}
+                  aria-invalid={showFullNameError}
                   className="pl-10 h-12 rounded-xl"
                   required
                 />
               </div>
+              {showFullNameError && <p className="text-xs text-destructive">{fullNameError}</p>}
             </div>
 
             <div className="space-y-2">
@@ -164,11 +182,17 @@ export default function PatientSignUp() {
                   type="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    touched.touch("email");
+                  }}
+                  onBlur={() => touched.touch("email")}
+                  aria-invalid={showEmailError}
                   className="pl-10 h-12 rounded-xl"
                   required
                 />
               </div>
+              {showEmailError && <p className="text-xs text-destructive">{emailError}</p>}
             </div>
 
             <div className="space-y-2">
@@ -180,7 +204,12 @@ export default function PatientSignUp() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    touched.touch("password");
+                  }}
+                  onBlur={() => touched.touch("password")}
+                  aria-invalid={showPasswordError}
                   className="pl-10 pr-10 h-12 rounded-xl"
                   required
                 />
@@ -192,7 +221,11 @@ export default function PatientSignUp() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">At least 6 characters</p>
+              {showPasswordError ? (
+                <p className="text-xs text-destructive">{passwordError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">At least 6 characters</p>
+              )}
             </div>
 
             <div className="space-y-2">

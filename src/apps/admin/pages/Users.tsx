@@ -14,6 +14,15 @@ const roleStyles: Record<string, string> = {
   admin: "border-destructive/50 text-destructive",
 };
 
+const rolePriority = ["admin", "professional", "patient"];
+
+const getPrimaryRole = (roles: string[], fallbackRole?: string | null) => {
+  for (const role of rolePriority) {
+    if (roles.includes(role)) return role;
+  }
+  return fallbackRole || null;
+};
+
 export default function AdminUsers() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
@@ -22,12 +31,36 @@ export default function AdminUsers() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      const [{ data: profiles, error: profilesError }, { data: userRoles, error: rolesError }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, user_id, full_name, display_name, role, status, created_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("user_roles")
+          .select("user_id, role"),
+      ]);
+
+      if (profilesError) throw profilesError;
+      if (rolesError) throw rolesError;
+
+      const roleMap = new Map<string, string[]>();
+      for (const row of userRoles || []) {
+        const list = roleMap.get(row.user_id) || [];
+        if (!list.includes(row.role)) list.push(row.role);
+        roleMap.set(row.user_id, list);
+      }
+
+      return (profiles || []).map((profile) => {
+        const roles = roleMap.get(profile.user_id) || [];
+        const primaryRole = getPrimaryRole(roles, profile.role);
+
+        return {
+          ...profile,
+          roles: roles.length > 0 ? roles : (primaryRole ? [primaryRole] : []),
+          primaryRole,
+        };
+      });
     },
   });
 
@@ -52,8 +85,21 @@ export default function AdminUsers() {
     const name = u.full_name || u.display_name || "";
     const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
       (u.user_id || "").toLowerCase().includes(search.toLowerCase());
-    const matchesRole = !roleFilter || u.role === roleFilter;
+    const matchesRole = !roleFilter || u.roles.includes(roleFilter) || u.primaryRole === roleFilter;
     return matchesSearch && matchesRole;
+  });
+
+  const availableRoles = Array.from(
+    new Set(
+      users.flatMap((u: any) => (u.roles?.length ? u.roles : u.primaryRole ? [u.primaryRole] : []))
+    )
+  ).sort((a, b) => {
+    const aIdx = rolePriority.indexOf(a);
+    const bIdx = rolePriority.indexOf(b);
+    if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
+    if (aIdx === -1) return 1;
+    if (bIdx === -1) return -1;
+    return aIdx - bIdx;
   });
 
   return (
@@ -71,7 +117,7 @@ export default function AdminUsers() {
             <Input placeholder="Search by name..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-12 rounded-xl" />
           </div>
           <div className="flex gap-2">
-            {["patient", "professional", "admin"].map((role) => (
+            {availableRoles.map((role) => (
               <Button
                 key={role}
                 variant={roleFilter === role ? "default" : "outline"}
@@ -106,7 +152,11 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant="outline" className={roleStyles[u.role] || ""}>{u.role}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    {(u.roles || []).map((role: string) => (
+                      <Badge key={role} variant="outline" className={roleStyles[role] || ""}>{role}</Badge>
+                    ))}
+                  </div>
                   <Badge variant="outline" className={
                     u.status === "active" ? "border-emerald-500/50 text-emerald-500" : "border-destructive/50 text-destructive"
                   }>
