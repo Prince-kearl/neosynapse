@@ -90,24 +90,36 @@ export default function ProfessionalNotes() {
     )
     : [];
 
-  const creatableEncounters = encounters.filter((enc: any) => {
+  const availableEncounters = encounters.filter((enc: any) => {
     if (encounterFilterId && enc.id !== encounterFilterId) return false;
-    return !notes.some((note: any) => note.encounter_id === enc.id);
+    return true;
   });
 
+  const noteCountByEncounter = notes.reduce((acc: Record<string, number>, note: any) => {
+    acc[note.encounter_id] = (acc[note.encounter_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const latestNoteByEncounter = notes.reduce((acc: Record<string, any>, note: any) => {
+    if (!acc[note.encounter_id]) {
+      acc[note.encounter_id] = note;
+    }
+    return acc;
+  }, {});
+
   useEffect(() => {
-    if (encounterFilterId && creatableEncounters.some((enc: any) => enc.id === encounterFilterId)) {
+    if (encounterFilterId && availableEncounters.some((enc: any) => enc.id === encounterFilterId)) {
       setSelectedEncounterId(encounterFilterId);
       return;
     }
 
     setSelectedEncounterId((current) => {
-      if (current !== "none" && creatableEncounters.some((enc: any) => enc.id === current)) {
+      if (current !== "none" && availableEncounters.some((enc: any) => enc.id === current)) {
         return current;
       }
-      return creatableEncounters[0]?.id ?? "none";
+      return availableEncounters[0]?.id ?? "none";
     });
-  }, [encounterFilterId, creatableEncounters]);
+  }, [encounterFilterId, availableEncounters]);
 
   useEffect(() => {
     if (!selectedNote) return;
@@ -323,20 +335,16 @@ export default function ProfessionalNotes() {
     toast({ title: "Note finalized and report synced" });
   };
 
-  const createNote = async () => {
-    if (!user?.id || selectedEncounterId === "none") return;
+  const createNoteForEncounter = async (encounterId: string) => {
+    if (!user?.id || encounterId === "none") return;
 
-    const existingNote = notes.find((note: any) => note.encounter_id === selectedEncounterId);
-    if (existingNote) {
-      toast({ title: "Note already exists", description: "Opening the existing note for this encounter." });
-      navigate(`/professional/notes/${existingNote.id}/edit?encounterId=${selectedEncounterId}`);
-      return;
-    }
+    const previousNote = latestNoteByEncounter[encounterId];
+    const draftSeed = previousNote?.final_json ?? previousNote?.draft_json ?? {};
 
     setIsCreatingNote(true);
     const { data, error } = await clinicalNoteService.create({
-      encounter_id: selectedEncounterId,
-      draft_json: {},
+      encounter_id: encounterId,
+      draft_json: draftSeed,
     });
     setIsCreatingNote(false);
 
@@ -357,23 +365,33 @@ export default function ProfessionalNotes() {
       action: "clinical_note_created",
       entity_type: "clinical_note",
       entity_id: createdNote.id,
-      metadata: { encounter_id: selectedEncounterId, status: "draft" },
+      metadata: {
+        encounter_id: encounterId,
+        status: "draft",
+        revision_of_note_id: previousNote?.id ?? null,
+        revision_number: (noteCountByEncounter[encounterId] || 0) + 1,
+      },
     });
 
     queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
-    toast({ title: "Draft note created" });
-    navigate(`/professional/notes/${createdNote.id}/edit?encounterId=${selectedEncounterId}`);
+    toast({
+      title: previousNote ? "New revision created" : "Draft note created",
+      description: previousNote ? "The new draft was prefilled from the latest note for this encounter." : undefined,
+    });
+    navigate(`/professional/notes/${createdNote.id}/edit?encounterId=${encounterId}`);
   };
 
-  const deleteNote = async () => {
-    if (!selectedNote || !user?.id) return;
+  const createNote = async () => createNoteForEncounter(selectedEncounterId);
+
+  const deleteNoteByRecord = async (note: any) => {
+    if (!note || !user?.id) return;
 
     if (!window.confirm("Delete this clinical note? This action cannot be undone.")) {
       return;
     }
 
     setIsDeletingNote(true);
-    const { error } = await clinicalNoteService.remove(selectedNote.id);
+    const { error } = await clinicalNoteService.remove(note.id);
     setIsDeletingNote(false);
 
     if (error) {
@@ -385,23 +403,33 @@ export default function ProfessionalNotes() {
       actor_id: user.id,
       action: "clinical_note_deleted",
       entity_type: "clinical_note",
-      entity_id: selectedNote.id,
-      metadata: { encounter_id: selectedNote.encounter_id, status: selectedNote.status },
+      entity_id: note.id,
+      metadata: { encounter_id: note.encounter_id, status: note.status },
     });
 
     queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
     toast({ title: "Note deleted" });
-    navigate(encounterFilterId ? `/professional/notes?encounterId=${encounterFilterId}` : "/professional/notes");
+    if (selectedNote?.id === note.id) {
+      navigate(encounterFilterId ? `/professional/notes?encounterId=${encounterFilterId}` : "/professional/notes");
+    }
+  };
+
+  const deleteNote = async () => {
+    if (!selectedNote) return;
+    await deleteNoteByRecord(selectedNote);
   };
 
   const NoteCard = ({ note }: { note: any }) => {
     const patientId = note.encounters?.patient_id;
     const patientName = patientId ? (nameMap[patientId] || "Patient") : "Patient";
     const encounterType = note.encounters?.encounter_type || "Consultation";
+    const revisionNumber = noteCountByEncounter[note.encounter_id]
+      ? noteCountByEncounter[note.encounter_id] - filteredNotes.filter((item: any) => item.encounter_id === note.encounter_id && item.created_at > note.created_at).length
+      : 1;
 
     return (
       <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
               <PenTool className="w-6 h-6 text-primary" />
@@ -415,13 +443,26 @@ export default function ProfessionalNotes() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Badge variant="outline">Revision {revisionNumber}</Badge>
             <Badge className={statusConfig[note.status] || statusConfig.draft}>{note.status}</Badge>
+            <Button variant="outline" size="sm" onClick={() => createNoteForEncounter(note.encounter_id)} disabled={isCreatingNote}>
+              <Plus className="w-4 h-4 mr-1" /> New Revision
+            </Button>
             {note.status !== "finalized" && (
               <Button variant="outline" size="sm" onClick={() => navigate(`/professional/notes/${note.id}/edit`)}>
                 <Edit className="w-4 h-4 mr-1" /> Edit
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => deleteNoteByRecord(note)}
+              disabled={isDeletingNote}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="w-4 h-4 mr-1" /> Delete
+            </Button>
           </div>
         </div>
       </div>
@@ -440,7 +481,7 @@ export default function ProfessionalNotes() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1">
               <h2 className="font-semibold">Create Clinical Note</h2>
-              <p className="text-sm text-muted-foreground">Start a new draft for an assigned encounter that does not already have a note.</p>
+              <p className="text-sm text-muted-foreground">Start a new draft for any assigned encounter. If notes already exist, a fresh revision will be created.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Select value={selectedEncounterId} onValueChange={setSelectedEncounterId}>
@@ -448,19 +489,20 @@ export default function ProfessionalNotes() {
                   <SelectValue placeholder="Select encounter" />
                 </SelectTrigger>
                 <SelectContent>
-                  {creatableEncounters.length === 0 ? (
+                  {availableEncounters.length === 0 ? (
                     <SelectItem value="none" disabled>No encounters available</SelectItem>
                   ) : (
-                    creatableEncounters.map((enc: any) => {
+                    availableEncounters.map((enc: any) => {
                       const patientName = nameMap[enc.patient_id] || "Patient";
                       const encounterDate = new Date(enc.created_at).toLocaleDateString("en-GB", {
                         day: "numeric",
                         month: "short",
                       });
+                      const revisionCount = noteCountByEncounter[enc.id] || 0;
 
                       return (
                         <SelectItem key={enc.id} value={enc.id}>
-                          {`${patientName} • ${enc.encounter_type} • ${encounterDate}`}
+                          {`${patientName} • ${enc.encounter_type} • ${encounterDate}${revisionCount ? ` • ${revisionCount} note${revisionCount === 1 ? "" : "s"}` : ""}`}
                         </SelectItem>
                       );
                     })

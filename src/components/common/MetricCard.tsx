@@ -16,14 +16,16 @@ export function MetricCard({
   iconClassName = "text-primary",
 }: MetricCardProps) {
   return (
-    <div className="bg-card rounded-2xl p-4 border border-border">
-      <div className="flex items-center gap-3 mb-2">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconWrapClassName}`}>
-          <Icon className={`w-5 h-5 ${iconClassName}`} />
+    <div className="bg-card rounded-3xl p-4 border border-border/50 shadow-sm w-full min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${iconWrapClassName}`}>
+          <Icon className={`w-6 h-6 ${iconClassName}`} />
+        </div>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="text-2xl font-bold leading-tight text-foreground truncate">{value}</p>
+          <p className="text-xs text-muted-foreground leading-snug truncate">{label}</p>
         </div>
       </div>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );
 }
