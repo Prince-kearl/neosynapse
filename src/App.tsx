@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { AppThemeSync } from "@/components/AppThemeSync";
 
 // Auth pages
 import SignIn from "@/auth/pages/SignIn";
@@ -70,6 +71,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <AuthProvider>
+        <AppThemeSync />
         <LanguageProvider>
           <TooltipProvider>
             <Toaster />

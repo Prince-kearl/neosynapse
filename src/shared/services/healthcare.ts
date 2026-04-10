@@ -393,3 +393,51 @@ export const auditLogService = {
   getAll: () =>
     supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(500),
 };
+
+// ─── App Settings (Tenant-wide UI Configuration) ─────────────────
+
+export const appSettingsService = {
+  /** Get current app settings (all users can read) */
+  get: () =>
+    supabase.from("app_settings").select("*").limit(1).maybeSingle(),
+
+  /** Update app settings (admin only, enforced by RLS) */
+  update: async (data: {
+    app_color_mode?: string;
+    app_color_preset?: string;
+    app_custom_primary_hex?: string;
+    app_custom_accent_hex?: string;
+    app_custom_secondary_hex?: string;
+    app_custom_ring_hex?: string;
+    app_ui_radius?: string;
+    app_ui_scale?: string;
+    updated_by?: string;
+  }) => {
+    const { data: existingRow, error: fetchError } = await supabase
+      .from("app_settings")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError) {
+      return { data: null, error: fetchError };
+    }
+
+    const payload = { ...data, updated_at: new Date().toISOString() };
+
+    if (existingRow?.id) {
+      return supabase
+        .from("app_settings")
+        .update(payload)
+        .eq("id", existingRow.id)
+        .select()
+        .single();
+    }
+
+    return supabase
+      .from("app_settings")
+      .insert(payload)
+      .select()
+      .single();
+  },
+};

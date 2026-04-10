@@ -63,6 +63,7 @@
 
     /* Medical glow */
     --glow-primary: 0 0% 0% / 0;
+    --ui-scale: 1;
   }
 
   .dark {
@@ -137,6 +138,10 @@
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+  }
+
+  html {
+    font-size: calc(16px * var(--ui-scale));
   }
 
   * {

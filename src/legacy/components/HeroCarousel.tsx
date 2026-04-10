@@ -94,6 +94,9 @@ export function HeroCarousel({ displayName = "there" }: HeroCarouselProps) {
             <CarouselItem key={slide.id} className="pl-2 md:pl-4 max-[820px]:pl-0">
               <div
                 className="relative flex h-[180px] w-full items-stretch overflow-hidden rounded-2xl bg-gradient-to-br from-[#63C88F] to-[#53B67B] p-0 sm:h-[200px] md:h-[190px] max-[820px]:h-[460px] max-[820px]:rounded-[30px] max-[640px]:h-[210px] max-[520px]:h-[178px] max-[480px]:h-[156px]"
+                style={{
+                  background: "linear-gradient(135deg, hsl(var(--primary) / 0.72), hsl(var(--accent) / 0.88))",
+                }}
               >
                 {/* Image on the left */}
                 <div className="relative h-full w-[46%] shrink-0 sm:w-[45%] max-[820px]:w-[53%] max-[640px]:w-[50%] max-[480px]:w-[49%]">
@@ -109,10 +112,10 @@ export function HeroCarousel({ displayName = "there" }: HeroCarouselProps) {
                 </div>
                 {/* Content on the right */}
                 <div className="z-10 flex flex-1 flex-col justify-center px-4 py-3 sm:px-5 sm:py-4 max-[820px]:justify-center max-[820px]:px-7 max-[820px]:py-6 max-[640px]:px-3 max-[640px]:py-2 max-[480px]:px-2.5 max-[480px]:py-1.5">
-                  <h3 className="mb-1 font-display text-2xl font-semibold leading-tight text-[#151D1A] md:text-xl max-[820px]:text-[clamp(2.2rem,5.6vw,3.9rem)] max-[820px]:leading-[1.04] max-[640px]:text-[clamp(0.82rem,3.5vw,1.4rem)] max-[640px]:leading-tight">
+                  <h3 className="mb-1 font-display text-2xl font-semibold leading-tight text-primary-foreground md:text-xl max-[820px]:text-[clamp(2.2rem,5.6vw,3.9rem)] max-[820px]:leading-[1.04] max-[640px]:text-[clamp(0.82rem,3.5vw,1.4rem)] max-[640px]:leading-tight">
                     {slide.title}
                   </h3>
-                  <p className="mb-3 max-w-full break-words text-base leading-snug text-[#E8F7EE] md:text-base max-[820px]:mb-5 max-[820px]:max-w-[310px] max-[820px]:text-[clamp(1.25rem,3.8vw,2.5rem)] max-[820px]:leading-[1.15] max-[640px]:mb-2 max-[640px]:max-w-[220px] max-[640px]:text-[0.95rem] max-[640px]:leading-tight max-[520px]:max-w-[180px] max-[520px]:text-[0.85rem] max-[480px]:max-w-[160px] max-[480px]:text-[0.75rem]">
+                  <p className="mb-3 max-w-full break-words text-base leading-snug text-primary-foreground/90 md:text-base max-[820px]:mb-5 max-[820px]:max-w-[310px] max-[820px]:text-[clamp(1.25rem,3.8vw,2.5rem)] max-[820px]:leading-[1.15] max-[640px]:mb-2 max-[640px]:max-w-[220px] max-[640px]:text-[0.95rem] max-[640px]:leading-tight max-[520px]:max-w-[180px] max-[520px]:text-[0.85rem] max-[480px]:max-w-[160px] max-[480px]:text-[0.75rem]">
                     {slide.subtitle}
                   </p>
                   <Link
@@ -140,7 +143,7 @@ export function HeroCarousel({ displayName = "there" }: HeroCarouselProps) {
             className="h-2 rounded-full transition-all duration-300 max-[820px]:h-3 max-[480px]:h-2"
             style={{
               width: index === current ? "24px" : "8px",
-              backgroundColor: index === current ? "#22C55E" : "rgba(161,161,170,0.45)",
+              backgroundColor: index === current ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / 0.25)",
             }}
             aria-label={`Go to slide ${index + 1}`}
           />

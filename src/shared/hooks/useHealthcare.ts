@@ -22,6 +22,7 @@ import {
   clinicalNoteService,
   medicalReportService,
   auditLogService,
+  appSettingsService,
 } from "@/shared/services/healthcare";
 
 // ─── Profile Hooks ──────────────────────────────────────────────
@@ -454,6 +455,25 @@ export function useAuditLogs() {
       if (error) throw error;
       return data || [];
     },
+  });
+}
+
+// ─── App Settings (Tenant-wide UI Configuration) ─────────────────
+
+export function useAppSettings() {
+  return useQuery({
+    queryKey: ["app-settings"],
+    queryFn: async () => {
+      const { data, error } = await appSettingsService.get();
+      if (error) {
+        // Gracefully fall back to defaults while migrations propagate.
+        if ((error as any).code === "PGRST205" || (error as any).code === "PGRST116") return null;
+        throw error;
+      }
+      return data;
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

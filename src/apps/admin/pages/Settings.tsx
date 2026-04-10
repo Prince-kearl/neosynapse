@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Moon, Globe, Shield, Bell, Database, LogOut } from "lucide-react";
+import { ArrowLeft, Moon, Globe, Shield, Bell, Database, LogOut, Palette, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -9,8 +10,11 @@ import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMyProfile } from "@/shared/hooks/useHealthcare";
+import { useAppSettings } from "@/shared/hooks/useHealthcare";
 import { profileService } from "@/shared/services/healthcare";
+import { appSettingsService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
+import { APP_COLOR_PRESETS, DEFAULT_CUSTOM_PALETTE, type AppColorPresetKey, applyAppThemeSettings } from "@/lib/ui-theme";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -19,6 +23,13 @@ export default function AdminSettings() {
   const { language, setLanguage } = useLanguage();
   const { profile } = useUserRole();
   const { data: myProfile } = useMyProfile();
+  const { data: appSettings } = useAppSettings();
+  const [customPalette, setCustomPalette] = useState({
+    primary: DEFAULT_CUSTOM_PALETTE.primary,
+    accent: DEFAULT_CUSTOM_PALETTE.accent,
+    secondary: DEFAULT_CUSTOM_PALETTE.secondary,
+    ring: DEFAULT_CUSTOM_PALETTE.ring,
+  });
 
   const settings = ((myProfile?.settings_json as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const uiSettings = {
@@ -26,6 +37,56 @@ export default function AdminSettings() {
     newRegistrations: settings.new_registrations === true,
     auditLoggingVisible: settings.audit_logging_visible !== false,
     dataRetentionDays: typeof settings.data_retention_days === "string" ? settings.data_retention_days : "90",
+    colorMode: appSettings?.app_color_mode === "custom" ? "custom" : "preset",
+    colorPreset: (typeof appSettings?.app_color_preset === "string" ? appSettings.app_color_preset : "medical_green") as AppColorPresetKey,
+    uiRadius: typeof appSettings?.app_ui_radius === "string" ? appSettings.app_ui_radius : "0.75rem",
+    uiScale: typeof appSettings?.app_ui_scale === "string" ? appSettings.app_ui_scale : "1",
+  };
+
+  const themePreviewSettings = {
+    app_color_mode: uiSettings.colorMode,
+    app_color_preset: uiSettings.colorPreset,
+    app_custom_primary_hex: customPalette.primary,
+    app_custom_accent_hex: customPalette.accent,
+    app_custom_secondary_hex: customPalette.secondary,
+    app_custom_ring_hex: customPalette.ring,
+    app_ui_radius: uiSettings.uiRadius,
+    app_ui_scale: uiSettings.uiScale,
+  };
+
+  useEffect(() => {
+    setCustomPalette({
+      primary: typeof appSettings?.app_custom_primary_hex === "string" ? appSettings.app_custom_primary_hex : DEFAULT_CUSTOM_PALETTE.primary,
+      accent: typeof appSettings?.app_custom_accent_hex === "string" ? appSettings.app_custom_accent_hex : DEFAULT_CUSTOM_PALETTE.accent,
+      secondary: typeof appSettings?.app_custom_secondary_hex === "string" ? appSettings.app_custom_secondary_hex : DEFAULT_CUSTOM_PALETTE.secondary,
+      ring: typeof appSettings?.app_custom_ring_hex === "string" ? appSettings.app_custom_ring_hex : DEFAULT_CUSTOM_PALETTE.ring,
+    });
+  }, [appSettings]);
+
+  const saveAppSettingsMutation = useMutation({
+    mutationFn: async (nextAppSettings: Record<string, unknown>) => {
+      const { error } = await appSettingsService.update({
+        ...nextAppSettings,
+        updated_by: user?.id,
+      } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to save app settings", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const persistAppSettings = (nextSettings: Record<string, unknown>, successMessage?: string) => {
+    saveAppSettingsMutation.mutate(nextSettings, {
+      onSuccess: () => {
+        if (successMessage) {
+          toast({ title: successMessage });
+        }
+      },
+    });
   };
 
   const saveSettingsMutation = useMutation({
@@ -37,6 +98,7 @@ export default function AdminSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile", user?.id] });
     },
     onError: (error) => {
       toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
@@ -90,6 +152,184 @@ export default function AdminSettings() {
               <span className="font-medium">Theme</span>
             </div>
             <ThemeToggle />
+
+            <div className="pt-2 border-t border-border/70 space-y-3">
+              <div className="flex items-center gap-3">
+                <Palette className="w-5 h-5 text-muted-foreground" />
+                <span className="font-medium">Brand Color</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Choose a tenant-wide palette for dashboards, accents, carousel highlights, and active states.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {(Object.entries(APP_COLOR_PRESETS) as [AppColorPresetKey, (typeof APP_COLOR_PRESETS)[AppColorPresetKey]][]).map(([key, preset]) => {
+                  const active = uiSettings.colorPreset === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`rounded-2xl border px-3 py-3 text-left transition-colors ${
+                        active ? "border-primary bg-primary/10 shadow-sm" : "border-border hover:border-primary/40 hover:bg-muted/30"
+                      }`}
+                      onClick={() => {
+                        const nextAppSettings = { ...themePreviewSettings, app_color_mode: "preset", app_color_preset: key };
+                        applyAppThemeSettings(nextAppSettings);
+                        persistAppSettings(nextAppSettings, `${preset.label} palette applied`);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{preset.label}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {active ? "Current tenant palette" : "Primary, accent, and depth tones"}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {active ? "Active" : "Preset"}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="h-8 flex-1 rounded-xl" style={{ backgroundColor: `hsl(${preset.primary})` }} />
+                        <span className="h-8 flex-1 rounded-xl" style={{ backgroundColor: `hsl(${preset.accent})` }} />
+                        <span className="h-8 flex-1 rounded-xl" style={{ backgroundColor: `hsl(${preset.secondary})` }} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-2xl border border-border bg-muted/20 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Custom Palette</p>
+                    <p className="text-xs text-muted-foreground">Define your own tenant-wide colors and apply them across the app.</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      uiSettings.colorMode === "custom" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {uiSettings.colorMode === "custom" ? "Active" : "Custom"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    ["primary", "Primary"],
+                    ["accent", "Accent"],
+                    ["secondary", "Secondary"],
+                    ["ring", "Ring"],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="rounded-xl border border-border bg-card p-3">
+                      <span className="mb-2 block text-xs font-medium text-muted-foreground">{label}</span>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={customPalette[key]}
+                          className="h-10 w-14 cursor-pointer rounded-md border border-border bg-transparent p-1"
+                          onChange={(event) => {
+                            const nextPalette = { ...customPalette, [key]: event.target.value };
+                            setCustomPalette(nextPalette);
+                            applyAppThemeSettings({
+                              ...themePreviewSettings,
+                              app_color_mode: "custom",
+                              app_custom_primary_hex: nextPalette.primary,
+                              app_custom_accent_hex: nextPalette.accent,
+                              app_custom_secondary_hex: nextPalette.secondary,
+                              app_custom_ring_hex: nextPalette.ring,
+                            });
+                          }}
+                        />
+                        <span className="rounded-md bg-muted px-2 py-1 text-xs font-mono uppercase text-foreground">
+                          {customPalette[key]}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="h-10 flex-1 rounded-xl" style={{ backgroundColor: customPalette.primary }} />
+                  <span className="h-10 flex-1 rounded-xl" style={{ backgroundColor: customPalette.accent }} />
+                  <span className="h-10 flex-1 rounded-xl" style={{ backgroundColor: customPalette.secondary }} />
+                  <span className="h-10 flex-1 rounded-xl" style={{ backgroundColor: customPalette.ring }} />
+                </div>
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={saveAppSettingsMutation.isPending}
+                  onClick={() => {
+                    const nextAppSettings = {
+                      ...themePreviewSettings,
+                      app_color_mode: "custom",
+                      app_custom_primary_hex: customPalette.primary,
+                      app_custom_accent_hex: customPalette.accent,
+                      app_custom_secondary_hex: customPalette.secondary,
+                      app_custom_ring_hex: customPalette.ring,
+                    };
+                    applyAppThemeSettings(nextAppSettings);
+                    persistAppSettings(nextAppSettings, "Custom palette applied");
+                  }}
+                >
+                  Apply Custom Palette
+                </Button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/70 space-y-3">
+              <div className="flex items-center gap-3">
+                <SlidersHorizontal className="w-5 h-5 text-muted-foreground" />
+                <span className="font-medium">UI Density</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Corner Radius</p>
+                  <Select
+                    value={uiSettings.uiRadius}
+                    onValueChange={(value) => {
+                      const nextAppSettings = { app_ui_radius: value };
+                      applyAppThemeSettings(nextAppSettings as any);
+                      persistAppSettings(nextAppSettings, "Corner radius updated");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.5rem">Compact</SelectItem>
+                      <SelectItem value="0.75rem">Default</SelectItem>
+                      <SelectItem value="1rem">Soft</SelectItem>
+                      <SelectItem value="1.25rem">Rounded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Text Scale</p>
+                  <Select
+                    value={uiSettings.uiScale}
+                    onValueChange={(value) => {
+                      const nextAppSettings = { app_ui_scale: value };
+                      applyAppThemeSettings(nextAppSettings as any);
+                      persistAppSettings(nextAppSettings, "Text scale updated");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.95">Compact</SelectItem>
+                      <SelectItem value="1">Default</SelectItem>
+                      <SelectItem value="1.05">Comfortable</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
