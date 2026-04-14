@@ -1094,7 +1094,7 @@ function AIAssistant() {
   return (
     <div className="flex min-h-screen flex-1 flex-col overflow-x-hidden bg-background">
       {/* Top Bar */}
-      <div className="sticky top-0 z-10 flex items-center gap-2 bg-primary/90 px-4 py-2.5 backdrop-blur">
+      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 bg-primary/90 px-4 py-2.5 backdrop-blur lg:sticky lg:top-0">
         {/* More options dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1194,6 +1194,9 @@ function AIAssistant() {
         </div>
       </div>
 
+      {/* Mobile spacer for fixed top bar */}
+      <div className="h-14 lg:hidden" />
+
       <div className="flex-1 min-h-0 flex">
         <aside className="hidden md:flex w-72 border-r border-border bg-muted/20 flex-col">
           <div className="p-3 border-b border-border flex items-center justify-between">
@@ -1258,24 +1261,31 @@ function AIAssistant() {
           </div>
         </aside>
 
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="md:hidden p-3 border-b border-border bg-muted/20 flex items-center gap-2">
-            <Select value={activeSessionId || ""} onValueChange={(v) => setActiveSessionId(v)}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select conversation" />
-              </SelectTrigger>
-              <SelectContent>
-                {orderedSessions.map((session) => (
-                  <SelectItem key={session.id} value={session.id}>
-                    {session.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" variant="outline" onClick={() => createNewSession()}>
-              <Plus className="w-4 h-4" />
-            </Button>
+        <div className="flex-1 min-h-0 flex flex-col pb-40 lg:pb-0">
+          <div className="fixed inset-x-0 top-14 z-30 border-b border-border bg-muted/95 p-3 backdrop-blur md:hidden">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <Select value={activeSessionId || ""} onValueChange={(v) => setActiveSessionId(v)}>
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue placeholder="Select conversation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orderedSessions.map((session) => (
+                      <SelectItem key={session.id} value={session.id}>
+                        {session.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0" onClick={() => createNewSession()}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
+
+          {/* Mobile spacer for fixed conversation selector */}
+          <div className="h-[74px] md:hidden" />
 
           {/* Main Content: Text or Voice Mode */}
           {mode === "text" ? (
@@ -1437,7 +1447,7 @@ function AIAssistant() {
           )}
 
           {/* Input - Redesigned Search Box UI */}
-          <div className="sticky bottom-0 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-6">
+          <div className="fixed inset-x-0 bottom-[68px] z-40 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-4 lg:sticky lg:bottom-0 lg:p-6">
             <div className="mx-auto w-full max-w-2xl">
               <div className="flex items-center w-full rounded-full bg-card text-foreground border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.12)' }}>
 

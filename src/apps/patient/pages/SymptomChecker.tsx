@@ -298,18 +298,6 @@ export default function PatientSymptomChecker() {
     );
   };
 
-  const getValidAccessToken = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    let accessToken = sessionData.session?.access_token;
-
-    if (!accessToken) {
-      const { data: refreshed } = await supabase.auth.refreshSession();
-      accessToken = refreshed.session?.access_token;
-    }
-
-    return accessToken;
-  };
-
   const handleSubmit = async () => {
     const allSymptomsList = parseSymptoms(selectedSymptoms, symptoms);
     const allSymptoms = allSymptomsList.join(", ");
@@ -330,50 +318,24 @@ export default function PatientSymptomChecker() {
     setStep("loading");
 
     try {
-      const accessToken = await getValidAccessToken();
-      if (!accessToken) {
-        toast({ title: "Sign in required", description: "Redirecting you to sign in.", variant: "destructive" });
-        navigate("/auth/sign-in?redirect=/patient/symptom-checker");
-        setStep("input");
-        return;
-      }
-
-      const invokeTriage = (token: string) => supabase.functions.invoke("symptom-triage", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const { data, error } = await supabase.functions.invoke("symptom-triage", {
         body: { symptoms: allSymptoms, age, gender, language, medicalHistoryContext },
       });
 
-      let { data, error } = await invokeTriage(accessToken);
-
       if (error) {
-        const initialStatus = (error as any)?.context?.status || (error as any)?.status;
-        if (initialStatus === 401) {
-          const { data: refreshed } = await supabase.auth.refreshSession();
-          const refreshedToken = refreshed.session?.access_token;
-
-          if (refreshedToken) {
-            const retryResult = await invokeTriage(refreshedToken);
-            data = retryResult.data;
-            error = retryResult.error;
-          }
-
-          const retryStatus = (error as any)?.context?.status || (error as any)?.status;
-          if (retryStatus === 401) {
-            toast({ title: "Session expired", description: "Redirecting you to sign in.", variant: "destructive" });
-            navigate("/auth/sign-in?redirect=/patient/symptom-checker");
-            setStep("input");
-            return;
-          }
+        const status = (error as any)?.context?.status || (error as any)?.status;
+        if (status === 401) {
+          toast({ title: "Session expired", description: "Redirecting you to sign in.", variant: "destructive" });
+          navigate("/auth/sign-in?redirect=/patient/symptom-checker");
+          setStep("input");
+          return;
         }
-        const finalStatus = (error as any)?.context?.status || (error as any)?.status;
-        if (finalStatus === 429) {
+        if (status === 429) {
           toast({ title: "Too many requests", description: "Please wait a moment and try again.", variant: "destructive" });
           setStep("input");
           return;
         }
-        if (finalStatus === 402) {
+        if (status === 402) {
           toast({ title: "Service temporarily unavailable", description: "Triage credits are currently exhausted.", variant: "destructive" });
           setStep("input");
           return;

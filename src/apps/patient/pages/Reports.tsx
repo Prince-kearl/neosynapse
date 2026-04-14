@@ -166,12 +166,12 @@ export default function PatientReports() {
 
         {reportId && (
           <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-semibold">Report Detail</h2>
                 <p className="text-sm text-muted-foreground">Report ID: {reportId}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => navigate("/patient/reports")}>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => navigate("/patient/reports")}>
                 Back to Reports
               </Button>
             </div>
@@ -186,14 +186,14 @@ export default function PatientReports() {
                 <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
                   {JSON.stringify(selectedReport.report_json ?? {}, null, 2)}
                 </pre>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => downloadReportJson(selectedReport)}>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button size="sm" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportJson(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Export JSON
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => downloadReportPdf(selectedReport)}>
+                  <Button size="sm" variant="outline" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportPdf(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Download PDF
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => shareReport(selectedReport)}>
+                  <Button size="sm" variant="outline" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => shareReport(selectedReport)}>
                     <Share2 className="w-4 h-4 mr-1" /> Share
                   </Button>
                 </div>
@@ -216,22 +216,22 @@ export default function PatientReports() {
 
               return (
                 <div key={report.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-3">
+                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
                       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                         <FileText className="w-5 h-5 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium">{title}</p>
+                      <div className="min-w-0">
+                        <p className="font-medium break-words">{title}</p>
                         <p className="text-xs text-muted-foreground">{doctor}</p>
                       </div>
                     </div>
-                    <Badge className={statusConfig[status] || statusConfig.approved}>
+                    <Badge className={`self-start shrink-0 ${statusConfig[status] || statusConfig.approved}`}>
                       {status}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <Clock className="w-3 h-3" />
                       {new Date(report.created_at).toLocaleDateString("en-GB", { 
                         day: "numeric", 
@@ -241,11 +241,11 @@ export default function PatientReports() {
                       <span>•</span>
                       <span>{report.report_type}</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8"
+                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
                         onClick={() => navigate(`/patient/reports/${report.id}`)}
                       >
                         <Eye className="w-4 h-4 mr-1" /> View
@@ -253,7 +253,7 @@ export default function PatientReports() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8"
+                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
                         onClick={() => navigate(`/patient/reports/${report.id}?action=export`)}
                       >
                         <Download className="w-4 h-4 mr-1" /> Export
@@ -261,7 +261,7 @@ export default function PatientReports() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8"
+                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
                         onClick={() => void downloadReportPdf(report)}
                       >
                         <Download className="w-4 h-4 mr-1" /> PDF
@@ -269,7 +269,7 @@ export default function PatientReports() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8"
+                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
                         onClick={() => void shareReport(report)}
                       >
                         <Share2 className="w-4 h-4 mr-1" /> Share
