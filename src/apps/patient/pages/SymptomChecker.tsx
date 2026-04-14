@@ -298,6 +298,18 @@ export default function PatientSymptomChecker() {
     );
   };
 
+  const getValidAccessToken = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    let accessToken = sessionData.session?.access_token;
+
+    if (!accessToken) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      accessToken = refreshed.session?.access_token;
+    }
+
+    return accessToken;
+  };
+
   const handleSubmit = async () => {
     const allSymptomsList = parseSymptoms(selectedSymptoms, symptoms);
     const allSymptoms = allSymptomsList.join(", ");
@@ -318,8 +330,7 @@ export default function PatientSymptomChecker() {
     setStep("loading");
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
+      const accessToken = await getValidAccessToken();
       if (!accessToken) {
         toast({ title: "Sign in required", description: "Redirecting you to sign in.", variant: "destructive" });
         navigate("/auth/sign-in?redirect=/patient/symptom-checker");
@@ -327,27 +338,42 @@ export default function PatientSymptomChecker() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("symptom-triage", {
+      const invokeTriage = (token: string) => supabase.functions.invoke("symptom-triage", {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
         body: { symptoms: allSymptoms, age, gender, language, medicalHistoryContext },
       });
 
+      let { data, error } = await invokeTriage(accessToken);
+
       if (error) {
-        const status = (error as any)?.context?.status || (error as any)?.status;
-        if (status === 401) {
-          toast({ title: "Session expired", description: "Redirecting you to sign in.", variant: "destructive" });
-          navigate("/auth/sign-in?redirect=/patient/symptom-checker");
-          setStep("input");
-          return;
+        const initialStatus = (error as any)?.context?.status || (error as any)?.status;
+        if (initialStatus === 401) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          const refreshedToken = refreshed.session?.access_token;
+
+          if (refreshedToken) {
+            const retryResult = await invokeTriage(refreshedToken);
+            data = retryResult.data;
+            error = retryResult.error;
+          }
+
+          const retryStatus = (error as any)?.context?.status || (error as any)?.status;
+          if (retryStatus === 401) {
+            toast({ title: "Session expired", description: "Redirecting you to sign in.", variant: "destructive" });
+            navigate("/auth/sign-in?redirect=/patient/symptom-checker");
+            setStep("input");
+            return;
+          }
         }
-        if (status === 429) {
+        const finalStatus = (error as any)?.context?.status || (error as any)?.status;
+        if (finalStatus === 429) {
           toast({ title: "Too many requests", description: "Please wait a moment and try again.", variant: "destructive" });
           setStep("input");
           return;
         }
-        if (status === 402) {
+        if (finalStatus === 402) {
           toast({ title: "Service temporarily unavailable", description: "Triage credits are currently exhausted.", variant: "destructive" });
           setStep("input");
           return;
@@ -570,6 +596,25 @@ export default function PatientSymptomChecker() {
           <p className="text-muted-foreground text-sm">
             {copy.checkerSubtitle}
           </p>
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Best for urgency triage</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use Symptom Checker when you want risk level and next-step care guidance.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="sm:shrink-0"
+              onClick={() => navigate("/patient/ai-assistant")}
+            >
+              Need broader health guidance?
+            </Button>
+          </div>
         </div>
 
         {/* Patient Info */}

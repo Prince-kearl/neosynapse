@@ -15,10 +15,30 @@ import {
 import { cn } from "@/lib/utils";
 
 const quickActions = [
-  { title: "Symptom Checker", icon: Stethoscope, url: "/patient/symptom-checker" },
-  { title: "AI Health Assistant", icon: Bot, url: "/patient/ai-assistant" },
-  { title: "Telemedicine Consultation", icon: Video, url: "/patient/telemedicine" },
-  { title: "Medical Reports", icon: FileText, url: "/patient/reports" },
+  {
+    title: "Symptom Checker",
+    subtitle: "Fast triage for urgency and next-step care",
+    icon: Stethoscope,
+    url: "/patient/symptom-checker",
+  },
+  {
+    title: "AI Health Assistant",
+    subtitle: "General health questions, explanations, and guidance",
+    icon: Bot,
+    url: "/patient/ai-assistant",
+  },
+  {
+    title: "Telemedicine Consultation",
+    subtitle: "Start a real-time video consultation",
+    icon: Video,
+    url: "/patient/telemedicine",
+  },
+  {
+    title: "Medical Reports",
+    subtitle: "View generated reports and summaries",
+    icon: FileText,
+    url: "/patient/reports",
+  },
 ];
 
 export default function PatientDashboard() {
@@ -287,9 +307,14 @@ export default function PatientDashboard() {
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 max-[380px]:h-8 max-[380px]:w-8">
                   <action.icon className="h-5 w-5 text-primary max-[380px]:h-4 max-[380px]:w-4" />
                 </div>
-                <span className="w-full break-words text-sm font-medium text-foreground max-[380px]:text-xs max-[380px]:leading-tight">
-                  {action.title}
-                </span>
+                <div className="w-full min-w-0">
+                  <p className="break-words text-sm font-medium text-foreground max-[380px]:text-xs max-[380px]:leading-tight">
+                    {action.title}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground max-[380px]:text-[11px] max-[380px]:leading-tight">
+                    {action.subtitle}
+                  </p>
+                </div>
               </button>
             ))}
           </div>

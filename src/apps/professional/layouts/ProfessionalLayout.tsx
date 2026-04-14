@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { ProfessionalSidebar } from "../components/ProfessionalSidebar";
 import { ProfessionalMobileNav } from "../components/ProfessionalMobileNav";
+import { ProfessionalIncomingCallListener } from "../components/ProfessionalIncomingCallListener";
 import { MobileTopActions } from "@/components/common/MobileTopActions";
 
 export function ProfessionalLayout() {
@@ -8,6 +9,7 @@ export function ProfessionalLayout() {
     <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-background lg:h-screen lg:overflow-hidden">
       <ProfessionalSidebar />
       <div className="flex min-h-screen flex-1 min-w-0 flex-col lg:h-screen lg:min-h-0">
+        <ProfessionalIncomingCallListener />
         <MobileTopActions
           profilePath="/professional/settings"
           notificationsPath="/professional/notifications"

@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { MedicalReportTools } from "./MedicalReportTools";
 import { medicalReportService } from "@/shared/services/healthcare";
 
@@ -381,6 +381,7 @@ const AI_ASSISTANT_COPY = {
 } as const;
 
 function AIAssistant() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: medicalHistory } = useMedicalHistory();
@@ -1286,6 +1287,24 @@ function AIAssistant() {
                   <p className="text-base text-muted-foreground mb-6 text-center max-w-xl">
                     {copy.welcomeDescription}
                   </p>
+                  <div className="mb-6 w-full max-w-xl rounded-2xl border border-border/70 bg-card/70 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Best for general guidance</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Use AI Assistant for explanations, report interpretation, and follow-up questions.
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => navigate("/patient/symptom-checker")}
+                      >
+                        Need urgency triage?
+                      </Button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-3 w-full max-w-lg mb-8 justify-center">
                     {copy.suggestions.map((chip, idx) => (
                       <Button
