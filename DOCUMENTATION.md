@@ -1218,6 +1218,9 @@ supabase db push --yes
 | 2026-04-14 | Reduced Symptom Checker conversational heading/helper text sizes to improve readability and visual balance across screen sizes | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Reduced only the bold conversational prompt headings by about 30% to improve visual balance on mobile and small screens | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Enabled true multi-input symptom capture in Symptom Checker: users can add several typed symptoms (Enter/comma/semicolon), review them as chips, and combine them with pill selections | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-04-15 | Updated browser tab icon to use the app favicon from `public/favicon.ico` by adding an explicit favicon link in the HTML head | `index.html`, `DOCUMENTATION.md` |
+| 2026-04-15 | Clarified favicon setup with explicit standard + shortcut icon tags so browsers consistently load `public/favicon.ico` | `index.html`, `DOCUMENTATION.md` |
+| 2026-04-15 | Added favicon cache-busting and Apple touch icon tags so browsers refresh and use `public/favicon.ico` consistently | `index.html`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Patient Reports mobile responsiveness by stacking/wrapping metadata and action controls so report cards fully fit small screens | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Professional Reports mobile responsiveness by stacking/wrapping detail and list actions so controls fit cleanly on small screens | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile scrolling UX by pinning the top bar, conversation selector, and bottom input bar while chat content scrolls independently | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
