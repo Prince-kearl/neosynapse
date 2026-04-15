@@ -320,12 +320,15 @@ A full-featured conversational AI interface.
 Structured, single-purpose urgent triage tool.
 
 **Workflow:**
-1. Patient selects common symptoms from localised chip grid OR types free-form symptoms.
-2. Optionally fills age and gender for context.
-3. Submits → `handleSubmit()`:
-   - Refreshes session token (`getValidAccessToken()`), retrying once on 401.
-   - POSTs to `symptom-triage` edge function with symptoms, demographics, and `medicalHistoryContext`.
-   - Shows loading animation.
+1. Patient completes a conversational intake flow (mobile-first): intro, who the assessment is for, name (if for someone else), sex assigned at birth, age, symptom duration, and symptom entry.
+2. Symptoms can be provided using localised quick-select chips and/or multi-input free-form entry.
+  - Free-form input supports adding multiple symptoms with Enter, comma, or semicolon.
+  - Added custom symptoms appear as removable chips before submission.
+3. Submits from the final "Start symptom assessment" CTA → `handleSubmit()`:
+  - Uses `supabase.functions.invoke("symptom-triage")` without manual auth header (supabase-js auto-manages session tokens).
+  - POSTs symptoms, demographics, and `medicalHistoryContext`.
+  - Includes duration context in the symptoms payload for better triage quality.
+  - Shows loading animation.
 4. Result screen displays:
    - **Urgency badge** — `non-urgent` | `needs-attention` | `urgent` | `emergency` (colour-coded).
    - **Summary** paragraph.
@@ -336,7 +339,11 @@ Structured, single-purpose urgent triage tool.
 5. Auto-saves triage result as a `medical_report` entry.
 6. "New Check" resets to step 1.
 
-**Guidance banner (top of form):** "Need broader health guidance?" button cross-links to AI Assistant.
+**UI style update (2026-04-14):** redesigned to an ADA-inspired conversational assessment layout with a fixed top title bar, explicit "Previous" step control, right-aligned pill answer buttons, and a minimal footer privacy action.
+
+**Responsive polish update (2026-04-14):** conversational step typography and controls were re-scaled for better readability across phone, tablet, and desktop breakpoints, and prompt grammar was corrected for self vs third-person flows (for example, "your" vs "Prince's").
+
+**Typography refinement (2026-04-14):** reduced hero/prompt heading and helper-copy sizes in the conversational intake steps to avoid oversized text on small and mid-size screens.
 
 Localised in: English, Twi, Ga, Ewe, Hausa.
 
@@ -358,7 +365,8 @@ Localised in: English, Twi, Ga, Ewe, Hausa.
 #### 6.6 Medical Reports (`/patient/reports`)
 
 - Lists all `medical_reports` for the current patient.
-- View full report in markdown.
+- View report details in plain-language sections (summary, urgency, recommended next steps, symptoms, warning signs, and consultation questions) designed for non-technical users.
+- Technical JSON remains available under an expandable "Show technical report data (JSON)" section.
 - Download as PDF via `html2pdf.js`.
 - Share link (copy to clipboard).
 - Filter by report type.
@@ -470,6 +478,9 @@ The same detection logic runs in `ProfessionalLayout` on **every** professional 
 
 - Lists all `medical_reports` the professional has access to (RLS-enforced).
 - View / download / share (same as patient reports).
+- Report detail supports two modes:
+  - **Technical Editor** for JSON/template editing and workflow transitions.
+  - **Patient-safe Preview** that renders the same report in plain-language sections (summary, urgency, next steps, symptoms, warning signs, follow-up questions) for easy clinician-to-patient review.
 - Mobile-first report layout: patient/report metadata and status/actions wrap into stacked/grid controls on small screens to avoid overflow.
 
 ### 7.9 Notifications (`/professional/notifications`)
@@ -1200,6 +1211,13 @@ supabase db push --yes
 | 2026-04-10 | Fixed `useNavigate()` called at module level in `AIAssistant.tsx` (invalid hook call crash) | `AIAssistant.tsx` |
 | 2026-04-14 | Fixed Symptom Checker "Session expired" false positive: added `getValidAccessToken()` with refresh + one-shot retry on 401 | `SymptomChecker.tsx` |
 | 2026-04-14 | Fixed Symptom Checker persistent 401 errors: removed manual token passing that bypassed supabase-js auto-refresh; added `verify_jwt = false` in config.toml for `symptom-triage` | `src/apps/patient/pages/SymptomChecker.tsx`, `supabase/config.toml`, `DOCUMENTATION.md` |
+| 2026-04-14 | Redesigned Patient Symptom Checker into an ADA-inspired conversational mobile flow (step intake with pill choices, previous navigation, and staged symptom capture) while keeping the existing Neo Synapse triage backend | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Refined Symptom Checker conversational UX to match app theme tokens, improved responsive text sizing across breakpoints, and fixed dynamic grammar in self/other question prompts | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Redesigned patient report detail view for readability: replaced raw JSON-first display with plain-language sections and moved JSON to a collapsible technical block | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Added Professional Reports patient-safe preview mode as a separate non-technical reader view alongside the JSON technical editor | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Reduced Symptom Checker conversational heading/helper text sizes to improve readability and visual balance across screen sizes | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Reduced only the bold conversational prompt headings by about 30% to improve visual balance on mobile and small screens | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-04-14 | Enabled true multi-input symptom capture in Symptom Checker: users can add several typed symptoms (Enter/comma/semicolon), review them as chips, and combine them with pill selections | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Patient Reports mobile responsiveness by stacking/wrapping metadata and action controls so report cards fully fit small screens | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Professional Reports mobile responsiveness by stacking/wrapping detail and list actions so controls fit cleanly on small screens | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile scrolling UX by pinning the top bar, conversation selector, and bottom input bar while chat content scrolls independently | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |

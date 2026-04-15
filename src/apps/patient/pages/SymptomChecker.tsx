@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle, ChevronRight, Loader2,
-  Thermometer, Brain, Heart, Stethoscope, Shield
+  Brain, Heart, Stethoscope, Shield, Search, X, ArrowUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +13,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { MedicalReportTools } from "./MedicalReportTools";
 import { medicalReportService } from "@/shared/services/healthcare";
 import { useMedicalHistory } from "@/shared/hooks/useHealthcare";
@@ -177,15 +170,30 @@ const localizedCommonSymptoms: Record<string, string[]> = {
   ha: ["Ciwon kai", "Zazzabi", "Tari", "Ciwon kirji", "Gajiya", "Tashin zuciya", "Jiri", "Wahalar numfashi", "Ciwon gabobi", "Ciwon ciki"],
 };
 
-function parseSymptoms(selectedSymptoms: string[], additionalSymptoms: string): string[] {
-  const fromText = additionalSymptoms
-    .split(",")
+const durationOptions = [
+  "Less than one day",
+  "One day to one week",
+  "One week to one month",
+  "One month to one year",
+  "More than one year",
+  "I don't know",
+];
+
+type IntakeStep = "intro" | "forWhom" | "name" | "sex" | "age" | "duration" | "symptoms";
+
+function extractSymptomTokens(text: string): string[] {
+  return text
+    .split(/[\n,;]+/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function parseSymptoms(selectedSymptoms: string[], customSymptoms: string[], symptomInput = ""): string[] {
+  const fromText = extractSymptomTokens(symptomInput);
 
   // Deduplicate case-insensitively while preserving first-seen value.
   const dedup = new Map<string, string>();
-  [...selectedSymptoms, ...fromText].forEach((item) => {
+  [...selectedSymptoms, ...customSymptoms, ...fromText].forEach((item) => {
     const normalized = item.toLowerCase();
     if (!dedup.has(normalized)) dedup.set(normalized, item);
   });
@@ -198,15 +206,12 @@ function buildSymptomReport(params: {
   age: string;
   gender: string;
   selectedSymptoms: string[];
-  additionalSymptoms: string;
+  additionalSymptoms: string[];
+  duration: string;
 }) {
-  const { result, age, gender, selectedSymptoms, additionalSymptoms } = params;
+  const { result, age, gender, selectedSymptoms, additionalSymptoms, duration } = params;
   const now = new Date();
-  const additional = additionalSymptoms
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const allSymptoms = [...selectedSymptoms, ...additional];
+  const allSymptoms = parseSymptoms(selectedSymptoms, additionalSymptoms);
 
   const reportJson = {
     title: "AI Symptom Triage Report",
@@ -216,6 +221,7 @@ function buildSymptomReport(params: {
       age: age || "unknown",
       gender: gender || "unknown",
     },
+    duration: duration || "unknown",
     symptoms: allSymptoms,
     urgency: result.urgency,
     summary: result.summary,
@@ -247,6 +253,7 @@ function buildSymptomReport(params: {
 ## Patient Information
 - Age: ${age || "unknown"}
 - Gender: ${gender || "unknown"}
+- Duration: ${duration || "unknown"}
 
 ## Reported Symptoms
 ${allSymptoms.length > 0 ? allSymptoms.map((s) => `- ${s}`).join("\n") : "- None listed"}
@@ -281,16 +288,40 @@ export default function PatientSymptomChecker() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"input" | "loading" | "result">("input");
-  const [symptoms, setSymptoms] = useState("");
+  const [symptomInput, setSymptomInput] = useState("");
+  const [customSymptoms, setCustomSymptoms] = useState<string[]>([]);
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
+  const [duration, setDuration] = useState("");
   const [result, setResult] = useState<TriageResult | null>(null);
+  const [assessmentFor, setAssessmentFor] = useState<"self" | "other" | null>(null);
+  const [patientName, setPatientName] = useState("");
+  const [intakeStep, setIntakeStep] = useState<IntakeStep>("intro");
   const savedReportSignaturesRef = useRef<Set<string>>(new Set());
   const copy = symptomCheckerCopy[language] || symptomCheckerCopy.en;
   const medicalHistoryContext = buildMedicalHistoryContext(medicalHistory, null);
   const commonSymptoms = localizedCommonSymptoms[language] || localizedCommonSymptoms.en;
-  const parsedSymptoms = parseSymptoms(selectedSymptoms, symptoms);
+  const parsedSymptoms = parseSymptoms(selectedSymptoms, customSymptoms, symptomInput);
+  const normalizedName = patientName.trim();
+  const possessiveName = normalizedName
+    ? `${normalizedName}${normalizedName.toLowerCase().endsWith("s") ? "'" : "'s"}`
+    : "their";
+  const sexQuestion = assessmentFor === "other"
+    ? `What is ${possessiveName} sex assigned at birth?`
+    : "What is your sex assigned at birth?";
+  const ageQuestion = assessmentFor === "other"
+    ? `How old is ${normalizedName || "the patient"}?`
+    : "How old are you?";
+  const durationQuestion = assessmentFor === "other"
+    ? `How long has this been troubling ${normalizedName || "them"}?`
+    : "How long has this been troubling you?";
+  const symptomQuestion = assessmentFor === "other"
+    ? `Let's start with one symptom that's bothering ${normalizedName || "them"}, whichever comes to mind first.`
+    : "Let's start with one symptom that's bothering you, whichever comes to mind first.";
+  const answerPillClass = "h-11 rounded-full border-primary/50 px-6 text-base font-semibold text-primary hover:bg-primary/10 sm:h-12 sm:text-lg";
+  const sectionTitleClass = "font-display text-[1.4rem] leading-tight text-foreground sm:text-[1.75rem]";
+  const primaryCtaClass = "h-12 rounded-full px-8 text-base font-semibold sm:h-14 sm:px-10 sm:text-lg";
 
   const toggleSymptom = (s: string) => {
     setSelectedSymptoms((prev) =>
@@ -298,9 +329,29 @@ export default function PatientSymptomChecker() {
     );
   };
 
+  const addCustomSymptoms = (rawValue: string) => {
+    const tokens = extractSymptomTokens(rawValue);
+    if (!tokens.length) return;
+
+    setCustomSymptoms((prev) => {
+      const dedup = new Map<string, string>();
+      [...selectedSymptoms, ...prev, ...tokens].forEach((item) => {
+        const normalized = item.toLowerCase();
+        if (!dedup.has(normalized)) dedup.set(normalized, item);
+      });
+
+      return [...dedup.values()].filter((item) => !selectedSymptoms.some((s) => s.toLowerCase() === item.toLowerCase()));
+    });
+  };
+
+  const removeCustomSymptom = (symptom: string) => {
+    setCustomSymptoms((prev) => prev.filter((item) => item.toLowerCase() !== symptom.toLowerCase()));
+  };
+
   const handleSubmit = async () => {
-    const allSymptomsList = parseSymptoms(selectedSymptoms, symptoms);
+    const allSymptomsList = parseSymptoms(selectedSymptoms, customSymptoms, symptomInput);
     const allSymptoms = allSymptomsList.join(", ");
+    const symptomsForTriage = duration ? `${allSymptoms}. Duration: ${duration}.` : allSymptoms;
 
     if (!allSymptomsList.length) {
       toast({ title: "No symptoms", description: "Please enter at least one symptom.", variant: "destructive" });
@@ -319,7 +370,7 @@ export default function PatientSymptomChecker() {
 
     try {
       const { data, error } = await supabase.functions.invoke("symptom-triage", {
-        body: { symptoms: allSymptoms, age, gender, language, medicalHistoryContext },
+        body: { symptoms: symptomsForTriage, age, gender, language, medicalHistoryContext },
       });
 
       if (error) {
@@ -366,10 +417,15 @@ export default function PatientSymptomChecker() {
 
   const resetChecker = () => {
     setStep("input");
-    setSymptoms("");
+    setSymptomInput("");
+    setCustomSymptoms([]);
     setSelectedSymptoms([]);
     setAge("");
     setGender("");
+    setDuration("");
+    setAssessmentFor(null);
+    setPatientName("");
+    setIntakeStep("intro");
     setResult(null);
   };
 
@@ -382,7 +438,8 @@ export default function PatientSymptomChecker() {
       age,
       gender,
       selectedSymptoms,
-      additionalSymptoms: symptoms,
+      additionalSymptoms: [...customSymptoms, ...extractSymptomTokens(symptomInput)],
+      duration,
     });
 
     const signature = `${result.urgency}|${result.summary}|${autoReport.markdown.slice(0, 220)}`;
@@ -416,7 +473,7 @@ export default function PatientSymptomChecker() {
     return () => {
       cancelled = true;
     };
-  }, [step, result, user?.id, age, gender, selectedSymptoms, symptoms, queryClient, navigate]);
+  }, [step, result, user?.id, age, gender, duration, selectedSymptoms, customSymptoms, symptomInput, queryClient, navigate]);
 
   if (step === "loading") {
     return (
@@ -441,7 +498,8 @@ export default function PatientSymptomChecker() {
       age,
       gender,
       selectedSymptoms,
-      additionalSymptoms: symptoms,
+      additionalSymptoms: [...customSymptoms, ...extractSymptomTokens(symptomInput)],
+      duration,
     });
 
     return (
@@ -546,133 +604,313 @@ export default function PatientSymptomChecker() {
     );
   }
 
-  // Input Step
+  const goToPreviousIntakeStep = () => {
+    const order: IntakeStep[] = ["intro", "forWhom", "name", "sex", "age", "duration", "symptoms"];
+    const idx = order.indexOf(intakeStep);
+    if (idx <= 0) return;
+
+    if (intakeStep === "sex" && assessmentFor === "self") {
+      setIntakeStep("forWhom");
+      return;
+    }
+
+    setIntakeStep(order[idx - 1]);
+  };
+
+  const canContinueAge = age.trim().length > 0;
+  const canContinueName = assessmentFor === "self" || patientName.trim().length > 1;
+
+  // Input Step (ADA-inspired conversational intake)
   return (
     <div className="flex-1 min-h-screen bg-background">
-      <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-            <Thermometer className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="font-display text-2xl font-bold mb-2">{copy.checkerTitle}</h1>
-          <p className="text-muted-foreground text-sm">
-            {copy.checkerSubtitle}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Best for urgency triage</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Use Symptom Checker when you want risk level and next-step care guidance.
-              </p>
-            </div>
+      <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col bg-background">
+        <header className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-4 backdrop-blur">
+          <div className="relative text-center">
+            <h1 className="font-display text-xl font-medium text-foreground">Symptom Assessment</h1>
             <Button
-              variant="outline"
-              size="sm"
-              className="sm:shrink-0"
-              onClick={() => navigate("/patient/ai-assistant")}
+              variant="ghost"
+              size="icon"
+              className="absolute -top-1 right-0 text-muted-foreground"
+              onClick={() => navigate("/patient/dashboard")}
+              aria-label="Close symptom checker"
             >
-              Need broader health guidance?
+              <X className="h-6 w-6" />
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* Patient Info */}
-        <div className="space-y-4 rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-          <h3 className="font-semibold">{copy.patientInformation}</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">{copy.age}</label>
-              <Input
-                type="number"
-                placeholder={copy.agePlaceholder}
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">{copy.gender}</label>
-              <Select value={gender} onValueChange={setGender}>
-                <SelectTrigger>
-                  <SelectValue placeholder={copy.select} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
+        <main className="flex-1 px-5 pb-24 pt-6 sm:px-8">
+          {intakeStep !== "intro" && (
+            <button
+              onClick={goToPreviousIntakeStep}
+              className="mb-8 inline-flex items-center gap-2 text-base font-semibold text-primary sm:text-lg"
+            >
+              <ArrowUp className="h-4 w-4" />
+              Previous
+            </button>
+          )}
 
-        {/* Common Symptoms */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="font-semibold">{copy.commonSymptoms}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{parsedSymptoms.length} {copy.selected}</span>
-              {(selectedSymptoms.length > 0 || symptoms.trim()) && (
+          {intakeStep === "intro" && (
+            <section className="space-y-8">
+              <h2 className={sectionTitleClass}>
+                Hi, I&apos;m Neo Assistant. Let&apos;s take a few minutes to answer questions about your symptoms.
+              </h2>
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-foreground">
+                <p className="text-sm leading-relaxed sm:text-base">
+                  If you are experiencing severe symptoms, contact emergency services immediately.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button className={primaryCtaClass} onClick={() => setIntakeStep("forWhom")}>
+                  Continue
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "forWhom" && (
+            <section className="space-y-8">
+              <h2 className={sectionTitleClass}>Great. Who is this assessment for?</h2>
+              <div className="flex flex-col items-end gap-3">
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
+                  variant="outline"
+                  className={answerPillClass}
                   onClick={() => {
-                    setSelectedSymptoms([]);
-                    setSymptoms("");
+                    setAssessmentFor("self");
+                    setPatientName("");
+                    setIntakeStep("sex");
                   }}
                 >
-                  {copy.clearAll}
+                  Myself
                 </Button>
+                <Button
+                  variant="outline"
+                  className={answerPillClass}
+                  onClick={() => {
+                    setAssessmentFor("other");
+                    setIntakeStep("name");
+                  }}
+                >
+                  Someone else
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "name" && (
+            <section className="space-y-6">
+              <h2 className={sectionTitleClass}>What&apos;s their name?</h2>
+              <Input
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                placeholder="Type in their name"
+                className="h-12 rounded-full border-border bg-background px-6 text-base sm:h-14 sm:text-lg"
+              />
+              <div className="flex justify-end">
+                <Button
+                  className={primaryCtaClass}
+                  onClick={() => setIntakeStep("sex")}
+                  disabled={!canContinueName}
+                >
+                  Continue
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "sex" && (
+            <section className="space-y-8">
+              <h2 className={sectionTitleClass}>{sexQuestion}</h2>
+              <p className="text-sm text-muted-foreground sm:text-base">
+                Sex assigned at birth can be a risk factor for some conditions and helps improve triage accuracy.
+              </p>
+              <div className="flex flex-col items-end gap-3">
+                <Button
+                  variant="outline"
+                  className={answerPillClass}
+                  onClick={() => {
+                    setGender("female");
+                    setIntakeStep("age");
+                  }}
+                >
+                  Female
+                </Button>
+                <Button
+                  variant="outline"
+                  className={answerPillClass}
+                  onClick={() => {
+                    setGender("male");
+                    setIntakeStep("age");
+                  }}
+                >
+                  Male
+                </Button>
+                <Button
+                  variant="outline"
+                  className={answerPillClass}
+                  onClick={() => {
+                    setGender("other");
+                    setIntakeStep("age");
+                  }}
+                >
+                  Intersex / Other
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "age" && (
+            <section className="space-y-6">
+              <h2 className={sectionTitleClass}>{ageQuestion}</h2>
+              <Input
+                type="number"
+                value={age}
+                min={1}
+                max={120}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder={copy.agePlaceholder}
+                className="h-12 rounded-full border-border bg-background px-6 text-base sm:h-14 sm:text-lg"
+              />
+              <div className="flex justify-end">
+                <Button
+                  className={primaryCtaClass}
+                  onClick={() => setIntakeStep("duration")}
+                  disabled={!canContinueAge}
+                >
+                  Continue
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "duration" && (
+            <section className="space-y-8">
+              <h2 className={sectionTitleClass}>{durationQuestion}</h2>
+              <div className="flex flex-col items-end gap-3">
+                {durationOptions.map((option) => (
+                  <Button
+                    key={option}
+                    variant="outline"
+                    className={answerPillClass}
+                    onClick={() => {
+                      setDuration(option);
+                      setIntakeStep("symptoms");
+                    }}
+                  >
+                    {option}
+                  </Button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {intakeStep === "symptoms" && (
+            <section className="space-y-8">
+              <h2 className={sectionTitleClass}>{symptomQuestion}</h2>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground sm:text-base">For example, you can search &lsquo;runny nose&rsquo;.</p>
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={symptomInput}
+                    onChange={(e) => setSymptomInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "," || e.key === ";") {
+                        e.preventDefault();
+                        addCustomSymptoms(symptomInput);
+                        setSymptomInput("");
+                      }
+                    }}
+                    placeholder="Search for a symptom"
+                    className="h-12 rounded-full border-border bg-background pl-12 pr-20 text-base sm:h-14 sm:text-lg"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full px-3 text-xs"
+                    onClick={() => {
+                      addCustomSymptoms(symptomInput);
+                      setSymptomInput("");
+                    }}
+                    disabled={!symptomInput.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Press Enter, comma, or semicolon to add multiple symptoms.</p>
+              </div>
+
+              {customSymptoms.length > 0 && (
+                <div>
+                  <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Added Symptoms</p>
+                  <div className="flex flex-wrap gap-2">
+                    {customSymptoms.map((symptom) => (
+                      <button
+                        key={symptom}
+                        onClick={() => removeCustomSymptom(symptom)}
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-3 py-1.5 text-sm text-foreground"
+                        title="Remove symptom"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        {symptom}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {commonSymptoms.map((s) => (
-              <button
-                key={s}
-                onClick={() => toggleSymptom(s)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  selectedSymptoms.includes(s)
-                    ? "bg-primary text-primary-foreground glow-green"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
 
-        {/* Additional Symptoms */}
-        <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
-          <h3 className="font-semibold mb-3">{copy.additionalSymptoms}</h3>
-          <textarea
-            value={symptoms}
-            onChange={(e) => setSymptoms(e.target.value)}
-            placeholder={copy.additionalPlaceholder}
-            rows={3}
-            className="w-full resize-none rounded-xl bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-          />
-          <p className="mt-2 text-xs text-muted-foreground">
-            {copy.commaHint}
-          </p>
-        </div>
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Common Symptoms</p>
+                  {(selectedSymptoms.length > 0 || customSymptoms.length > 0 || symptomInput.trim()) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-sm text-foreground"
+                      onClick={() => {
+                        setSelectedSymptoms([]);
+                        setCustomSymptoms([]);
+                        setSymptomInput("");
+                      }}
+                    >
+                      {copy.clearAll}
+                    </Button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {commonSymptoms.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => toggleSymptom(s)}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        selectedSymptoms.includes(s)
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-primary/50 bg-transparent text-primary hover:bg-primary/10"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        <Button
-          className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
-          onClick={handleSubmit}
-          disabled={parsedSymptoms.length === 0}
-        >
-          <Activity className="w-5 h-5 mr-2" />
-          {copy.analyze}
-        </Button>
+              <div className="flex justify-end">
+                <Button
+                  className={primaryCtaClass}
+                  onClick={handleSubmit}
+                  disabled={parsedSymptoms.length === 0}
+                >
+                  Start symptom assessment
+                </Button>
+              </div>
+            </section>
+          )}
+        </main>
 
-        <p className="text-xs text-muted-foreground text-center">
-          This tool provides guidance only and is not a substitute for professional medical advice.
-        </p>
+        <footer className="flex items-center justify-between border-t border-border px-5 py-5 text-xs text-muted-foreground sm:px-8 sm:text-sm">
+          <span>Powered by Neo Synapse</span>
+          <button className="underline" onClick={() => navigate("/patient/settings")}>About Neo Synapse and Privacy</button>
+        </footer>
       </div>
     </div>
   );

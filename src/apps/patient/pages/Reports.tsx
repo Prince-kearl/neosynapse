@@ -16,6 +16,41 @@ const statusConfig: Record<string, string> = {
   approved: "bg-green-500/10 text-green-500 border-green-500/20",
 };
 
+const urgencyConfig: Record<string, { label: string; className: string }> = {
+  "non-urgent": { label: "Non-urgent", className: "border-green-500/30 bg-green-500/10 text-green-700" },
+  "needs-attention": { label: "Needs attention", className: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700" },
+  urgent: { label: "Urgent", className: "border-orange-500/30 bg-orange-500/10 text-orange-700" },
+  emergency: { label: "Emergency", className: "border-red-500/30 bg-red-500/10 text-red-700" },
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+
+const asText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+
+const asStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
+    : [];
+
+const toTitleCase = (value: string): string =>
+  value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatDateTime = (value: unknown): string => {
+  if (typeof value !== "string") return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 export default function PatientReports() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -182,10 +217,138 @@ export default function PatientReports() {
 
             {selectedReport && (
               <>
-                <div className="text-sm text-muted-foreground">Type: {selectedReport.report_type}</div>
-                <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
-                  {JSON.stringify(selectedReport.report_json ?? {}, null, 2)}
-                </pre>
+                {(() => {
+                  const reportData = asRecord(selectedReport.report_json) || {};
+                  const patient = asRecord(reportData.patient) || {};
+                  const urgencyKey = asText(reportData.urgency).toLowerCase();
+                  const urgency = urgencyConfig[urgencyKey] || null;
+                  const summary = asText(reportData.summary) || "No summary is available for this report yet.";
+                  const recommendedAction = asText(reportData.recommended_action) || "No recommended next step was provided.";
+                  const reportType = asText(selectedReport.report_type) || "medical_report";
+                  const symptoms = asStringArray(reportData.symptoms);
+                  const warningSigns = asStringArray(reportData.warning_signs);
+                  const followUpQuestions = asStringArray(reportData.follow_up_questions).length > 0
+                    ? asStringArray(reportData.follow_up_questions)
+                    : asStringArray(reportData.questions);
+                  const possibleConditions = Array.isArray(reportData.possible_conditions)
+                    ? reportData.possible_conditions
+                      .map((item) => asRecord(item))
+                      .filter(Boolean)
+                      .map((item) => ({
+                        name: asText(item?.name) || "Unknown condition",
+                        likelihood: asText(item?.likelihood) || "unknown",
+                      }))
+                    : [];
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border bg-muted/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Report type</p>
+                          <p className="mt-1 text-sm font-medium text-foreground">{toTitleCase(reportType)}</p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-muted/20 p-4">
+                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Generated on</p>
+                          <p className="mt-1 text-sm font-medium text-foreground">{formatDateTime(reportData.generatedAt || selectedReport.created_at)}</p>
+                        </div>
+                      </div>
+
+                      {urgency && (
+                        <div className={`rounded-xl border px-4 py-3 ${urgency.className}`}>
+                          <p className="text-xs uppercase tracking-wide">Urgency level</p>
+                          <p className="text-base font-semibold">{urgency.label}</p>
+                        </div>
+                      )}
+
+                      <div className="rounded-xl border border-border bg-card p-4">
+                        <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{summary}</p>
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-card p-4">
+                        <h3 className="text-sm font-semibold text-foreground">Recommended next step</h3>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendedAction}</p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <h3 className="text-sm font-semibold text-foreground">Patient details</h3>
+                          <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
+                            <div className="flex justify-between gap-3">
+                              <dt>Age</dt>
+                              <dd className="font-medium text-foreground">{asText(patient.age) || "Not provided"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt>Sex</dt>
+                              <dd className="font-medium text-foreground">{toTitleCase(asText(patient.gender) || "not provided")}</dd>
+                            </div>
+                            {asText(reportData.duration) && (
+                              <div className="flex justify-between gap-3">
+                                <dt>Duration</dt>
+                                <dd className="font-medium text-foreground">{asText(reportData.duration)}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <h3 className="text-sm font-semibold text-foreground">Reported symptoms</h3>
+                          {symptoms.length > 0 ? (
+                            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                              {symptoms.map((symptom) => (
+                                <li key={symptom}>• {symptom}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-sm text-muted-foreground">No symptoms were listed.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {possibleConditions.length > 0 && (
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <h3 className="text-sm font-semibold text-foreground">Possible causes to discuss with your clinician</h3>
+                          <div className="mt-3 space-y-2">
+                            {possibleConditions.map((condition) => (
+                              <div key={`${condition.name}-${condition.likelihood}`} className="flex items-center justify-between gap-3 rounded-lg border border-border/80 p-3">
+                                <p className="text-sm text-foreground">{condition.name}</p>
+                                <Badge variant="outline" className="capitalize">{condition.likelihood}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {warningSigns.length > 0 && (
+                        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                          <h3 className="text-sm font-semibold text-red-700">Warning signs to watch for</h3>
+                          <ul className="mt-2 space-y-1 text-sm text-red-700/90">
+                            {warningSigns.map((item) => (
+                              <li key={item}>• {item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {followUpQuestions.length > 0 && (
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <h3 className="text-sm font-semibold text-foreground">Questions to ask during your consultation</h3>
+                          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                            {followUpQuestions.map((question) => (
+                              <li key={question}>• {question}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <details className="rounded-xl border border-border bg-muted/20 p-4">
+                        <summary className="cursor-pointer text-sm font-medium text-foreground">Show technical report data (JSON)</summary>
+                        <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-3 text-xs">
+                          {JSON.stringify(selectedReport.report_json ?? {}, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button size="sm" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportJson(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Export JSON
