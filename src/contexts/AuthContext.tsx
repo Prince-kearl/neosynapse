@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureNativePushRegistration } from "@/mobile/pushNotifications";
 
 interface AuthContextType {
   user: User | null;
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
+        void ensureNativePushRegistration(session?.user?.id);
       }
     );
 
@@ -37,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+      void ensureNativePushRegistration(session?.user?.id);
     });
 
     return () => subscription.unsubscribe();

@@ -24,6 +24,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMedicalHistory, useMedicalHistoryFiles } from "@/shared/hooks/useHealthcare";
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
 import ReactMarkdown from "react-markdown";
+import { Capacitor } from "@capacitor/core";
+import { Keyboard } from "@capacitor/keyboard";
 import {
   Select,
   SelectContent,
@@ -423,6 +425,7 @@ function AIAssistant() {
   // Always default to text mode when opening the AI Assistant
   const [mode, setMode] = useState("text");
   const [sessionSearch, setSessionSearch] = useState("");
+  const [keyboardInset, setKeyboardInset] = useState(0);
   // Remove continuous voice loop
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any | null>(null);
@@ -441,6 +444,7 @@ function AIAssistant() {
   // --- Suggestion chip highlight state ---
   const [highlightedChip, setHighlightedChip] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previousKeyboardInsetRef = useRef(0);
   const previewText = VOICE_PREVIEW_TEXT[language] || VOICE_PREVIEW_TEXT.en;
   const normalizedSessionSearch = sessionSearch.trim().toLowerCase();
   const orderedSessions = useMemo(() => {
@@ -545,10 +549,81 @@ function AIAssistant() {
     localStorage.setItem("ai-assistant-voice-style", voiceStyle);
   }, [voiceStyle]);
 
+  useEffect(() => {
+    let isDisposed = false;
+    let nativeShowHandle: { remove: () => Promise<void> } | null = null;
+    let nativeHideHandle: { remove: () => Promise<void> } | null = null;
+
+    const visualViewport = window.visualViewport;
+    const updateKeyboardInsetFromViewport = () => {
+      if (!visualViewport || Capacitor.isNativePlatform()) return;
+
+      const inset = Math.max(
+        0,
+        Math.round(window.innerHeight - visualViewport.height - visualViewport.offsetTop)
+      );
+
+      // Ignore tiny viewport shifts from browser chrome and only react to real keyboard height.
+      setKeyboardInset(inset > 60 ? inset : 0);
+    };
+
+    if (Capacitor.isNativePlatform()) {
+      void Keyboard.addListener("keyboardWillShow", (info) => {
+        if (isDisposed) return;
+        setKeyboardInset(Math.max(0, info.keyboardHeight || 0));
+      }).then((handle) => {
+        nativeShowHandle = handle;
+      });
+
+      void Keyboard.addListener("keyboardWillHide", () => {
+        if (isDisposed) return;
+        setKeyboardInset(0);
+      }).then((handle) => {
+        nativeHideHandle = handle;
+      });
+    } else if (visualViewport) {
+      updateKeyboardInsetFromViewport();
+      visualViewport.addEventListener("resize", updateKeyboardInsetFromViewport);
+      visualViewport.addEventListener("scroll", updateKeyboardInsetFromViewport);
+      window.addEventListener("orientationchange", updateKeyboardInsetFromViewport);
+    }
+
+    return () => {
+      isDisposed = true;
+      if (visualViewport) {
+        visualViewport.removeEventListener("resize", updateKeyboardInsetFromViewport);
+        visualViewport.removeEventListener("scroll", updateKeyboardInsetFromViewport);
+      }
+      window.removeEventListener("orientationchange", updateKeyboardInsetFromViewport);
+      void nativeShowHandle?.remove();
+      void nativeHideHandle?.remove();
+    };
+  }, []);
+
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const previousInset = previousKeyboardInsetRef.current;
+    const didJustOpenKeyboard = previousInset <= 0 && keyboardInset > 0;
+    previousKeyboardInsetRef.current = keyboardInset;
+
+    if (!didJustOpenKeyboard || mode !== "text") return;
+
+    const scrollToLatest = () => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    };
+
+    // Run once immediately and once after keyboard animation settles.
+    scrollToLatest();
+    const timer = window.setTimeout(scrollToLatest, 220);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [keyboardInset, mode]);
 
   // Auto-send dashboard search query when arriving with ?query=...
   useEffect(() => {
@@ -1447,7 +1522,13 @@ function AIAssistant() {
           )}
 
           {/* Input - Redesigned Search Box UI */}
-          <div className="fixed inset-x-0 bottom-[68px] z-40 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-4 lg:sticky lg:bottom-0 lg:p-6">
+          <div
+            className="fixed inset-x-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-4 lg:sticky lg:bottom-0 lg:p-6"
+            style={{
+              bottom: `calc(max(68px, env(safe-area-inset-bottom, 0px)) + ${keyboardInset}px)`,
+              transition: "bottom 180ms ease-out",
+            }}
+          >
             <div className="mx-auto w-full max-w-2xl">
               <div className="flex items-center w-full rounded-full bg-card text-foreground border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.12)' }}>
 

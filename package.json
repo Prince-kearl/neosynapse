@@ -10,9 +10,27 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "mobile:build": "npm run build && npx cap sync",
+    "mobile:sync": "npx cap sync",
+    "mobile:copy": "npx cap copy",
+    "mobile:android": "npx cap open android",
+    "mobile:ios": "npx cap open ios",
+    "mobile:run:android": "npx cap run android",
+    "mobile:run:ios": "npx cap run ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/device": "^8.0.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.3.1",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/push-notifications": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@elevenlabs/react": "^0.14.1",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/poppins": "^5.2.7",
@@ -78,6 +96,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.1",
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732" fill="none">
+  <defs>
+    <linearGradient id="mark" x1="1126" y1="1060" x2="1606" y2="1540" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B5FFF"/>
+      <stop offset="1" stop-color="#00A3A3"/>
+    </linearGradient>
+    <filter id="soft" x="1008" y="1008" width="716" height="716" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#1C3D5A" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="2732" height="2732" fill="#F7FBFF"/>
+
+  <g filter="url(#soft)">
+    <rect x="1062" y="1062" width="608" height="608" rx="160" fill="#FFFFFF"/>
+  </g>
+
+  <g transform="translate(1366 1366) rotate(45) translate(-1366 -1366)">
+    <rect x="1212" y="1330" width="308" height="72" rx="36" fill="url(#mark)"/>
+    <rect x="1330" y="1212" width="72" height="308" rx="36" fill="url(#mark)"/>
+  </g>
+</svg>

@@ -8,5 +8,8 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import App from "./App.tsx";
 import "./index.css";
+import { bootstrapNativeShell } from "./mobile/capacitorBootstrap";
+
+void bootstrapNativeShell();
 
 createRoot(document.getElementById("root")!).render(<App />);

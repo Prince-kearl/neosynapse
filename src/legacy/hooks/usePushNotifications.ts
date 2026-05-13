@@ -1,16 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getPushPermission,
+  isPushSupported as isPushSupportedUnified,
+  requestAndRegisterNativePush,
+  requestPushPermission,
+} from "@/mobile/pushNotifications";
 
 export const usePushNotifications = () => {
+  const { user } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [isSupported, setIsSupported] = useState(false);
 
   useEffect(() => {
-    const supported = "Notification" in window;
+    const supported = isPushSupportedUnified();
     setIsSupported(supported);
-    
-    if (supported) {
-      setPermission(Notification.permission);
-    }
+
+    if (!supported) return;
+
+    void getPushPermission().then((p) => setPermission(p));
   }, []);
 
   const requestPermission = useCallback(async () => {
@@ -20,17 +28,22 @@ export const usePushNotifications = () => {
     }
 
     try {
-      const result = await Notification.requestPermission();
+      const result = await requestPushPermission();
       setPermission(result);
+
+      if (result === "granted") {
+        await requestAndRegisterNativePush(user?.id);
+      }
+
       return result === "granted";
     } catch (error) {
       console.error("Error requesting notification permission:", error);
       return false;
     }
-  }, [isSupported]);
+  }, [isSupported, user?.id]);
 
   const sendNotification = useCallback((title: string, options?: NotificationOptions) => {
-    if (!isSupported || permission !== "granted") {
+    if (!("Notification" in window) || permission !== "granted") {
       console.warn("Cannot send notification: not supported or permission not granted");
       return null;
     }

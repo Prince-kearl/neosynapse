@@ -1,6 +1,6 @@
 # NeoSynapse — Project Documentation
 
-> **Last updated:** 14 April 2026  
+> **Last updated:** 9 May 2026  
 > This file is the single source of truth for the NeoSynapse platform. Update it whenever features, workflows, stack decisions, or database schemas change.
 
 ---
@@ -61,6 +61,7 @@ NeoSynapse is a multi-role healthcare platform designed for use in Ghana. It con
 | **Vite** | 5.x | Build tool and dev server |
 | **React Router v6** | 6.30.x | Client-side routing with nested route layouts |
 | **@tanstack/react-query** | 5.83.x | Server state: caching, mutations, invalidation |
+| **Capacitor** (`@capacitor/core`, platforms, plugins) | 8.x | Mobile wrapper runtime for Android/iOS native shells |
 | **Tailwind CSS** | 3.x | Utility-first styling |
 | **shadcn/ui** (Radix UI) | mixed | Pre-built accessible UI primitives |
 | **next-themes** | 0.3.x | Dark / light mode with `class` strategy |
@@ -101,6 +102,56 @@ NeoSynapse is a multi-role healthcare platform designed for use in Ghana. It con
 |---|---|
 | **Vitest** | Unit and integration tests |
 | **@testing-library/react** | Component testing helpers |
+
+### Mobile Wrapper (Capacitor)
+
+**Current setup status (2026-04-18):**
+- Capacitor initialized with `capacitor.config.ts`.
+- Native projects scaffolded in `android/` and `ios/`.
+- Build/sync scripts added to `package.json` (`mobile:build`, `mobile:sync`, `mobile:copy`, `mobile:android`, `mobile:ios`, `mobile:run:android`, `mobile:run:ios`).
+- Native shell bootstrap wired in `src/mobile/capacitorBootstrap.ts` and called from `src/main.tsx`.
+
+**Configured plugins (installed + synced):**
+- `@capacitor/app`
+- `@capacitor/browser`
+- `@capacitor/device`
+- `@capacitor/haptics`
+- `@capacitor/keyboard`
+- `@capacitor/push-notifications`
+- `@capacitor/splash-screen`
+- `@capacitor/status-bar`
+
+**Required plugin wiring plan:**
+1. **App lifecycle and back navigation**
+  - Keep `@capacitor/app` handling in `src/mobile/capacitorBootstrap.ts`.
+  - Extend with deep-link handling (`appUrlOpen`) for auth redirects.
+2. **Status bar and keyboard ergonomics**
+  - Keep `StatusBar` + `Keyboard` setup in `src/mobile/capacitorBootstrap.ts`.
+  - Validate against key pages (`AIAssistant`, `SymptomChecker`, `Reports`) for safe insets and keyboard overlap.
+3. **Push notifications (production-critical)**
+  - Implemented `src/mobile/pushNotifications.ts` to request permissions, register token, and attach listeners.
+  - Implemented Supabase persistence via `auth.user_metadata.mobile_push_tokens` (deduped token list with platform/version/timestamp).
+  - Remaining setup: configure APNs (iOS) and Firebase Cloud Messaging (Android) credentials for real delivery.
+4. **Native browser handoff for external links**
+  - Use `@capacitor/browser` for trusted external URLs where in-app context should remain controlled.
+5. **Device metadata and diagnostics**
+  - Use `@capacitor/device` for environment tagging (platform/app version) in logs/health checks.
+6. **Haptics for key interactions**
+  - Add subtle haptics only on high-value actions (primary CTA submit, call accept/end, important confirmations).
+
+**Android build note:**
+- Initial Gradle sync reported JVM 8 in local environment. Android build requires Java 11+ (prefer Java 17) for AGP 8.x.
+- Projects were still scaffolded successfully; set local `JAVA_HOME` to Java 17 before running Android Studio/Gradle builds.
+
+**Implemented continuation (2026-04-18):**
+- Added `src/mobile/pushNotifications.ts` as a unified native/web push permission + registration service.
+- Updated `src/legacy/hooks/usePushNotifications.ts` to use the unified service and trigger native registration after grant.
+- Updated `src/contexts/AuthContext.tsx` to auto-attempt native push registration for authenticated users.
+
+**Splash branding update (2026-05-09):**
+- Added a branded native splash artwork source at `resources/splash.svg` and applied generated splash images to iOS (`ios/App/App/Assets.xcassets/Splash.imageset`) and Android (`android/app/src/main/res/**/splash.png`).
+- Updated Capacitor splash timing (`launchShowDuration: 5000`) to reduce timeout auto-hide warnings on slower cold starts.
+- Refined the splash to a minimal Apple-style variant (logo-only, no subtitle) for a cleaner native launch appearance.
 
 ---
 
@@ -304,6 +355,9 @@ A full-featured conversational AI interface.
 - Streaming responses via `useMedicalChat` hook → `streamMedicalChat()` → `medical-chat` edge function.
 - Mobile fixed chrome — top action bar, mobile conversation selector, and bottom input/search bar stay fixed while only message content scrolls.
 - Mobile conversation controls keep the `+` new-conversation button inline beside the conversation dropdown on small screens.
+- Mobile keyboard-aware composer — AI Assistant input/search bar now moves with the on-screen keyboard so the text box remains visible while typing on iOS/Android.
+- Keyboard-open context preservation — when the mobile keyboard opens, AI Assistant auto-scrolls the latest message into view so current conversation context is not hidden.
+- Native keyboard event alignment — on Capacitor iOS/Android, composer offset now uses `Keyboard` plugin show/hide event heights (with browser `visualViewport` fallback) for more reliable movement above the keyboard.
 - Markdown rendering of AI replies.
 - Voice input — microphone button records audio, uploads to `speech-to-text` edge function (ElevenLabs Scribe v2), inserts transcribed text into the message box.
 - Text-to-speech — "Listen" button on each assistant message calls `text-to-speech` edge function (ElevenLabs multilingual v2).
@@ -635,6 +689,12 @@ Notable hooks:
 
 Real-time notification subscriptions and read/unread management.
 
+### Push Notification Invocation (`src/shared/services/pushNotificationService.ts`)
+
+- Client helper for invoking `send-push-notification` edge function from the frontend.
+- Supports dry-run and real-send flows with typed request/response contracts.
+- Used by Admin Notifications page for controlled test sends.
+
 ---
 
 ## 10. Supabase Edge Functions
@@ -685,6 +745,28 @@ All functions are located in `supabase/functions/` and run on Deno.
 
 - **Purpose:** Validate an invitation token and provision the new user's profile.
 - **Flow:** Reads token from `invitations`, verifies not expired / already accepted, creates `profiles` + role-specific profile record, marks invitation `accepted`.
+
+### `send-push-notification`
+
+- **Purpose:** Send mobile push notifications to one or more users by reading `mobile_push_tokens` from Supabase Auth `user_metadata`.
+- **Auth:** Requires caller JWT and checks `user_roles`; only `admin` and `professional` can dispatch.
+- **Input:**
+  - `target_user_id` or `target_user_ids` (max 50 users)
+  - `title`, `body`
+  - optional `data` object
+  - optional `urgency` (`normal` | `high`)
+  - optional `dry_run` boolean
+- **Providers:**
+  - Android: Firebase Cloud Messaging (legacy server key path via `FCM_SERVER_KEY`)
+  - iOS: Apple Push Notification service via HTTP API (`APNS_BEARER_TOKEN`, `APNS_TOPIC`)
+- **Output:** Per-token delivery results (`sent` | `failed` | `skipped`) plus totals.
+- **Audit:** Writes `push_notification_dispatch` / `push_notification_dry_run` events into `audit_logs`.
+
+### Admin push test UI (`/admin/notifications`)
+
+- Added a **Mobile Push Test** panel to send a dry-run or real push to a selected user.
+- Admin can configure target user, title, body, urgency, and dry-run toggle.
+- Function response totals and per-token delivery result JSON are displayed inline for verification.
 
 ---
 
@@ -1102,9 +1184,12 @@ See `src/shared/services/healthcare.ts` header for the full RLS status table and
 | `ELEVENLABS_API_KEY` | speech-to-text, text-to-speech | |
 | `RESEND_API_KEY` | send-invitation | Email delivery; optional — invitation is still created if missing |
 | `LOVABLE_API_KEY` | medical-chat, symptom-triage | Legacy fallback only |
+| `FCM_SERVER_KEY` | send-push-notification | Required for Android push dispatch (legacy FCM key flow) |
+| `APNS_BEARER_TOKEN` | send-push-notification | Required for iOS APNs direct send (JWT bearer token) |
+| `APNS_TOPIC` | send-push-notification | iOS app bundle identifier used as APNs topic |
 | `SUPABASE_URL` | send-invitation, accept-invitation | Auto-injected by Supabase |
-| `SUPABASE_ANON_KEY` | send-invitation | Auto-injected |
-| `SUPABASE_SERVICE_ROLE_KEY` | send-invitation, accept-invitation | Auto-injected |
+| `SUPABASE_ANON_KEY` | send-invitation, send-push-notification | Auto-injected |
+| `SUPABASE_SERVICE_ROLE_KEY` | send-invitation, accept-invitation, send-push-notification | Auto-injected |
 
 ---
 
@@ -1221,6 +1306,15 @@ supabase db push --yes
 | 2026-04-15 | Updated browser tab icon to use the app favicon from `public/favicon.ico` by adding an explicit favicon link in the HTML head | `index.html`, `DOCUMENTATION.md` |
 | 2026-04-15 | Clarified favicon setup with explicit standard + shortcut icon tags so browsers consistently load `public/favicon.ico` | `index.html`, `DOCUMENTATION.md` |
 | 2026-04-15 | Added favicon cache-busting and Apple touch icon tags so browsers refresh and use `public/favicon.ico` consistently | `index.html`, `DOCUMENTATION.md` |
+| 2026-04-18 | Set up Capacitor mobile wrapper structure: installed Capacitor core/platform/plugins, added `capacitor.config.ts`, scaffolded `android` and `ios`, added mobile scripts, and wired native bootstrap initialization | `package.json`, `capacitor.config.ts`, `src/mobile/capacitorBootstrap.ts`, `src/main.tsx`, `android/**`, `ios/**`, `DOCUMENTATION.md` |
+| 2026-04-18 | Continued mobile setup by implementing unified native/web push registration with Supabase metadata token persistence and auth-triggered native registration | `src/mobile/pushNotifications.ts`, `src/legacy/hooks/usePushNotifications.ts`, `src/contexts/AuthContext.tsx`, `DOCUMENTATION.md` |
+| 2026-04-18 | Added `send-push-notification` Supabase Edge Function to dispatch notifications from stored `mobile_push_tokens` with role checks, per-token delivery reporting, and audit logging | `supabase/functions/send-push-notification/index.ts`, `DOCUMENTATION.md` |
+| 2026-04-18 | Added frontend push invocation helper and Admin Notifications test panel for dry-run/real send verification against `send-push-notification` | `src/shared/services/pushNotificationService.ts`, `src/apps/admin/pages/Notifications.tsx`, `DOCUMENTATION.md` |
+| 2026-05-09 | Added branded native splash screen assets for iOS/Android and tuned Capacitor splash duration to improve cold-start launch experience | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `capacitor.config.ts`, `DOCUMENTATION.md` |
+| 2026-05-09 | Refined the native splash to a lighter minimal variant (logo only, no subtitle) to better match Apple launch-screen style | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `DOCUMENTATION.md` |
+| 2026-05-09 | Fixed AI Assistant mobile keyboard overlap by making the bottom input/search composer track keyboard height so the text box stays visible while typing | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
+| 2026-05-09 | Added AI Assistant keyboard-open auto-scroll so the latest message stays visible when the mobile keyboard appears | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
+| 2026-05-09 | Improved AI Assistant keyboard handling reliability on native mobile by using Capacitor Keyboard event heights for composer offset with browser fallback logic | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Patient Reports mobile responsiveness by stacking/wrapping metadata and action controls so report cards fully fit small screens | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Professional Reports mobile responsiveness by stacking/wrapping detail and list actions so controls fit cleanly on small screens | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile scrolling UX by pinning the top bar, conversation selector, and bottom input bar while chat content scrolls independently | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
