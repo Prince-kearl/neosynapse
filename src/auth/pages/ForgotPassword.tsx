@@ -31,8 +31,8 @@ export default function ForgotPassword() {
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
 
-      if (error) {
-        setError(error.message);
+      if (error && !/user not found|no user/.test(error.message.toLowerCase())) {
+        setError("Unable to send recovery instructions right now. Please try again later.");
       } else {
         setSent(true);
       }
@@ -60,7 +60,10 @@ export default function ForgotPassword() {
             </div>
             <h1 className="font-display text-2xl font-bold">Check Your Email</h1>
             <p className="text-muted-foreground">
-              We've sent password reset instructions to <span className="text-foreground font-medium">{email}</span>
+              If an account exists for <span className="text-foreground font-medium">{email}</span>, password reset instructions have been sent.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Check your inbox or spam folder, then use the link to continue resetting your password.
             </p>
             <Button variant="outline" asChild>
               <Link to="/auth/sign-in">
@@ -92,7 +95,10 @@ export default function ForgotPassword() {
           <div className="text-center">
             <h1 className="font-display text-2xl font-bold">Forgot Password?</h1>
             <p className="text-muted-foreground mt-1">
-              Enter your email and we'll send you reset instructions
+              Enter your email and we'll send secure reset instructions to your inbox.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              If you don't receive an email, check spam and try again in a few minutes.
             </p>
           </div>
 

@@ -11,6 +11,7 @@ import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { DoctorCard } from "@/components/telemedicine/DoctorCard";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
+import { pushNotificationService } from "@/shared/services/pushNotificationService";
 import { toast } from "@/hooks/use-toast";
 
 type ConsultationState = "lobby" | "waiting" | "active" | "ended";
@@ -170,6 +171,17 @@ export default function PatientTelemedicine() {
     }
 
     setRoomId(room.id);
+
+    try {
+      await pushNotificationService.sendTelemedicineCallNotification({
+        professionalId: selectedDoctor,
+        encounterId: encounter.id,
+        roomId: room.id,
+        patientName: user.email || "Patient",
+      });
+    } catch (notificationError) {
+      console.error("Failed to send telemedicine push notification:", notificationError);
+    }
 
     await startCall(videoEnabled, audioEnabled, room.id);
     setIsStartingConsultation(false);

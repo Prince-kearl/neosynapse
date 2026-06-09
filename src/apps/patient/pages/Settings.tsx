@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   ArrowLeft, Bell, Globe, Moon, Smartphone, Shield, Eye, Trash2, 
-  BellRing, FileText, HeartPulse
+  BellRing, FileText, HeartPulse, Sparkles, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -25,7 +25,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
 import { usePushNotifications } from "@/legacy/hooks/usePushNotifications";
 import { useMyConsents, useMyReports, usePatientProfile } from "@/shared/hooks/useHealthcare";
-import { patientProfileService } from "@/shared/services/healthcare";
+import { useAIConsentCheck } from "@/shared/hooks/useAIConsentCheck";
+import { patientProfileService, consentService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 
 export default function PatientSettings() {
@@ -36,7 +37,43 @@ export default function PatientSettings() {
   const { data: patientProfile } = usePatientProfile();
   const { data: reports = [] } = useMyReports();
   const { data: consents = [] } = useMyConsents();
+  const { data: aiConsent } = useAIConsentCheck();
   const { isSupported, isEnabled, permission, requestPermission } = usePushNotifications();
+
+  const revokeAiConsentMutation = useMutation({
+    mutationFn: async () => {
+      if (!user || !aiConsent?.id) throw new Error("No AI consent to revoke");
+      const { error } = await consentService.revoke(aiConsent.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-consent", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["consents", user?.id] });
+      toast({ title: "AI consent revoked", description: "You can re-grant consent from the AI Assistant." });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to revoke consent", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const aiConsentDate = aiConsent?.created_at
+    ? new Date(aiConsent.created_at).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+
+  const handleRevokeAiConsent = async () => {
+    if (!aiConsent?.id) return;
+    const confirmed = window.confirm("Revoke AI medical assistant consent?");
+    if (!confirmed) return;
+    await revokeAiConsentMutation.mutateAsync();
+  };
+
+  const handleOpenAiAssistant = () => {
+    navigate("/patient/ai-assistant");
+  };
 
   const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
   const profileMeta = (insuranceInfo.profile_meta as Record<string, unknown> | undefined) || {};
@@ -336,6 +373,49 @@ export default function PatientSettings() {
                 </div>
               </div>
               <Switch checked={anonymousAnalyticsEnabled} onCheckedChange={handleAnalyticsToggle} disabled={updateSettingsMutation.isPending} />
+            </div>
+          </div>
+        </section>
+
+        {/* AI Medical Consent */}
+        <section>
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3">AI Medical Consent</h2>
+          <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
+            <div className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <Shield className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">AI Medical Assistant</p>
+                  <p className="text-sm text-muted-foreground">
+                    {aiConsent
+                      ? `Consent granted on ${aiConsentDate}.`
+                      : "Consent not yet granted for AI medical advice."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {aiConsent ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleRevokeAiConsent}
+                    disabled={revokeAiConsentMutation.isPending}
+                  >
+                    {revokeAiConsentMutation.isPending ? "Revoking..." : "Revoke consent"}
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={handleOpenAiAssistant}>
+                    Grant consent
+                  </Button>
+                )}
+              </div>
+            </div>
+            <Separator />
+            <div className="p-4 text-sm text-muted-foreground">
+              <p>AI conversations require explicit medical consent before you can use the assistant.</p>
+              <p className="mt-2">
+                If you revoke consent, the AI Medical Assistant will require consent again before it can be used.
+              </p>
             </div>
           </div>
         </section>

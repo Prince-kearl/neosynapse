@@ -83,6 +83,29 @@ async function persistTokenForKnownUser(tokenPayload: StoredPushToken) {
   await upsertTokenIntoUserMetadata(lastRegisteredUserId, tokenPayload);
 }
 
+function openNotificationDeepLink(data: Record<string, string> | undefined, actionId?: string) {
+  if (!data) return;
+
+  const telemedicineAction = actionId || data.action;
+  const actionUrl = data.action_url;
+  let targetUrl: string | undefined;
+
+  if (data.type === "telemedicine_call" && data.encounterId) {
+    if (!actionId && actionUrl) {
+      targetUrl = actionUrl;
+    } else {
+      const action = telemedicineAction || "accept";
+      targetUrl = `/professional/telemedicine?encounterId=${encodeURIComponent(data.encounterId)}&action=${encodeURIComponent(action)}`;
+    }
+  } else if (actionUrl) {
+    targetUrl = actionUrl;
+  }
+
+  if (targetUrl) {
+    window.location.href = targetUrl;
+  }
+}
+
 async function initializeNativeListeners() {
   if (listenersInitialized) return;
 
@@ -112,6 +135,8 @@ async function initializeNativeListeners() {
 
   await PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
     console.log("[push] Notification action performed:", action);
+    const notificationData = action.notification?.data as Record<string, string> | undefined;
+    openNotificationDeepLink(notificationData, action.actionId);
   });
 
   listenersInitialized = true;

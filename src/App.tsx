@@ -13,6 +13,7 @@ import SignIn from "@/auth/pages/SignIn";
 import PatientSignUp from "@/auth/pages/PatientSignUp";
 import InviteAccept from "@/auth/pages/InviteAccept";
 import ForgotPassword from "@/auth/pages/ForgotPassword";
+import ResetPassword from "@/auth/pages/ResetPassword";
 import RoleRedirect from "@/auth/pages/RoleRedirect";
 
 // Guards
@@ -91,6 +92,7 @@ const App = () => (
                 <Route path="/auth/patient-sign-up" element={<PatientSignUp />} />
                 <Route path="/auth/invite-accept" element={<InviteAccept />} />
                 <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                <Route path="/auth/reset-password" element={<ResetPassword />} />
                 {/* Legacy auth route redirect */}
                 <Route path="/auth" element={<Navigate to="/auth/sign-in" replace />} />
 

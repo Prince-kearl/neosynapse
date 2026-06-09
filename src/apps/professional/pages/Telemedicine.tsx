@@ -423,16 +423,38 @@ export default function ProfessionalTelemedicine() {
 
   useEffect(() => {
     const deepLinkedEncounterId = searchParams.get("encounterId")?.trim() || null;
+    const deepLinkAction = searchParams.get("action")?.trim() || null;
     if (!deepLinkedEncounterId) return;
     if (callState !== "list") return;
-    if (consumedDeepLinkRef.current === deepLinkedEncounterId) return;
+    if (consumedDeepLinkRef.current === `${deepLinkedEncounterId}|${deepLinkAction}`) return;
 
     const targetEncounter = waitingEncounters.find((enc) => enc.id === deepLinkedEncounterId);
     if (!targetEncounter) return;
 
-    consumedDeepLinkRef.current = deepLinkedEncounterId;
+    consumedDeepLinkRef.current = `${deepLinkedEncounterId}|${deepLinkAction}`;
+
+    if (deepLinkAction === "reject") {
+      void supabase
+        .from("encounters")
+        .update({ status: "cancelled", ended_at: new Date().toISOString() })
+        .eq("id", targetEncounter.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error("Failed to reject telemedicine encounter:", error);
+            toast({ title: "Unable to reject call", description: "Please try again.", variant: "destructive" });
+            return;
+          }
+          toast({ title: "Call rejected", description: `You rejected ${getPatientName(targetEncounter.patient_id)}'s telemedicine request.` });
+        });
+      return;
+    }
+
     handleSelectEncounter(targetEncounter.id, targetEncounter.patient_id);
-  }, [searchParams, callState, waitingEncounters, handleSelectEncounter]);
+
+    if (deepLinkAction === "accept") {
+      void joinEncounter(targetEncounter.id);
+    }
+  }, [searchParams, callState, waitingEncounters, handleSelectEncounter, joinEncounter, getPatientName]);
 
   useEffect(() => {
     if (!snoozeUntil) return;
@@ -503,15 +525,15 @@ export default function ProfessionalTelemedicine() {
   }, [ringingEncounterId, startNotificationLoop]);
 
   /** Find the consultation room for this encounter's patient and join */
-  const handleJoinCall = useCallback(async () => {
-    if (!user || !selectedEncounterId) return;
+  const joinEncounter = useCallback(async (targetEncounterId: string) => {
+    if (!user || !targetEncounterId) return;
     stopRinging();
     setCallState("joining");
     setErrorMessage(null);
 
     try {
       // Find the encounter to get the patient_id
-      const encounter = waitingEncounters.find(e => e.id === selectedEncounterId);
+      const encounter = waitingEncounters.find(e => e.id === targetEncounterId);
       if (!encounter) {
         setCallState("error");
         setErrorMessage("Encounter not found");
@@ -562,6 +584,11 @@ export default function ProfessionalTelemedicine() {
         .eq("id", selectedEncounterId);
     }
   }, [endCall, selectedEncounterId]);
+
+  const handleJoinCall = useCallback(async () => {
+    if (!selectedEncounterId) return;
+    await joinEncounter(selectedEncounterId);
+  }, [joinEncounter, selectedEncounterId]);
 
   const handleToggleVideo = useCallback(() => {
     const next = !videoEnabled;

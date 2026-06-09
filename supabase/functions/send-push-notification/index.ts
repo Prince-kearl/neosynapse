@@ -15,12 +15,20 @@ interface StoredPushToken {
   updatedAt?: string;
 }
 
+interface NotificationAction {
+  id: string;
+  title: string;
+  icon?: string;
+}
+
 interface PushRequestBody {
   target_user_id?: string;
   target_user_ids?: string[];
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  category?: string;
+  actions?: NotificationAction[];
   urgency?: "normal" | "high";
   dry_run?: boolean;
 }
@@ -66,16 +74,51 @@ function sanitizeData(data: Record<string, unknown> | undefined): Record<string,
   return output;
 }
 
+function sanitizeActions(actions: NotificationAction[] | undefined): NotificationAction[] {
+  if (!Array.isArray(actions)) return [];
+  return actions
+    .filter((action) => action?.id && action?.title)
+    .map((action) => ({
+      id: String(action.id),
+      title: String(action.title),
+      icon: typeof action.icon === "string" ? action.icon : undefined,
+    }));
+}
+
 async function sendWithFcm(args: {
   token: string;
   title: string;
   body: string;
   urgency: "normal" | "high";
   data: Record<string, string>;
+  actions?: NotificationAction[];
 }): Promise<{ ok: boolean; response: unknown; message?: string }> {
   const key = Deno.env.get("FCM_SERVER_KEY");
   if (!key) {
     return { ok: false, response: null, message: "FCM_SERVER_KEY is not configured" };
+  }
+
+  const fcmPayload: Record<string, unknown> = {
+    to: args.token,
+    priority: args.urgency === "high" ? "high" : "normal",
+    notification: {
+      title: args.title,
+      body: args.body,
+      sound: "default",
+    },
+    data: args.data,
+  };
+
+  if (args.actions && args.actions.length > 0) {
+    fcmPayload.android = {
+      notification: {
+        actions: args.actions.map((action) => ({
+          title: action.title,
+          action: action.id,
+          icon: action.icon,
+        })),
+      },
+    };
   }
 
   const resp = await fetch("https://fcm.googleapis.com/fcm/send", {
@@ -84,16 +127,7 @@ async function sendWithFcm(args: {
       Authorization: `key=${key}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      to: args.token,
-      priority: args.urgency === "high" ? "high" : "normal",
-      notification: {
-        title: args.title,
-        body: args.body,
-        sound: "default",
-      },
-      data: args.data,
-    }),
+    body: JSON.stringify(fcmPayload),
   });
 
   const responseBody = await resp.text();
@@ -117,6 +151,7 @@ async function sendWithApns(args: {
   body: string;
   urgency: "normal" | "high";
   data: Record<string, string>;
+  category?: string;
 }): Promise<{ ok: boolean; response: unknown; message?: string }> {
   const bearerToken = Deno.env.get("APNS_BEARER_TOKEN");
   const topic = Deno.env.get("APNS_TOPIC");
@@ -145,6 +180,7 @@ async function sendWithApns(args: {
           body: args.body,
         },
         sound: "default",
+        ...(args.category ? { category: args.category } : {}),
       },
       data: args.data,
     }),
@@ -247,6 +283,8 @@ Deno.serve(async (req) => {
     const urgency = body.urgency === "high" ? "high" : "normal";
     const dryRun = body.dry_run === true;
     const dataPayload = sanitizeData(body.data);
+    const actionsPayload = sanitizeActions(body.actions);
+    const category = typeof body.category === "string" && body.category.trim() ? body.category.trim() : undefined;
     const deliveryResults: DeliveryResult[] = [];
 
     for (const targetUserId of targetUserIds) {
@@ -304,6 +342,7 @@ Deno.serve(async (req) => {
             body: body.body,
             urgency,
             data: dataPayload,
+            actions: actionsPayload,
           });
 
           deliveryResults.push({
@@ -325,6 +364,7 @@ Deno.serve(async (req) => {
             body: body.body,
             urgency,
             data: dataPayload,
+            category,
           });
 
           deliveryResults.push({

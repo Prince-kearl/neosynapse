@@ -22,7 +22,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMedicalHistory, useMedicalHistoryFiles } from "@/shared/hooks/useHealthcare";
+import { useAIConsentCheck } from "@/shared/hooks/useAIConsentCheck";
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
+import { AIConsentModal } from "@/components/ui/AIConsentModal";
+import { AIGuestConsentModal } from "@/components/ui/AIGuestConsentModal";
+import { AIDisclaimer } from "@/components/ui/AIDisclaimer";
 import ReactMarkdown from "react-markdown";
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
@@ -386,6 +390,12 @@ function AIAssistant() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  
+  // Consent checks
+  const { data: aiConsent, isLoading: consentLoading } = useAIConsentCheck();
+  const [showConsentModal, setShowConsentModal] = useState(!aiConsent && !!user && !consentLoading);
+  const [showGuestModal, setShowGuestModal] = useState(!user);
+
   const { data: medicalHistory } = useMedicalHistory();
   const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
   const chatStorageKey = `neo-synapse-ai-chat:${user?.id || "guest"}`;
@@ -539,6 +549,34 @@ function AIAssistant() {
     setTimeout(() => setHighlightedChip(null), 300);
     textareaRef.current?.focus();
   };
+
+  // Manage consent modal visibility
+  useEffect(() => {
+    if (consentLoading) return; // Wait for consent check to complete
+    
+    if (!user) {
+      // No user - show guest modal
+      setShowGuestModal(true);
+      setShowConsentModal(false);
+    } else if (aiConsent) {
+      // User has granted consent - hide modals
+      setShowConsentModal(false);
+      setShowGuestModal(false);
+    } else {
+      // User exists but no consent - show consent modal
+      setShowConsentModal(true);
+      setShowGuestModal(false);
+    }
+  }, [user, aiConsent, consentLoading]);
+
+  const handleConsentAccepted = useCallback(() => {
+    // Consent modal will close automatically when aiConsent updates after submission
+    setShowConsentModal(false);
+  }, []);
+
+  const handleConsentCanceled = useCallback(() => {
+    navigate("/patient/dashboard");
+  }, [navigate]);
 
   // Persist mode in localStorage
   useEffect(() => {
@@ -1363,6 +1401,8 @@ function AIAssistant() {
           <div className="h-[74px] md:hidden" />
 
           {/* Main Content: Text or Voice Mode */}
+          {user && aiConsent && <AIDisclaimer />}
+
           {mode === "text" ? (
             <>
               {/* Welcome & Suggestions */}
@@ -1614,6 +1654,10 @@ function AIAssistant() {
           </div>
         </div>
       </div>
+
+      {/* Consent Modals */}
+      {!user && <AIGuestConsentModal open={showGuestModal} onClose={() => setShowGuestModal(false)} />}
+      {user && <AIConsentModal open={showConsentModal} onAccepted={handleConsentAccepted} onCancel={handleConsentCanceled} />}
     </div>
   );
 }

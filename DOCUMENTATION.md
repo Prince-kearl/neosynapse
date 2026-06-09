@@ -298,6 +298,7 @@ neosynapse/
 | Patient self-registration | `/auth/patient-sign-up` | Anyone via public form |
 | Invitation-based | `/auth/invite-accept?token=...` | Professionals and admins invited by an admin |
 | Forgot password | `/auth/forgot-password` | Any registered user |
+| Password reset confirmation | `/auth/reset-password` | Any registered user using a recovery link |
 
 ### Session management (`AuthContext`)
 
@@ -1312,9 +1313,12 @@ supabase db push --yes
 | 2026-04-18 | Added frontend push invocation helper and Admin Notifications test panel for dry-run/real send verification against `send-push-notification` | `src/shared/services/pushNotificationService.ts`, `src/apps/admin/pages/Notifications.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Added branded native splash screen assets for iOS/Android and tuned Capacitor splash duration to improve cold-start launch experience | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `capacitor.config.ts`, `DOCUMENTATION.md` |
 | 2026-05-09 | Refined the native splash to a lighter minimal variant (logo only, no subtitle) to better match Apple launch-screen style | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `DOCUMENTATION.md` |
+| 2026-06-09 | Added native telemedicine push action buttons and deep-link handling for accept/reject on mobile notifications | `supabase/functions/send-push-notification/index.ts`, `src/shared/services/pushNotificationService.ts`, `src/mobile/pushNotifications.ts`, `DOCUMENTATION.md` |
+| 2026-06-09 | Added secure password recovery flow with reset confirmation page and improved forgot-password feedback | `src/auth/pages/ForgotPassword.tsx`, `src/auth/pages/ResetPassword.tsx`, `src/App.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Fixed AI Assistant mobile keyboard overlap by making the bottom input/search composer track keyboard height so the text box stays visible while typing | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Added AI Assistant keyboard-open auto-scroll so the latest message stays visible when the mobile keyboard appears | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Improved AI Assistant keyboard handling reliability on native mobile by using Capacitor Keyboard event heights for composer offset with browser fallback logic | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
+| 2026-06-09 | Added AI medical consent management to patient settings and persistent disclaimer handling for the AI Assistant | `src/apps/patient/pages/Settings.tsx`, `src/apps/patient/pages/AIAssistant.tsx`, `src/components/ui/AIConsentModal.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Patient Reports mobile responsiveness by stacking/wrapping metadata and action controls so report cards fully fit small screens | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Improved Professional Reports mobile responsiveness by stacking/wrapping detail and list actions so controls fit cleanly on small screens | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile scrolling UX by pinning the top bar, conversation selector, and bottom input bar while chat content scrolls independently | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |

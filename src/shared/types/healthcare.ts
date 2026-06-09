@@ -9,7 +9,16 @@ export type ClinicalNoteStatus = 'draft' | 'review' | 'finalized';
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 export type VerificationStatus = 'pending' | 'verified' | 'rejected';
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'emergency';
-export type ConsentType = 'recording' | 'data_sharing' | 'telemedicine' | 'treatment';
+export type ConsentType = 'recording' | 'data_sharing' | 'telemedicine' | 'treatment' | 'ai_medical_advice';
+
+// ─── Consent Type Constants ──────────────────────────────────────
+export const CONSENT_TYPES = {
+  RECORDING: 'recording' as const,
+  DATA_SHARING: 'data_sharing' as const,
+  TELEMEDICINE: 'telemedicine' as const,
+  TREATMENT: 'treatment' as const,
+  AI_MEDICAL_ADVICE: 'ai_medical_advice' as const,
+};
 
 // ─── Core Profile ───────────────────────────────────────────────
 export interface Profile {
