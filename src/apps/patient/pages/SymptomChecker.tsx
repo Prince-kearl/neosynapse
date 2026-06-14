@@ -359,20 +359,36 @@ export default function PatientSymptomChecker() {
       if (!raw) return;
 
       const parsed = JSON.parse(raw) as {
+        step?: "input" | "loading" | "result";
+        intakeStep?: IntakeStep;
+        assessmentFor?: "self" | "other" | null;
+        patientName?: string;
         symptomInput?: string;
         customSymptoms?: string[];
         selectedSymptoms?: string[];
         age?: string;
         gender?: string;
         duration?: string;
+        result?: TriageResult | null;
       };
 
+      if (parsed.step === "input") setStep(parsed.step);
+      if (parsed.step === "loading" && parsed.result) setStep("result");
+      if (parsed.intakeStep) setIntakeStep(parsed.intakeStep);
+      if (parsed.assessmentFor === "self" || parsed.assessmentFor === "other") setAssessmentFor(parsed.assessmentFor);
+      if (typeof parsed.patientName === "string") setPatientName(parsed.patientName);
       if (parsed.symptomInput) setSymptomInput(parsed.symptomInput);
       if (Array.isArray(parsed.customSymptoms)) setCustomSymptoms(parsed.customSymptoms);
       if (Array.isArray(parsed.selectedSymptoms)) setSelectedSymptoms(parsed.selectedSymptoms);
       if (typeof parsed.age === "string") setAge(parsed.age);
       if (typeof parsed.gender === "string") setGender(parsed.gender);
       if (typeof parsed.duration === "string") setDuration(parsed.duration);
+      if (parsed.result && typeof parsed.result === "object" && typeof parsed.result.urgency === "string") {
+        setResult(parsed.result);
+        setStep("result");
+      } else if (parsed.step === "result") {
+        setStep("input");
+      }
     } catch {
       // Ignore invalid storage state.
     }
@@ -381,17 +397,22 @@ export default function PatientSymptomChecker() {
   useEffect(() => {
     try {
       window.localStorage.setItem(symptomCheckerStorageKey, JSON.stringify({
+        step: step === "loading" ? "input" : step,
+        intakeStep,
+        assessmentFor,
+        patientName,
         symptomInput,
         customSymptoms,
         selectedSymptoms,
         age,
         gender,
         duration,
+        result,
       }));
     } catch {
       // Ignore storage errors.
     }
-  }, [symptomInput, customSymptoms, selectedSymptoms, age, gender, duration]);
+  }, [step, intakeStep, assessmentFor, patientName, symptomInput, customSymptoms, selectedSymptoms, age, gender, duration, result]);
   const copy = symptomCheckerCopy[language] || symptomCheckerCopy.en;
   const medicalHistoryContext = buildMedicalHistoryContext(medicalHistory, null);
   const commonSymptoms = localizedCommonSymptoms[language] || localizedCommonSymptoms.en;
