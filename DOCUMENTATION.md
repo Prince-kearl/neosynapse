@@ -1344,4 +1344,6 @@ supabase db push --yes
 | 2026-04-14 | Improved Professional Reports mobile responsiveness by stacking/wrapping detail and list actions so controls fit cleanly on small screens | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile scrolling UX by pinning the top bar, conversation selector, and bottom input bar while chat content scrolls independently | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed AI Assistant mobile conversation controls so the `+` new-conversation button stays inline beside the dropdown | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
+| 2026-06-14 | Fixed Symptom Checker state persistence: extended localStorage to preserve full workflow state (step, intakeStep, assessmentFor, result); hydration logic validates result and handles edge cases; explicit "New Check" button now fully clears stored state | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-06-14 | Implemented sequential follow-up questions in AI Assistant: reinforced system prompt with CRITICAL section enforcing exactly one follow-up question per response (no lists, no multiple questions per message) | `supabase/functions/medical-chat/index.ts`, `DOCUMENTATION.md` |
 | 2026-04-14 | Created this documentation file | `DOCUMENTATION.md` |
