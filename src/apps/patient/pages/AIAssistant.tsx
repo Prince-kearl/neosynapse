@@ -923,8 +923,15 @@ function AIAssistant() {
   }, []);
 
   // Auto-scroll on new messages
+  const initialScrollDoneRef = useRef(false);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    try {
+      const behavior = !initialScrollDoneRef.current && messages.length > 0 ? "auto" : "smooth";
+      messagesEndRef.current?.scrollIntoView({ behavior: behavior as ScrollBehavior });
+      initialScrollDoneRef.current = true;
+    } catch {
+      // ignore
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -1602,7 +1609,7 @@ function AIAssistant() {
               <Plus className="w-4 h-4 mr-1" /> New
             </Button>
           </div>
-          <div className="p-3 border-b border-border">
+          <div className="p-3 border-b border-border sticky top-14 z-30 bg-muted/20">
             <label className="flex items-center rounded-lg border border-border bg-background px-2 h-9">
               <Search className="w-4 h-4 text-muted-foreground" />
               <input
@@ -1850,7 +1857,9 @@ function AIAssistant() {
             className="fixed inset-x-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur sm:p-4 lg:sticky lg:bottom-0 lg:p-6"
             style={{
               bottom: `calc(max(68px, env(safe-area-inset-bottom, 0px)) + ${keyboardInset}px)`,
-              transition: "bottom 180ms ease-out",
+              transition: "bottom 180ms ease-out, transform 180ms ease-out",
+              transform: `translateY(0)`,
+              willChange: "bottom, transform",
             }}
           >
             <div className="mx-auto w-full max-w-2xl">
