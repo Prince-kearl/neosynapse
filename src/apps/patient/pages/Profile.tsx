@@ -747,6 +747,10 @@ export default function PatientProfile() {
                             <SelectItem value="ga">Ga</SelectItem>
                             <SelectItem value="ee">Ewe</SelectItem>
                             <SelectItem value="ha">Hausa</SelectItem>
+                            <SelectItem value="fr">French</SelectItem>
+                            <SelectItem value="ar">Arabic</SelectItem>
+                            <SelectItem value="yo">Yoruba</SelectItem>
+                            <SelectItem value="sw">Swahili</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

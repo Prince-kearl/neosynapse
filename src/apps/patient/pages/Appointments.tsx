@@ -24,6 +24,20 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const priorityColors: Record<string, string> = {
+  routine: "bg-slate-100 text-slate-700 border-slate-200",
+  priority: "bg-blue-100 text-blue-700 border-blue-200",
+  urgent: "bg-amber-100 text-amber-800 border-amber-200",
+  emergency: "bg-red-100 text-red-700 border-red-200",
+};
+
+const priorityLabels: Record<string, string> = {
+  routine: "Routine",
+  priority: "Priority",
+  urgent: "Urgent",
+  emergency: "Emergency",
+};
+
 export default function PatientAppointments() {
   const { isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -50,7 +64,7 @@ export default function PatientAppointments() {
     
     return (
       <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
               isTelemedicine ? "bg-primary/10" : "bg-secondary"
@@ -77,9 +91,16 @@ export default function PatientAppointments() {
               </p>
             </div>
           </div>
-          <Badge className={statusColors[appointment.status] || statusColors.pending}>
-            {statusLabels[appointment.status] || appointment.status}
-          </Badge>
+          <div className="flex flex-wrap gap-2 items-center">
+            {appointment.priority && (
+              <Badge className={priorityColors[appointment.priority] || priorityColors.routine}>
+                {priorityLabels[appointment.priority] || appointment.priority}
+              </Badge>
+            )}
+            <Badge className={statusColors[appointment.status] || statusColors.pending}>
+              {statusLabels[appointment.status] || appointment.status}
+            </Badge>
+          </div>
         </div>
         
         {appointment.reason_for_visit && (
@@ -113,7 +134,7 @@ export default function PatientAppointments() {
               Track and manage your medical appointments
             </p>
           </div>
-          <Button onClick={() => navigate("/patient/telemedicine")} className="gap-2">
+          <Button onClick={() => navigate("/patient/telemedicine?mode=schedule")} className="gap-2">
             <Plus className="w-4 h-4" />
             Book New
           </Button>
@@ -148,7 +169,7 @@ export default function PatientAppointments() {
                 title="No Upcoming Appointments"
                 description="Book a consultation with a healthcare professional."
                 actionLabel="Book Consultation"
-                onAction={() => navigate("/patient/telemedicine")}
+                onAction={() => navigate("/patient/telemedicine?mode=schedule")}
                 iconContainerClassName="bg-accent/10"
               />
             )}

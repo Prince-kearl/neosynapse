@@ -1,9 +1,12 @@
 import { FileText, Download, Eye, Clock, Loader2, Share2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { translateText } from "@/lib/translation";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { normalizeLabResults } from "@/shared/lib/labResults";
 import { useMyReports } from "@/shared/hooks/useHealthcare";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { toast } from "@/hooks/use-toast";
@@ -57,6 +60,10 @@ export default function PatientReports() {
   const { reportId } = useParams<{ reportId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: reports = [], isLoading } = useMyReports();
+  const { language, currentLanguage } = useLanguage();
+  const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+  const [translatedAction, setTranslatedAction] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
   const selectedReport = reportId ? reports.find((r: any) => r.id === reportId) : null;
 
   const getReportTitle = (report: any) => {
@@ -73,6 +80,31 @@ export default function PatientReports() {
 
   const toFileName = (report: any) =>
     `${String(getReportTitle(report)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "medical-report"}-${new Date(report.created_at || Date.now()).toISOString().slice(0, 10)}.pdf`;
+
+  const translateReportContent = async (summary: string, recommendedAction: string) => {
+    if (!selectedReport) return;
+    setIsTranslating(true);
+
+    try {
+      const [summaryTranslation, actionTranslation] = await Promise.all([
+        translateText(summary, language),
+        translateText(recommendedAction, language),
+      ]);
+
+      setTranslatedSummary(summaryTranslation);
+      setTranslatedAction(actionTranslation);
+      toast({ title: `Report translated to ${currentLanguage.nativeName}` });
+    } catch (error) {
+      toast({ title: "Translation failed", description: error instanceof Error ? error.message : "Could not translate report.", variant: "destructive" });
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  useEffect(() => {
+    setTranslatedSummary(null);
+    setTranslatedAction(null);
+  }, [reportId, language]);
 
   const buildPdfBlob = async (report: any): Promise<Blob> => {
     const markdown = getReportMarkdown(report);
@@ -239,6 +271,7 @@ export default function PatientReports() {
                         likelihood: asText(item?.likelihood) || "unknown",
                       }))
                     : [];
+                  const labResults = normalizeLabResults(reportData);
 
                   return (
                     <div className="space-y-4">
@@ -261,13 +294,72 @@ export default function PatientReports() {
                       )}
 
                       <div className="rounded-xl border border-border bg-card p-4">
-                        <h3 className="text-sm font-semibold text-foreground">Summary</h3>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{summary}</p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+                            <p className="text-xs text-muted-foreground">Translated into {currentLanguage.nativeName} when available.</p>
+                          </div>
+                          {language !== "en" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => translateReportContent(summary, recommendedAction)}
+                              disabled={isTranslating}
+                            >
+                              {isTranslating ? "Translating..." : `Translate to ${currentLanguage.nativeName}`}
+                            </Button>
+                          )}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedSummary ?? summary}</p>
                       </div>
+
+                      {labResults.length > 0 && (
+                        <div className="rounded-xl border border-border bg-card p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-sm font-semibold text-foreground">Lab results</h3>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Each lab result shows the reference range, how the value compares, and a short explanation.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-4">
+                            {labResults.map((result) => (
+                              <div key={`${result.label}-${result.rawValue}`} className="rounded-2xl border border-border/80 bg-muted/50 p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <p className="font-medium text-foreground">{result.label}</p>
+                                  <Badge variant="outline" className={`capitalize ${
+                                    result.status === "normal"
+                                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                                      : result.status === "low"
+                                      ? "border-orange-500/30 bg-orange-500/10 text-orange-700"
+                                      : result.status === "high"
+                                      ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+                                      : result.status === "critical"
+                                      ? "border-red-500/30 bg-red-500/10 text-red-700"
+                                      : "border-slate-500/30 bg-slate-500/10 text-slate-700"
+                                  }`}>
+                                    {result.status}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                  <div className="text-sm text-muted-foreground">
+                                    <span className="font-medium text-foreground">Value:</span> {result.rawValue}{result.units ? ` ${result.units}` : ""}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    <span className="font-medium text-foreground">Reference range:</span> {result.referenceRange ?? "Not provided"}
+                                  </div>
+                                </div>
+                                <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.explanation}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="rounded-xl border border-border bg-card p-4">
                         <h3 className="text-sm font-semibold text-foreground">Recommended next step</h3>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{recommendedAction}</p>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedAction ?? recommendedAction}</p>
                       </div>
 
                       <div className="grid gap-3 sm:grid-cols-2">

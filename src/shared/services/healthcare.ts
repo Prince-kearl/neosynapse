@@ -29,7 +29,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Profile, PatientProfile, ProfessionalProfile, Facility,
-  Invitation, Appointment, Encounter, TriageSession, Consent,
+  Invitation, Appointment, AppointmentPriority, Encounter, TriageSession, Consent,
   Transcript, ClinicalNote, MedicalReport, AuditLog, MedicalHistory, MedicalHistoryFile,
 } from "@/shared/types/healthcare";
 
@@ -222,6 +222,8 @@ export const appointmentService = {
     appointment_type: string;
     reason_for_visit?: string;
     scheduled_at?: string;
+    priority?: AppointmentPriority;
+    status?: AppointmentStatus;
   }) =>
     supabase.from("appointments").insert(data),
 

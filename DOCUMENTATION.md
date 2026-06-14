@@ -1,6 +1,6 @@
 # NeoSynapse — Project Documentation
 
-> **Last updated:** 9 May 2026  
+> **Last updated:** 10 June 2026  
 > This file is the single source of truth for the NeoSynapse platform. Update it whenever features, workflows, stack decisions, or database schemas change.
 
 ---
@@ -411,7 +411,7 @@ Localised in: English, Twi, Ga, Ewe, Hausa.
 #### 6.5 Telemedicine (`/patient/telemedicine`)
 
 - **Lobby state:** Shows list of verified professionals with availability status; patient selects a doctor.
-- **Pre-call settings:** Toggle video/audio; grant recording consent (`consents` table).
+- **Pre-call settings:** Toggle video/audio; explicitly choose Allow Recording or Decline Recording before launching the call (`consultation_rooms.consent_recording`).
 - **Waiting state:** Patient creates a `consultation_room` and an `encounter` record; waits for professional.
 - **Active call:** WebRTC peer-to-peer video/audio stream using `useWebRTC` hook. Controls: mute, camera toggle, end call.
 - **Emergency contacts sidebar:** Hardcoded Ghana emergency numbers (112, 193, 191, 192), Ghana Health Service, NHIS, and regional contacts.
@@ -496,7 +496,11 @@ Real-time notification feed from `notifications` table.
 
 ### 7.5 Telemedicine (`/professional/telemedicine`)
 
-Mirrors patient Telemedicine but from the professional's side.
+Mirrors patient Telemedicine but from the professional's side with urgency-based prioritization:
+- **Waiting list sorted by urgency:** Encounters ordered Emergency → Urgent → Needs Attention → Low Priority, then by creation time within each tier.
+- **Urgency indicators:** Visual badges with emoji indicators (🔴🟠🟡🟢) show priority level on encounter cards.
+- **Pre-call urgency display:** Alert banner on the join screen displays the urgency level and context before accepting the call.
+- **Emergency escalation:** Emergency cases trigger high-priority push notifications and prominent UI highlighting.
 
 **Flow:**
 1. List pending encounters (patient waiting).
@@ -734,6 +738,14 @@ All functions are located in `supabase/functions/` and run on Deno.
 - **Input:** `{ text: string, voiceId?: string }`.
 - **Output:** `audio/mpeg` binary stream.
 - **Secret required:** `ELEVENLABS_API_KEY`.
+
+### `translate-text`
+
+- **Purpose:** Translate patient-facing clinical summaries, doctor messages, and consultation notes into a preferred language.
+- **Provider:** Google Gemini 2.5 Flash primary → Lovable AI Gateway fallback.
+- **Input:** `{ text: string, targetLanguage: string, sourceLanguage?: string }`.
+- **Output:** `{ translated_text: string }`.
+- **Secrets required:** `GOOGLE_AI_API_KEY` or `LOVABLE_API_KEY`.
 
 ### `send-invitation`
 
@@ -1295,8 +1307,16 @@ supabase db push --yes
 | 2026-04-10 | Created `ProfessionalIncomingCallListener` — global call ringtone on all professional pages | `ProfessionalIncomingCallListener.tsx`, `ProfessionalLayout.tsx` |
 | 2026-04-10 | Sharpened UI distinction between Symptom Checker and AI Assistant: subtitles on Dashboard, guidance banners in each tool with cross-navigation | `Dashboard.tsx` (patient), `AIAssistant.tsx`, `SymptomChecker.tsx` |
 | 2026-04-10 | Fixed `useNavigate()` called at module level in `AIAssistant.tsx` (invalid hook call crash) | `AIAssistant.tsx` |
+| 2026-06-09 | Made AI Assistant responses conversational and concise by default, with full written reports generated only when explicitly requested | `supabase/functions/medical-chat/index.ts`, `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
+| 2026-06-09 | Added structured lab result rendering in patient report details, including reference range, Low/Normal/High/Critical status, and plain-language explanation | `src/apps/patient/pages/Reports.tsx`, `src/shared/lib/labResults.ts`, `src/test/labResults.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-10 | Added patient scheduled telemedicine booking with preferred date/time slot selection from available doctors | `src/apps/patient/pages/Telemedicine.tsx`, `src/apps/patient/pages/Appointments.tsx`, `src/shared/services/healthcare.ts`, `DOCUMENTATION.md` |
+| 2026-06-10 | Added patient telemedicine queue visibility with waiting patients count and estimated wait time | `src/apps/patient/pages/Telemedicine.tsx`, `DOCUMENTATION.md` |
+| 2026-06-10 | Added appointment priority categories and urgent doctor alerting for high-risk telemedicine scheduling | `src/apps/patient/pages/Telemedicine.tsx`, `src/apps/patient/pages/Appointments.tsx`, `src/shared/services/healthcare.ts`, `supabase/migrations/20260610120000_add_appointment_priority.sql`, `DOCUMENTATION.md` |
+| 2026-06-10 | Added explicit patient recording consent prompt before telemedicine calls with Allow Recording / Decline Recording options | `src/apps/patient/pages/Telemedicine.tsx`, `src/components/telemedicine/PreConsultationSettings.tsx`, `DOCUMENTATION.md` |
+| 2026-06-10 | Implemented emergency and high-volume management with urgency-based encounter prioritization (🔴🟠🟡🟢 indicators) and prominent escalation display for emergency cases | `src/apps/professional/pages/Telemedicine.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Fixed Symptom Checker "Session expired" false positive: added `getValidAccessToken()` with refresh + one-shot retry on 401 | `SymptomChecker.tsx` |
 | 2026-04-14 | Fixed Symptom Checker persistent 401 errors: removed manual token passing that bypassed supabase-js auto-refresh; added `verify_jwt = false` in config.toml for `symptom-triage` | `src/apps/patient/pages/SymptomChecker.tsx`, `supabase/config.toml`, `DOCUMENTATION.md` |
+| 2026-06-09 | Added backend validation and rewrite enforcement so symptom-triage always includes condition definition, causes, symptoms, treatments, and sources before returning results | `supabase/functions/symptom-triage/index.ts`, `DOCUMENTATION.md` |
 | 2026-04-14 | Redesigned Patient Symptom Checker into an ADA-inspired conversational mobile flow (step intake with pill choices, previous navigation, and staged symptom capture) while keeping the existing Neo Synapse triage backend | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Refined Symptom Checker conversational UX to match app theme tokens, improved responsive text sizing across breakpoints, and fixed dynamic grammar in self/other question prompts | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Redesigned patient report detail view for readability: replaced raw JSON-first display with plain-language sections and moved JSON to a collapsible technical block | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
@@ -1310,6 +1330,7 @@ supabase db push --yes
 | 2026-04-18 | Set up Capacitor mobile wrapper structure: installed Capacitor core/platform/plugins, added `capacitor.config.ts`, scaffolded `android` and `ios`, added mobile scripts, and wired native bootstrap initialization | `package.json`, `capacitor.config.ts`, `src/mobile/capacitorBootstrap.ts`, `src/main.tsx`, `android/**`, `ios/**`, `DOCUMENTATION.md` |
 | 2026-04-18 | Continued mobile setup by implementing unified native/web push registration with Supabase metadata token persistence and auth-triggered native registration | `src/mobile/pushNotifications.ts`, `src/legacy/hooks/usePushNotifications.ts`, `src/contexts/AuthContext.tsx`, `DOCUMENTATION.md` |
 | 2026-04-18 | Added `send-push-notification` Supabase Edge Function to dispatch notifications from stored `mobile_push_tokens` with role checks, per-token delivery reporting, and audit logging | `supabase/functions/send-push-notification/index.ts`, `DOCUMENTATION.md` |
+| 2026-06-10 | Added `translate-text` Supabase Edge Function and patient report translation integration for preferred language support | `supabase/functions/translate-text/index.ts`, `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-18 | Added frontend push invocation helper and Admin Notifications test panel for dry-run/real send verification against `send-push-notification` | `src/shared/services/pushNotificationService.ts`, `src/apps/admin/pages/Notifications.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Added branded native splash screen assets for iOS/Android and tuned Capacitor splash duration to improve cold-start launch experience | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `capacitor.config.ts`, `DOCUMENTATION.md` |
 | 2026-05-09 | Refined the native splash to a lighter minimal variant (logo only, no subtitle) to better match Apple launch-screen style | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `DOCUMENTATION.md` |

@@ -4,6 +4,7 @@
 export type UserRole = 'patient' | 'professional' | 'admin';
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+export type AppointmentPriority = 'routine' | 'priority' | 'urgent' | 'emergency';
 export type EncounterStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type ClinicalNoteStatus = 'draft' | 'review' | 'finalized';
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
@@ -129,6 +130,7 @@ export interface Appointment {
   appointment_type: string;
   reason_for_visit: string | null;
   scheduled_at: string | null;
+  priority?: AppointmentPriority;
   status: AppointmentStatus;
   created_at: string;
   updated_at: string;

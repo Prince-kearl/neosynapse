@@ -3,15 +3,21 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Video, Phone, Clock, Shield, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { DoctorCard } from "@/components/telemedicine/DoctorCard";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
+import { appointmentService } from "@/shared/services/healthcare";
 import { pushNotificationService } from "@/shared/services/pushNotificationService";
+import type { AppointmentPriority } from "@/shared/types/healthcare";
 import { toast } from "@/hooks/use-toast";
 
 type ConsultationState = "lobby" | "waiting" | "active" | "ended";
@@ -52,6 +58,31 @@ const regionalContacts: ContactItem[] = [
   { name: "Northern Region", phone: "0372022889", phoneLabel: "0372022889", note: "Alt: 0372022297" },
 ];
 
+const TIME_SLOTS = ["09:00", "11:00", "14:00", "16:00"];
+const SCHEDULE_LOOKAHEAD_DAYS = 30;
+
+const PRIORITY_OPTIONS = [
+  { value: "routine" as const, label: "Routine", description: "Regular consultation with no immediate urgency." },
+  { value: "priority" as const, label: "Priority", description: "Needs attention soon but not immediate." },
+  { value: "urgent" as const, label: "Urgent", description: "Requesting prompt review from your doctor." },
+  { value: "emergency" as const, label: "Emergency", description: "Immediate attention required. Doctor alerted." },
+];
+
+const HIGH_RISK_KEYWORDS = [
+  "chest pain",
+  "shortness of breath",
+  "severe pain",
+  "bleeding",
+  "unconscious",
+  "trauma",
+  "stroke",
+  "heart attack",
+  "difficulty breathing",
+  "allergic reaction",
+  "sudden weakness",
+  "confusion",
+];
+
 export default function PatientTelemedicine() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -63,6 +94,20 @@ export default function PatientTelemedicine() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [encounterId, setEncounterId] = useState<string | null>(null);
   const [isStartingConsultation, setIsStartingConsultation] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [bookingMode, setBookingMode] = useState<"live" | "schedule">(
+    searchParams.get("mode") === "schedule" ? "schedule" : "live",
+  );
+  const [scheduledDate, setScheduledDate] = useState<Date | undefined>(() => {
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 0, 0);
+    return nextDay;
+  });
+  const [scheduledTime, setScheduledTime] = useState(TIME_SLOTS[0]);
+  const [reasonForVisit, setReasonForVisit] = useState<string>("");
+  const [selectedPriority, setSelectedPriority] = useState<AppointmentPriority>("routine");
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const {
     data: professionalProfiles = [],
@@ -104,7 +149,36 @@ export default function PatientTelemedicine() {
     },
   });
 
+  const {
+    data: waitingQueue = [],
+    isLoading: queueLoading,
+    error: queueError,
+  } = useQuery({
+    queryKey: ["patient-telemedicine-queue"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("encounters")
+        .select("id, created_at")
+        .eq("encounter_type", "telemedicine")
+        .eq("status", "pending");
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30_000,
+  });
+
   const doctors = useMemo(() => professionalProfiles, [professionalProfiles]);
+  const waitingCount = waitingQueue.length;
+  const estimatedWaitMinutes = useMemo(() => {
+    if (waitingCount === 0) return 0;
+    return Math.min(60, waitingCount * 5);
+  }, [waitingCount]);
+
+  const isHighRiskReason = useMemo(() => {
+    const normalized = reasonForVisit.trim().toLowerCase();
+    if (!normalized) return false;
+    return HIGH_RISK_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  }, [reasonForVisit]);
 
   const {
     connectionState,
@@ -187,6 +261,73 @@ export default function PatientTelemedicine() {
     setIsStartingConsultation(false);
   }, [user, selectedDoctor, consentRecording, videoEnabled, audioEnabled, startCall, isStartingConsultation]);
 
+  const handleScheduleAppointment = useCallback(async () => {
+    if (!user || !selectedDoctor || !scheduledDate || !scheduledTime || isScheduling) return;
+    setIsScheduling(true);
+
+    const scheduledAt = new Date(scheduledDate);
+    const [hours, minutes] = scheduledTime.split(":").map(Number);
+    scheduledAt.setHours(hours, minutes, 0, 0);
+
+    const { data, error } = await appointmentService.create({
+      patient_id: user.id,
+      professional_id: selectedDoctor,
+      appointment_type: "telemedicine",
+      reason_for_visit: reasonForVisit || null,
+      scheduled_at: scheduledAt.toISOString(),
+      priority: selectedPriority,
+      status: "pending",
+    } as any).select("id").single();
+
+    if (error || !data) {
+      console.error("Unable to schedule appointment:", error);
+      toast({ title: "Booking failed", description: "We could not schedule your consultation. Please try again.", variant: "destructive" });
+      setIsScheduling(false);
+      return;
+    }
+
+    if (["urgent", "emergency"].includes(selectedPriority) || isHighRiskReason) {
+      try {
+        await pushNotificationService.sendTestPush({
+          targetUserId: selectedDoctor,
+          title: selectedPriority === "emergency" ? "Emergency appointment requested" : "Urgent appointment requested",
+          body: `${user.email || "A patient"} requested a ${selectedPriority} telemedicine appointment. Please review promptly.`,
+          urgency: "high",
+          category: "telemedicine_appointment_alert",
+          data: {
+            appointmentId: data.id,
+            patientId: user.id,
+            priority: selectedPriority,
+            reason: reasonForVisit || "No reason provided",
+          },
+        });
+      } catch (notificationError) {
+        console.error("Failed to send priority appointment alert:", notificationError);
+      }
+    }
+
+    toast({ title: "Appointment booked", description: "Your consultation has been scheduled. Check your appointments list for confirmation.", variant: "success" });
+    navigate("/patient/appointments");
+  }, [user, selectedDoctor, scheduledDate, scheduledTime, reasonForVisit, selectedPriority, isHighRiskReason, isScheduling, navigate]);
+
+  const today = useMemo(() => {
+    const current = new Date();
+    current.setDate(current.getDate() + 1);
+    current.setHours(0, 0, 0, 0);
+    return current;
+  }, []);
+
+  const maxScheduleDate = useMemo(() => {
+    const next = new Date(today);
+    next.setDate(next.getDate() + SCHEDULE_LOOKAHEAD_DAYS);
+    return next;
+  }, [today]);
+
+  const disabledScheduleDays = useMemo(
+    () => [{ before: today }, { after: maxScheduleDate }],
+    [today, maxScheduleDate],
+  );
+
   const handleCancelWaiting = useCallback(async () => {
     await endCall();
     if (encounterId) {
@@ -199,6 +340,16 @@ export default function PatientTelemedicine() {
     setEncounterId(null);
     setRoomId(null);
   }, [endCall, encounterId]);
+
+  const selectedDoctorData = doctors.find((d) => d.id === selectedDoctor);
+
+  const availableSlotSummary = scheduledDate
+    ? `${scheduledDate.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      })} at ${scheduledTime}`
+    : "Choose a date and time.";
 
   const handleEndCall = useCallback(async () => {
     await endCall();
@@ -284,8 +435,6 @@ export default function PatientTelemedicine() {
       </div>
     );
   }
-
-  const selectedDoctorData = doctors.find((d) => d.id === selectedDoctor);
 
   const ContactGroup = ({
     title,
@@ -399,7 +548,34 @@ export default function PatientTelemedicine() {
       <div className="p-4 lg:p-6 max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Telemedicine</h1>
-          <p className="text-muted-foreground">Connect with healthcare professionals via live video consultation</p>
+          <p className="text-muted-foreground">Connect with healthcare professionals via live or scheduled video consultation</p>
+        </div>
+
+        {/* Queue Visibility */}
+        <div className="rounded-3xl border border-border bg-card p-4 sm:p-5 mb-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium">Queue status</p>
+              <p className="text-sm text-muted-foreground">
+                {queueLoading
+                  ? "Checking current queue..."
+                  : queueError
+                  ? "Queue unavailable"
+                  : waitingCount === 0
+                  ? "No patients currently waiting"
+                  : `${waitingCount} patient${waitingCount === 1 ? "" : "s"} waiting`}
+              </p>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {queueLoading || queueError ? null : (
+                <span>
+                  Estimated wait time: <span className="font-semibold">
+                    {waitingCount === 0 ? "Less than 5 minutes" : `${estimatedWaitMinutes} minutes`}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Available Doctors */}
@@ -429,25 +605,152 @@ export default function PatientTelemedicine() {
         </div>
 
         {selectedDoctor && (
-          <>
-            <PreConsultationSettings
-              videoEnabled={videoEnabled}
-              audioEnabled={audioEnabled}
-              consentRecording={consentRecording}
-              onVideoChange={setVideoEnabled}
-              onAudioChange={setAudioEnabled}
-              onConsentChange={setConsentRecording}
-            />
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-3 items-center">
+              <Button
+                size="sm"
+                variant={bookingMode === "live" ? "default" : "outline"}
+                onClick={() => setBookingMode("live")}
+              >
+                Live consultation
+              </Button>
+              <Button
+                size="sm"
+                variant={bookingMode === "schedule" ? "default" : "outline"}
+                onClick={() => setBookingMode("schedule")}
+              >
+                Schedule consultation
+              </Button>
+            </div>
 
-            <Button
-              className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
-              onClick={handleStartConsultation}
-              disabled={isStartingConsultation}
-            >
-              {isStartingConsultation ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Video className="w-5 h-5 mr-2" />}
-              {isStartingConsultation ? "Starting..." : "Start Live Consultation"}
-            </Button>
-          </>
+            {bookingMode === "live" ? (
+              <>
+                <PreConsultationSettings
+                  videoEnabled={videoEnabled}
+                  audioEnabled={audioEnabled}
+                  consentRecording={consentRecording}
+                  onVideoChange={setVideoEnabled}
+                  onAudioChange={setAudioEnabled}
+                  onConsentChange={setConsentRecording}
+                />
+
+                <Button
+                  className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
+                  onClick={handleStartConsultation}
+                  disabled={isStartingConsultation}
+                >
+                  {isStartingConsultation ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Video className="w-5 h-5 mr-2" />}
+                  {isStartingConsultation ? "Starting..." : "Start Live Consultation"}
+                </Button>
+              </>
+            ) : (
+              <div className="rounded-3xl border border-border bg-card p-6 space-y-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Schedule a future consultation</p>
+                    <p className="text-sm text-muted-foreground">
+                      Choose a preferred date and time for {selectedDoctorData?.name}.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Available next {SCHEDULE_LOOKAHEAD_DAYS} days
+                  </p>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="booking-date">Preferred date</Label>
+                      <Calendar
+                        mode="single"
+                        selected={scheduledDate}
+                        onSelect={(date) => setScheduledDate(date || scheduledDate)}
+                        disabled={disabledScheduleDays}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="booking-time">Available time slots</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {TIME_SLOTS.map((slot) => (
+                          <button
+                            key={slot}
+                            type="button"
+                            className={cn(
+                              "rounded-2xl border px-3 py-2 text-sm font-medium text-left",
+                              slot === scheduledTime
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:border-primary/20",
+                            )}
+                            onClick={() => setScheduledTime(slot)}
+                          >
+                            {slot}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="booking-reason">Reason for visit</Label>
+                      <Input
+                        id="booking-reason"
+                        placeholder="e.g. follow-up, chest pain, fever"
+                        value={reasonForVisit}
+                        onChange={(event) => setReasonForVisit(event.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="booking-priority">Appointment priority</Label>
+                      <div className="grid gap-2 mt-2">
+                        {PRIORITY_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={cn(
+                              "rounded-2xl border px-4 py-3 text-left transition",
+                              selectedPriority === option.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:border-primary/20",
+                            )}
+                            onClick={() => setSelectedPriority(option.value)}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium text-sm">{option.label}</span>
+                              <span className="text-xs text-muted-foreground capitalize">{option.value}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">{option.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {isHighRiskReason && (
+                      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                        High-risk symptoms were detected from your reason for visit. Please consider selecting "Urgent" or "Emergency" so the doctor can prioritize your consultation.
+                      </div>
+                    )}
+
+                    <div className="rounded-2xl border border-border bg-background/80 p-4 text-sm text-muted-foreground">
+                      <p className="font-medium">Selected time</p>
+                      <p>{availableSlotSummary}</p>
+                    </div>
+
+                    <Button
+                      className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
+                      onClick={handleScheduleAppointment}
+                      disabled={isScheduling}
+                    >
+                      {isScheduling ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : null}
+                      {isScheduling ? "Booking..." : "Schedule consultation"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Info Cards */}

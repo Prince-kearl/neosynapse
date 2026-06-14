@@ -87,6 +87,89 @@ function shouldRewriteReasons(result: unknown): result is { possible_conditions:
   );
 }
 
+function isCompleteCondition(condition: any): boolean {
+  return (
+    typeof condition === "object" && condition !== null &&
+    typeof condition.name === "string" && condition.name.trim().length > 0 &&
+    typeof condition.likelihood === "string" && ["high", "medium", "low"].includes(condition.likelihood) &&
+    typeof condition.reason === "string" && condition.reason.trim().length >= 30 &&
+    typeof condition.definition === "string" && condition.definition.trim().length > 0 &&
+    typeof condition.causes === "string" && condition.causes.trim().length > 0 &&
+    typeof condition.symptoms === "string" && condition.symptoms.trim().length > 0 &&
+    typeof condition.treatments === "string" && condition.treatments.trim().length > 0 &&
+    Array.isArray(condition.sources) && condition.sources.length > 0 &&
+    condition.sources.every((source: any) => typeof source === "string" && source.trim().length > 0)
+  );
+}
+
+function isCompleteTriageResult(result: unknown): result is { urgency: string; summary: string; possible_conditions: any[]; recommended_action: string; questions: unknown[]; warning_signs: unknown[] } {
+  return (
+    typeof result === "object" && result !== null &&
+    typeof (result as any).urgency === "string" &&
+    typeof (result as any).summary === "string" &&
+    Array.isArray((result as any).possible_conditions) &&
+    (result as any).possible_conditions.every(isCompleteCondition) &&
+    typeof (result as any).recommended_action === "string" &&
+    Array.isArray((result as any).questions) &&
+    Array.isArray((result as any).warning_signs)
+  );
+}
+
+async function rewriteIncompleteResult(
+  provider: ProviderConfig,
+  systemPrompt: string,
+  userMessage: string,
+  previousResult: unknown,
+) {
+  const rewritePrompt = `${systemPrompt}
+
+REWRITE PASS:
+- Return the same full triage result object.
+- Ensure every possible_conditions entry includes name, likelihood, reason, definition, causes, symptoms, treatments, and sources.
+- Do not omit or remove any of those fields.
+- Preserve the same urgency, summary, recommended_action, questions, and warning_signs values.
+- If a field is missing in a condition, add it with a concise and clinically accurate value.
+- Return the result using the triage_assessment function call only.`;
+
+  const response = await fetch(provider.url, {
+    method: "POST",
+    headers: provider.headers,
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [
+        { role: "system", content: rewritePrompt },
+        { role: "user", content: `${userMessage}
+
+Previous assessment result:
+${JSON.stringify(previousResult, null, 2)}
+
+Please return the same object with all required condition fields populated.` },
+      ],
+      tools: [triageTool],
+      tool_choice: { type: "function", function: { name: "triage_assessment" } },
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (toolCall) {
+    const parsed = tryParseJson(toolCall.function.arguments);
+    if (parsed !== null && isCompleteTriageResult(parsed)) return parsed;
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content === "string") {
+    const parsed = tryParseJson(content);
+    if (parsed !== null && isCompleteTriageResult(parsed)) return parsed;
+  }
+
+  return null;
+}
+
 function tryParseJson(text: string): unknown | null {
   try {
     return JSON.parse(text);
@@ -217,8 +300,13 @@ const triageTool = {
               name: { type: "string" },
               likelihood: { type: "string", enum: ["high", "medium", "low"] },
               reason: { type: "string", minLength: 20 },
+              definition: { type: "string" },
+              causes: { type: "string" },
+              symptoms: { type: "string" },
+              treatments: { type: "string" },
+              sources: { type: "array", items: { type: "string" } },
             },
-            required: ["name", "likelihood", "reason"],
+            required: ["name", "likelihood", "reason", "definition", "causes", "symptoms", "treatments", "sources"],
           },
         },
         recommended_action: { type: "string" },
@@ -253,6 +341,8 @@ IMPORTANT:
 - You are NOT confirming any disease.
 - You are generating possible explanations for the patient’s symptoms.
 - Your reasoning must be transparent, symptom-specific, and clinically meaningful.
+- Your summary must make the likely severity of the patient’s situation clear and consistent with the urgency rating.
+- The summary should tell the patient whether their symptoms are most likely non-urgent, need attention, are urgent, or constitute an emergency.
 
 # **=================================================================**
 ** ****POSSIBLE CONDITIONS REQUIREMENTS**
@@ -261,8 +351,16 @@ For EVERY condition you suggest, you MUST provide:
 1. Condition name
 2. Likelihood (high, medium, low)
 3. Detailed clinical reasoning
+4. A concise medical definition
+5. Common causes or risk factors
+6. Key symptoms that support the condition
+7. Typical treatments or management approaches
+8. Trusted medical sources or organizations
 
 The reasoning is the most important part.
+
+Each condition object must include all of the keys listed above. Do not omit definition, causes, symptoms, treatments, or sources.
+If any of these fields are missing, the response is invalid and must be rewritten before returning.
 
 The reasoning must:
 
@@ -335,13 +433,25 @@ Return:
 
 "likelihood": "high",
 
-"reason": "Detailed symptom-based clinical reasoning."
+"reason": "Detailed symptom-based clinical reasoning.",
+
+"definition": "A concise medical definition of the condition.",
+
+"causes": "Common causes or risk factors.",
+
+"symptoms": "Key symptoms associated with the condition.",
+
+"treatments": "Typical treatments or management approaches.",
+
+"sources": ["Trusted medical source 1", "Trusted medical source 2"]
 
 }
 
 ]
 
 }
+
+Ensure every condition object includes definition, causes, symptoms, treatments, and sources in the returned JSON.
 
 # **=================================================================**
 ** ****ADDITIONAL RULES**
@@ -406,10 +516,16 @@ Use these symptoms to generate possible conditions. Each condition must include 
     if (toolCall) {
       const result = tryParseJson(toolCall.function.arguments);
       if (result !== null) {
-        const finalResult = await ensureConditionReasons(provider, systemPrompt, userMessage, result);
-        return new Response(JSON.stringify(finalResult), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const resultWithReasons = await ensureConditionReasons(provider, systemPrompt, userMessage, result);
+        const finalResult = isCompleteTriageResult(resultWithReasons)
+          ? resultWithReasons
+          : await rewriteIncompleteResult(provider, systemPrompt, userMessage, resultWithReasons);
+
+        if (finalResult) {
+          return new Response(JSON.stringify(finalResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
       console.error("[symptom-triage] Could not parse tool call arguments:", toolCall.function.arguments);
@@ -417,14 +533,20 @@ Use these symptoms to generate possible conditions. Each condition must include 
 
     // Fallback: some models may return content instead of tool_calls
     const content = data.choices?.[0]?.message?.content;
-    if (content) {
-      try {
-        const parsed = JSON.parse(content);
-        const finalResult = await ensureConditionReasons(provider, systemPrompt, userMessage, parsed);
-        return new Response(JSON.stringify(finalResult), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch {
+    if (typeof content === "string") {
+      const parsed = tryParseJson(content);
+      if (parsed !== null) {
+        const resultWithReasons = await ensureConditionReasons(provider, systemPrompt, userMessage, parsed);
+        const finalResult = isCompleteTriageResult(resultWithReasons)
+          ? resultWithReasons
+          : await rewriteIncompleteResult(provider, systemPrompt, userMessage, resultWithReasons);
+
+        if (finalResult) {
+          return new Response(JSON.stringify(finalResult), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } else {
         console.error("[symptom-triage] Could not parse content as JSON:", content);
       }
     }

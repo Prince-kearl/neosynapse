@@ -63,6 +63,10 @@ const RECOGNITION_LANGUAGE_MAP = {
   ga: "gaa",
   ee: "ee-GH",
   ha: "ha-NG",
+  fr: "fr-FR",
+  ar: "ar-SA",
+  yo: "yo-NG",
+  sw: "sw-KE",
 } as const;
 
 const SPEECH_LANGUAGE_MAP = {
@@ -71,6 +75,10 @@ const SPEECH_LANGUAGE_MAP = {
   ga: "en-GH",
   ee: "en-GH",
   ha: "ha",
+  fr: "fr-FR",
+  ar: "ar-SA",
+  yo: "yo-NG",
+  sw: "sw-KE",
 } as const;
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -93,6 +101,10 @@ const OCR_LANGUAGE_MAP: Record<LanguageCode, string> = {
   ga: "eng",
   ee: "eng",
   ha: "hau",
+  fr: "eng",
+  ar: "eng",
+  yo: "eng",
+  sw: "eng",
 };
 
 type VoiceStyle = "natural" | "balanced" | "fast";
@@ -103,6 +115,10 @@ const VOICE_STYLE_LABELS: Record<LanguageCode, { label: string; natural: string;
   ga: { label: "Voice", natural: "Natural", balanced: "Balanced", fast: "Fast" },
   ee: { label: "Gbe", natural: "Natural", balanced: "Balanced", fast: "Fast" },
   ha: { label: "Murya", natural: "Natural", balanced: "Balanced", fast: "Fast" },
+  fr: { label: "Voix", natural: "Naturelle", balanced: "Équilibrée", fast: "Rapide" },
+  ar: { label: "الصوت", natural: "طبيعي", balanced: "متوازن", fast: "سريع" },
+  yo: { label: "Ohùn", natural: "Adayeba", balanced: "Iwọn", fast: "Yara" },
+  sw: { label: "Sauti", natural: "Asili", balanced: "Wastani", fast: "Haraka" },
 };
 
 const VOICE_PREVIEW_TEXT: Record<LanguageCode, string> = {
@@ -111,6 +127,10 @@ const VOICE_PREVIEW_TEXT: Record<LanguageCode, string> = {
   ga: "Agoo. Eyi hewɔ voice style ni a otsɔɔ lɛ preview kpokpoi.",
   ee: "Fofo. Esia nye gbeɖiɖi ƒe kpɔkpɔa kpui a nètia.",
   ha: "Sannu. Wannan gajeren gwaji ne na salo na murya da ka zaɓa.",
+  fr: "Bonjour. Ceci est un aperçu rapide du style de voix sélectionné.",
+  ar: "مرحباً. هذه معاينة سريعة لنمط الصوت المحدد.",
+  yo: "Pẹlẹ o. Eyi ni atunyẹwo kukuru ti ara ohùn ti o yan.",
+  sw: "Habari. Hii ni onyesho mfupi wa mtindo wa sauti uliyochagua.",
 };
 
 const AI_ASSISTANT_COPY = {
@@ -120,7 +140,7 @@ const AI_ASSISTANT_COPY = {
     voiceChat: "Voice Chat",
     textChat: "Text Chat",
     welcomeTitle: "How can I help you today?",
-    welcomeDescription: "Ask me health questions, describe symptoms, or upload a medical image for analysis. I support text, voice, and image input.",
+    welcomeDescription: "Ask me health questions, describe symptoms, or upload a medical image for analysis. I’ll keep answers short and ask follow-up questions one at a time.",
     suggestions: [
       "I have a headache and fever",
       "What does my blood test result mean?",
@@ -383,6 +403,270 @@ const AI_ASSISTANT_COPY = {
     stopRecording: "Dakatar da rikodi",
     send: "Aika",
     listen: "Saurara",
+  },
+  fr: {
+    switchToVoice: "Passer au chat vocal",
+    switchToText: "Passer au chat texte",
+    voiceChat: "Chat vocal",
+    textChat: "Chat texte",
+    welcomeTitle: "Comment puis-je vous aider aujourd'hui ?",
+    welcomeDescription: "Posez-moi des questions de santé, décrivez vos symptômes ou téléchargez une image médicale pour analyse. Je garde les réponses courtes et je pose une question à la fois.",
+    suggestions: [
+      "J'ai mal à la tête et de la fièvre",
+      "Que signifie le résultat de ma prise de sang ?",
+      "Symptômes du paludisme vs typhoïde",
+      "Aidez-moi à préparer une visite chez le médecin",
+    ],
+    analyzeImageFallback: "Veuillez analyser cette image médicale et fournir votre évaluation.",
+    imageWithOcrPrompt: (ocrText: string) => `Cette image peut contenir un rapport médical ou un document. Voici le texte extrait :
+
+${ocrText}
+
+Veuillez analyser ce rapport et résumer les points clés. Si l'image contient d'autres informations médicales, analysez-les également.`,
+    uploadedReportImagePrompt: (fileName: string) => `Veuillez analyser ce rapport médical téléchargé : ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Je télécharge un rapport médical PDF (${fileName}). Voici le texte extrait :
+
+${preview}
+
+Veuillez analyser ce rapport et résumer les points clés.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Je télécharge un rapport médical (${fileName}). Voici le contenu :
+
+${preview}
+
+Veuillez analyser ce rapport et résumer les points clés.`,
+    fileTooLargeTitle: "Fichier trop volumineux",
+    fileTooLargeImageDescription: "Images jusqu'à 10 Mo maximum.",
+    fileTooLargeDescription: "Fichier jusqu'à 10 Mo maximum.",
+    imageOcrFailedTitle: "Échec de l'OCR de l'image",
+    imageOcrFailedDescription: "Impossible d'extraire le texte de l'image.",
+    pdfFailedTitle: "Échec de l'extraction PDF",
+    pdfFailedDescription: "Impossible d'extraire le texte du PDF.",
+    speechErrorTitle: "Erreur vocale",
+    speechErrorDescription: "Impossible de reconnaître la voix. Veuillez réessayer ou taper votre message.",
+    voiceUnsupportedTitle: "Voix non prise en charge",
+    voiceUnsupportedDescription: "Votre navigateur ne prend pas en charge la reconnaissance vocale. Veuillez taper votre message.",
+    microphoneErrorTitle: "Erreur du microphone",
+    microphoneErrorDescription: "Impossible d'accéder au microphone.",
+    noSpeechTitle: "Aucune voix détectée",
+    noSpeechDescription: "Veuillez parler clairement et réessayer.",
+    listeningFallbackTitle: "Écoute...",
+    listeningFallbackDescription: "Parlez maintenant - la reconnaissance vocale du navigateur est utilisée en secours.",
+    voiceUnavailableTitle: "Voix indisponible",
+    voiceUnavailableDescription: "La synthèse vocale n'est pas disponible. Veuillez lire la réponse à la place.",
+    listening: "Écoute...",
+    saySomething: "Dites quelque chose...",
+    pressMic: "Appuyez sur le micro pour commencer à parler",
+    duration: "Durée",
+    listeningIndicator: "Écoute...",
+    stop: "Arrêter",
+    transcribing: "Transcription de votre voix...",
+    uploadAria: "Télécharger un fichier ou une image",
+    uploadedAlt: "Aperçu du fichier téléchargé",
+    inputPlaceholder: "Posez n'importe quelle question",
+    inputListeningPlaceholder: "Écoute...",
+    inputTranscribingPlaceholder: "Transcription en cours...",
+    startVoiceInput: "Commencer la saisie vocale",
+    stopRecording: "Arrêter l'enregistrement",
+    send: "Envoyer",
+    listen: "Écouter",
+  },
+  ar: {
+    switchToVoice: "التبديل إلى الدردشة الصوتية",
+    switchToText: "التبديل إلى دردشة نصية",
+    voiceChat: "الدردشة الصوتية",
+    textChat: "الدردشة النصية",
+    welcomeTitle: "كيف يمكنني مساعدتك اليوم؟",
+    welcomeDescription: "اطرح علي أسئلة صحية، وصف الأعراض، أو قم بتحميل صورة طبية للتحليل. سأبقي الإجابات قصيرة وأسأل سؤالاً واحداً في كل مرة.",
+    suggestions: [
+      "أعاني من صداع وحمى",
+      "ماذا يعني نتيجة فحص الدم؟",
+      "أعراض الملاريا مقابل التيفود",
+      "ساعدني على الاستعداد لزيارة الطبيب",
+    ],
+    analyzeImageFallback: "يرجى تحليل هذه الصورة الطبية وتقديم تقييمك.",
+    imageWithOcrPrompt: (ocrText: string) => `قد تحتوي هذه الصورة على تقرير طبي أو مستند. النص المستخرج هو:
+
+${ocrText}
+
+يرجى تحليل هذا التقرير وتلخيص النقاط الرئيسية. إذا كانت الصورة تحتوي على معلومات طبية أخرى، فقم بتحليلها أيضًا.`,
+    uploadedReportImagePrompt: (fileName: string) => `يرجى تحليل صورة التقرير الطبي المرفوعة: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `أقوم بتحميل ملف PDF لتقرير طبي (${fileName}). النص المستخرج هو:
+
+${preview}
+
+يرجى تحليل هذا التقرير وتلخيص النقاط الرئيسية.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `أقوم بتحميل تقرير طبي (${fileName}). المحتوى هو:
+
+${preview}
+
+يرجى تحليل هذا التقرير وتلخيص النقاط الرئيسية.`,
+    fileTooLargeTitle: "الملف كبير جدًا",
+    fileTooLargeImageDescription: "الصور حتى 10 ميغابايت كحد أقصى.",
+    fileTooLargeDescription: "الملف حتى 10 ميغابايت كحد أقصى.",
+    imageOcrFailedTitle: "فشل استخراج النص من الصورة",
+    imageOcrFailedDescription: "تعذر استخراج النص من الصورة.",
+    pdfFailedTitle: "فشل استخراج النص من PDF",
+    pdfFailedDescription: "تعذر استخراج النص من PDF.",
+    speechErrorTitle: "خطأ في الصوت",
+    speechErrorDescription: "تعذر التعرف على الصوت. يرجى المحاولة مرة أخرى أو كتابة رسالتك.",
+    voiceUnsupportedTitle: "الصوت غير مدعوم",
+    voiceUnsupportedDescription: "المتصفح الخاص بك لا يدعم التعرف على الصوت. يرجى كتابة رسالتك بدلاً من ذلك.",
+    microphoneErrorTitle: "خطأ في الميكروفون",
+    microphoneErrorDescription: "تعذر الوصول إلى الميكروفون.",
+    noSpeechTitle: "لم يتم اكتشاف الصوت",
+    noSpeechDescription: "يرجى التحدث بوضوح والمحاولة مرة أخرى.",
+    listeningFallbackTitle: "جاري الاستماع...",
+    listeningFallbackDescription: "تحدث الآن - يتم استخدام التعرف على الصوت في المتصفح كنسخة احتياطية.",
+    voiceUnavailableTitle: "الصوت غير متاح",
+    voiceUnavailableDescription: "تحويل النص إلى كلام غير متاح. يرجى قراءة الرد بدلاً من ذلك.",
+    listening: "جاري الاستماع...",
+    saySomething: "قل شيئًا...",
+    pressMic: "اضغط على الميكروفون للبدء في التحدث",
+    duration: "المدة",
+    listeningIndicator: "جاري الاستماع...",
+    stop: "إيقاف",
+    transcribing: "جاري تحويل صوتك إلى نص...",
+    uploadAria: "تحميل ملف أو صورة",
+    uploadedAlt: "معاينة الملف المحمل",
+    inputPlaceholder: "اسأل أي شيء",
+    inputListeningPlaceholder: "جاري الاستماع...",
+    inputTranscribingPlaceholder: "جاري النسخ...",
+    startVoiceInput: "بدء الإدخال الصوتي",
+    stopRecording: "إيقاف التسجيل",
+    send: "إرسال",
+    listen: "استمع",
+  },
+  yo: {
+    switchToVoice: "Yi sọrọ pẹlu ohùn",
+    switchToText: "Yi pada si ibaraẹnisọrọ ọrọ",
+    voiceChat: "Ibaraẹnisọrọ Ohùn",
+    textChat: "Ibaraẹnisọrọ Ọrọ",
+    welcomeTitle: "Báwo lẹ ṣe fẹ́ kí n ran ọ lọwọ lónìí?",
+    welcomeDescription: "Beere lọwọ mi awọn ibeere ilera, ṣe apejuwe awọn aami aisan rẹ, tabi po aworan iṣoogun kan fun itupalẹ. Emi yoo pa awọn idahun ni kuru ati beere ibeere kan ni akoko kan.",
+    suggestions: [
+      "Mo ni irora ori ati iba",
+      "Kini itumọ esi idanwo ẹjẹ mi?",
+      "Awọn aami aisan malaria vs typhoid",
+      "Ran mi lọwọ lati mura silẹ fun ibẹwo dokita",
+    ],
+    analyzeImageFallback: "Jọwọ ṣe itupalẹ aworan iṣoogun yii ki o pese iṣiro rẹ.",
+    imageWithOcrPrompt: (ocrText: string) => `Aworan yi le ni ijabọ iṣoogun tabi iwe kan. Eyi ni ọrọ ti a fa jade:
+
+${ocrText}
+
+Jọwọ ṣe itupalẹ ijabọ yii ki o ṣoki awọn aaye pataki. Ti aworan naa ba ni alaye iṣoogun miiran, tun ṣe itupalẹ wọn.`,
+    uploadedReportImagePrompt: (fileName: string) => `Jọwọ ṣe itupalẹ aworan ijabọ iṣoogun ti a gbe soke: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Mo n gbe PDF ijabọ iṣoogun kan soke (${fileName}). Eyi ni ọrọ ti a fa jade:
+
+${preview}
+
+Jọwọ ṣe itupalẹ ijabọ yii ki o ṣoki awọn aaye pataki.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Mo n gbe ijabọ iṣoogun kan soke (${fileName}). Eyi ni akoonu:
+
+${preview}
+
+Jọwọ ṣe itupalẹ ijabọ yii ki o ṣoki awọn aaye pataki.`,
+    fileTooLargeTitle: "Faili tobi ju",
+    fileTooLargeImageDescription: "Awọn fọto to to 10 MB ni opin.",
+    fileTooLargeDescription: "Faili to to 10 MB ni opin.",
+    imageOcrFailedTitle: "Kò ṣe é yọ ọrọ kúrò ninu aworan",
+    imageOcrFailedDescription: "A kò lè yọ ọrọ kúrò ninu aworan.",
+    pdfFailedTitle: "Kò ṣe é yọ ọrọ kúrò ninu PDF",
+    pdfFailedDescription: "A kò lè yọ ọrọ kúrò ninu PDF.",
+    speechErrorTitle: "Aṣiṣe ọrọ",
+    speechErrorDescription: "A kò lè mọ ohun naa. Jọwọ tun gbiyanju tabi kọ ifiranṣẹ rẹ.",
+    voiceUnsupportedTitle: "A ko ṣe atilẹyin ohùn",
+    voiceUnsupportedDescription: "Ẹrọ aṣawakiri rẹ ko ṣe atilẹyin idanimọ ọrọ. Jọwọ kọ ifiranṣẹ rẹ dipo.",
+    microphoneErrorTitle: "Aṣiṣe gbohungbohun",
+    microphoneErrorDescription: "A kò le wọle si gbohungbohun.",
+    noSpeechTitle: "A ko ri ohùn",
+    noSpeechDescription: "Jọwọ sọrọ kedere ki o tun gbiyanju.",
+    listeningFallbackTitle: "Ngbọ...",
+    listeningFallbackDescription: "Sọ bayi - idanimọ ọrọ aṣawakiri ni a n lo bi aropọ.",
+    voiceUnavailableTitle: "Ohùn ko si",
+    voiceUnavailableDescription: "A ko le ṣe ọrọ si ọrọ. Jọwọ ka idahun naa dipo.",
+    listening: "Ngbọ...",
+    saySomething: "Ṣe sọ nkan kan...",
+    pressMic: "Tẹ gbohungbohun lati bẹrẹ sọrọ",
+    duration: "Akoko",
+    listeningIndicator: "Ngbọ...",
+    stop: "Duro",
+    transcribing: "A n yi ohùn rẹ pada si ọrọ...",
+    uploadAria: "Gbe faili tabi aworan wọle",
+    uploadedAlt: "Aworan faili ti a gbe wọle",
+    inputPlaceholder: "Beere ohunkohun",
+    inputListeningPlaceholder: "Ngbọ...",
+    inputTranscribingPlaceholder: "A n daakọ...",
+    startVoiceInput: "Bẹrẹ titẹ ohùn",
+    stopRecording: "Duro igbasilẹ",
+    send: "Firanṣẹ",
+    listen: "Gbọ",
+  },
+  sw: {
+    switchToVoice: "Badilisha kwa mazungumzo ya sauti",
+    switchToText: "Badilisha kwa mazungumzo ya maandishi",
+    voiceChat: "Mazungumzo ya Sauti",
+    textChat: "Mazungumzo ya Maandishi",
+    welcomeTitle: "Ninawezaje kukusaidia leo?",
+    welcomeDescription: "Niniulize maswali ya afya, eleza dalili zako, au pakia picha ya kiafya kwa uchambuzi. Nitafupisha majibu na kuuliza swali moja kwa wakati.",
+    suggestions: [
+      "Nina maumivu ya kichwa na homa",
+      "Matokeo ya mtihani wangu wa damu yanamaanisha nini?",
+      "Dalili za malaria dhidi ya typhoid",
+      "Nisaidie kujiandaa kwa ziara kwa daktari",
+    ],
+    analyzeImageFallback: "Tafadhali chambua picha hii ya kiafya na utoe tathmini yako.",
+    imageWithOcrPrompt: (ocrText: string) => `Picha hii inaweza kuwa na ripoti ya kiafya au hati. Hapa ni maandishi yaliyochujwa:
+
+${ocrText}
+
+Tafadhali chambua ripoti hii na ufupishe matokeo muhimu. Ikiwa picha ina taarifa nyingine za kiafya, chunguza pia.`,
+    uploadedReportImagePrompt: (fileName: string) => `Tafadhali chambua picha hii ya ripoti ya kiafya iliyopakiwa: ${fileName}`,
+    uploadedPdfPrompt: (fileName: string, preview: string) => `Ninaupload PDF ya ripoti ya kiafya (${fileName}). Hapa ni maandishi yaliyochujwa:
+
+${preview}
+
+Tafadhali chambua ripoti hii na ufupishe matokeo muhimu.`,
+    uploadedReportPrompt: (fileName: string, preview: string) => `Ninaupload ripoti ya kiafya (${fileName}). Yaliyomo ni:
+
+${preview}
+
+Tafadhali chambua ripoti hii na ufupishe matokeo muhimu.`,
+fileTooLargeTitle: "Faili kubwa sana",
+    fileTooLargeImageDescription: "Picha hadi 10 MB tu.",
+    fileTooLargeDescription: "Faili hadi 10 MB tu.",
+    imageOcrFailedTitle: "Uchambuzi wa picha haukufanikiwa",
+    imageOcrFailedDescription: "Haikuwezekana kutoa maandishi kutoka kwa picha.",
+    pdfFailedTitle: "Uchambuzi wa PDF haukufanikiwa",
+    pdfFailedDescription: "Haikuwezekana kutoa maandishi kutoka kwa PDF.",
+    speechErrorTitle: "Hitilafu ya sauti",
+    speechErrorDescription: "Haikuwezekana kutambua hotuba. Tafadhali jaribu tena au andika ujumbe wako.",
+    voiceUnsupportedTitle: "Sauti haitegemezwi",
+    voiceUnsupportedDescription: "Kivinjari chako hakitambui hotuba. Tafadhali andika ujumbe wako badala yake.",
+    microphoneErrorTitle: "Hitilafu ya kipaza sauti",
+    microphoneErrorDescription: "Haikuwezekana kupata kipaza sauti.",
+    noSpeechTitle: "Hakuna hotuba iliyotambuliwa",
+    noSpeechDescription: "Tafadhali sema kwa uwazi na ujaribu tena.",
+    listeningFallbackTitle: "Kusikilizwa...",
+    listeningFallbackDescription: "Zungumza sasa - utambuzi wa hotuba wa kivinjari unatumiwa kama mbadala.",
+    voiceUnavailableTitle: "Sauti haipatikani",
+    voiceUnavailableDescription: "Kutoka maandishi kwa sauti hakuna. Tafadhali soma jibu badala yake.",
+    listening: "Kusikilizwa...",
+    saySomething: "Sema kitu...",
+    pressMic: "Bonyeza kipaza sauti ili kuanza kuongea",
+    duration: "Muda",
+    listeningIndicator: "Kusikilizwa...",
+    stop: "Simama",
+    transcribing: "Hotuba yako inabadilishwa kuwa maandishi...",
+    uploadAria: "Pakia faili au picha",
+    uploadedAlt: "Onyesho la faili iliyopakuliwa",
+    inputPlaceholder: "Uliza chochote",
+    inputListeningPlaceholder: "Kusikilizwa...",
+    inputTranscribingPlaceholder: "Inarekodiwa...",
+    startVoiceInput: "Anza kuingiza kwa sauti",
+    stopRecording: "Acha kurekodi",
+    send: "Tuma",
+    listen: "Sikiliza",
   },
 } as const;
 

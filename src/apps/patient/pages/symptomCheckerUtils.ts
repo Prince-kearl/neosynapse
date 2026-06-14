@@ -2,6 +2,11 @@ export type PossibleCondition = {
   name: string;
   likelihood: "high" | "medium" | "low";
   reason: string;
+  definition?: string;
+  causes?: string;
+  symptoms?: string;
+  treatments?: string;
+  sources?: string[];
 };
 
 const genericReasonPatterns = [

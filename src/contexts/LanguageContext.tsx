@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type LanguageCode = "en" | "tw" | "ga" | "ee" | "ha";
+export type LanguageCode = "en" | "tw" | "ga" | "ee" | "ha" | "fr" | "ar" | "yo" | "sw";
 
 export interface Language {
   code: LanguageCode;
@@ -14,6 +14,10 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: "ga", name: "Ga", nativeName: "Gã" },
   { code: "ee", name: "Ewe", nativeName: "Eʋegbe" },
   { code: "ha", name: "Hausa", nativeName: "Hausa" },
+  { code: "fr", name: "French", nativeName: "Français" },
+  { code: "ar", name: "Arabic", nativeName: "العربية" },
+  { code: "yo", name: "Yoruba", nativeName: "Yorùbá" },
+  { code: "sw", name: "Swahili", nativeName: "Kiswahili" },
 ];
 
 interface LanguageContextType {

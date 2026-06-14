@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Video, Users, Loader2, Phone, AlertCircle, Bell, BellOff } from "lucide-react";
+import { Video, Users, Loader2, Phone, AlertCircle, Bell, BellOff, AlertTriangle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,9 +11,42 @@ import { auditLogService } from "@/shared/services/healthcare";
 import { VideoDisplay } from "@/components/telemedicine/VideoDisplay";
 import { CallControls } from "@/components/telemedicine/CallControls";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
+import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 type CallState = "list" | "pre-call" | "joining" | "active" | "ended" | "error";
+
+// Urgency configuration with visual indicators
+const URGENCY_CONFIG = {
+  routine: {
+    label: "Low Priority",
+    icon: "🟢",
+    className: "border-green-500/30 bg-green-500/10 text-green-700",
+    badgeVariant: "outline" as const,
+    sortIndex: 3,
+  },
+  priority: {
+    label: "Needs Attention",
+    icon: "🟡",
+    className: "border-yellow-500/30 bg-yellow-500/10 text-yellow-700",
+    badgeVariant: "outline" as const,
+    sortIndex: 2,
+  },
+  urgent: {
+    label: "Urgent",
+    icon: "🟠",
+    className: "border-orange-500/30 bg-orange-500/10 text-orange-700",
+    badgeVariant: "outline" as const,
+    sortIndex: 1,
+  },
+  emergency: {
+    label: "Emergency",
+    icon: "🔴",
+    className: "border-red-500/30 bg-red-500/10 text-red-700",
+    badgeVariant: "destructive" as const,
+    sortIndex: 0,
+  },
+};
 
 export default function ProfessionalTelemedicine() {
   const { user } = useAuth();
@@ -336,10 +369,23 @@ export default function ProfessionalTelemedicine() {
         .select("*")
         .eq("professional_id", user!.id)
         .eq("encounter_type", "telemedicine")
-        .in("status", ["pending", "in_progress"])
-        .order("created_at", { ascending: true });
+        .in("status", ["pending", "in_progress"]);
       if (error) throw error;
-      return data || [];
+      
+      // Sort by priority (emergency first) then by created_at
+      const sorted = (data || []).sort((a, b) => {
+        const aPriority = (a.priority as string) || "routine";
+        const bPriority = (b.priority as string) || "routine";
+        const aSortIndex = URGENCY_CONFIG[aPriority as keyof typeof URGENCY_CONFIG]?.sortIndex ?? 3;
+        const bSortIndex = URGENCY_CONFIG[bPriority as keyof typeof URGENCY_CONFIG]?.sortIndex ?? 3;
+        
+        if (aSortIndex !== bSortIndex) {
+          return aSortIndex - bSortIndex;
+        }
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
+      
+      return sorted;
     },
     enabled: !!user,
     refetchInterval: 10000, // Poll every 10s for new patients
@@ -721,6 +767,12 @@ export default function ProfessionalTelemedicine() {
 
   // ─── Pre-call settings view ────────────────────────────────────
   if (callState === "pre-call") {
+    const encounter = waitingEncounters.find((e) => e.id === selectedEncounterId);
+    const priority = (encounter?.priority as string) || "routine";
+    const urgencyInfo = URGENCY_CONFIG[priority as keyof typeof URGENCY_CONFIG];
+    const isEmergency = priority === "emergency";
+    const isUrgent = priority === "urgent";
+    
     return (
       <div className="flex-1 min-h-screen bg-background">
         <div className="p-4 lg:p-6 max-w-lg mx-auto space-y-6">
@@ -730,6 +782,36 @@ export default function ProfessionalTelemedicine() {
               Connecting with <span className="font-medium text-foreground">{patientName}</span>
             </p>
           </div>
+
+          {/* Urgency Indicator */}
+          {urgencyInfo && (
+            <div
+              className={cn(
+                "rounded-2xl border p-4 flex items-start gap-3",
+                isEmergency
+                  ? "border-red-500/50 bg-red-50 dark:bg-red-950/20"
+                  : isUrgent
+                  ? "border-orange-500/30 bg-orange-50/50 dark:bg-orange-950/20"
+                  : priority === "priority"
+                  ? "border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/20"
+                  : "border-green-500/30 bg-green-50/50 dark:bg-green-950/20"
+              )}
+            >
+              <div className="text-2xl mt-0.5">{urgencyInfo.icon}</div>
+              <div>
+                <p className="font-semibold text-sm">{urgencyInfo.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isEmergency
+                    ? "This is an emergency case requiring immediate attention."
+                    : isUrgent
+                    ? "This case requires urgent attention and should be prioritized."
+                    : priority === "priority"
+                    ? "This patient needs attention soon but not immediately."
+                    : "This is a routine consultation."}
+                </p>
+              </div>
+            </div>
+          )}
 
           <PreConsultationSettings
             videoEnabled={videoEnabled}
@@ -746,7 +828,14 @@ export default function ProfessionalTelemedicine() {
               Cancel
             </Button>
             <Button
-              className="flex-1 h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
+              className={cn(
+                "flex-1 h-12 rounded-full text-base font-semibold",
+                isEmergency
+                  ? "bg-red-600 hover:bg-red-700"
+                  : isUrgent
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-primary hover:bg-primary/90"
+              )}
               onClick={handleJoinCall}
             >
               <Video className="w-5 h-5 mr-2" />
@@ -806,37 +895,93 @@ export default function ProfessionalTelemedicine() {
             </div>
           ) : waitingEncounters.length > 0 ? (
             <div className="space-y-3">
-              {waitingEncounters.map((enc) => (
-                <div key={enc.id} className="flex flex-col gap-3 rounded-xl bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                      {getPatientName(enc.patient_id).charAt(0)}
+              {waitingEncounters.map((enc) => {
+                const priority = (enc.priority as string) || "routine";
+                const urgencyInfo = URGENCY_CONFIG[priority as keyof typeof URGENCY_CONFIG];
+                const isEmergency = priority === "emergency";
+                
+                return (
+                  <div
+                    key={enc.id}
+                    className={cn(
+                      "flex flex-col gap-3 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between border transition",
+                      isEmergency
+                        ? "border-red-500/50 bg-red-50 dark:bg-red-950/20"
+                        : priority === "urgent"
+                        ? "border-orange-500/30 bg-orange-50/50 dark:bg-orange-950/20"
+                        : "border-border bg-muted/30"
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div
+                        className={cn(
+                          "w-12 h-12 rounded-full flex items-center justify-center font-semibold text-lg",
+                          priority === "emergency"
+                            ? "bg-red-500/20 text-red-600"
+                            : priority === "urgent"
+                            ? "bg-orange-500/20 text-orange-600"
+                            : priority === "priority"
+                            ? "bg-yellow-500/20 text-yellow-600"
+                            : "bg-primary/10 text-primary"
+                        )}
+                      >
+                        {isEmergency ? (
+                          <AlertTriangle className="w-6 h-6" />
+                        ) : priority === "urgent" ? (
+                          <Zap className="w-6 h-6" />
+                        ) : (
+                          getPatientName(enc.patient_id).charAt(0)
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{getPatientName(enc.patient_id)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {enc.status === "in_progress" ? "In progress" : "Waiting"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{getPatientName(enc.patient_id)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {enc.status === "in_progress" ? "In progress" : "Waiting"}
-                      </p>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <span className="text-xs text-muted-foreground sm:text-sm">
+                        {getWaitTime(enc.created_at)}
+                      </span>
+                      {urgencyInfo && (
+                        <Badge
+                          variant={urgencyInfo.badgeVariant}
+                          className={cn(
+                            "gap-1",
+                            urgencyInfo.badgeVariant === "destructive"
+                              ? "border-red-300 bg-red-100 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300"
+                              : undefined
+                          )}
+                        >
+                          <span>{urgencyInfo.icon}</span>
+                          {urgencyInfo.label}
+                        </Badge>
+                      )}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          enc.status === "in_progress"
+                            ? "border-primary/50 text-primary capitalize"
+                            : "border-yellow-500/50 text-yellow-500 capitalize"
+                        )}
+                      >
+                        {enc.status.replace("_", " ")}
+                      </Badge>
+                      <Button
+                        className={cn(
+                          "w-full sm:w-auto",
+                          isEmergency ? "bg-red-600 hover:bg-red-700" : undefined
+                        )}
+                        onClick={() => handleSelectEncounter(enc.id, enc.patient_id)}
+                      >
+                        <Video className="w-4 h-4 mr-2" />
+                        Join Call
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <span className="text-xs text-muted-foreground sm:text-sm">
-                      {getWaitTime(enc.created_at)}
-                    </span>
-                    <Badge variant="outline" className={
-                      enc.status === "in_progress"
-                        ? "border-primary/50 text-primary capitalize"
-                        : "border-yellow-500/50 text-yellow-500 capitalize"
-                    }>
-                      {enc.status.replace("_", " ")}
-                    </Badge>
-                    <Button className="w-full sm:w-auto" onClick={() => handleSelectEncounter(enc.id, enc.patient_id)}>
-                      <Video className="w-4 h-4 mr-2" />
-                      Join Call
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8">
@@ -850,12 +995,23 @@ export default function ProfessionalTelemedicine() {
         </section>
 
         {/* Info */}
-        <div className="bg-muted/50 rounded-2xl p-4 border border-border">
-          <p className="text-sm text-muted-foreground">
-            <strong>Note:</strong> When you join a call, the patient's video feed will appear.
-            Ensure your camera and microphone are enabled. If recording consent was granted,
-            the consultation will be transcribed for clinical documentation.
-          </p>
+        <div className="bg-muted/50 rounded-2xl p-4 border border-border space-y-3">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              <strong>Note:</strong> When you join a call, the patient's video feed will appear.
+              Ensure your camera and microphone are enabled. If recording consent was granted,
+              the consultation will be transcribed for clinical documentation.
+            </p>
+          </div>
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-semibold text-foreground mb-2">Urgency Indicators:</p>
+            <div className="grid gap-2 text-xs text-muted-foreground">
+              <div>🟢 <strong>Low Priority</strong> — Routine consultation</div>
+              <div>🟡 <strong>Needs Attention</strong> — Should be addressed soon</div>
+              <div>🟠 <strong>Urgent</strong> — High priority case</div>
+              <div>🔴 <strong>Emergency</strong> — Immediate attention required</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
