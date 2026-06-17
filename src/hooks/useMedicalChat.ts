@@ -455,14 +455,21 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
   const storageKey = options?.storageKey || DEFAULT_STORAGE_KEY;
   const userId = options?.userId;
   const contextMessage = options?.contextMessage?.trim() || null;
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [initialStore] = useState(() => {
+    if (typeof window === "undefined") {
+      const fallback = createSession();
+      return { sessions: [fallback], activeSessionId: fallback.id };
+    }
+    return hydrateStore(storageKey);
+  });
+  const [sessions, setSessions] = useState<ChatSession[]>(initialStore.sessions);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(initialStore.activeSessionId);
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<ChatSyncStatus>("idle");
   const { language } = useLanguage();
   const abortRef = useRef(false);
-  const sessionsRef = useRef<ChatSession[]>([]);
-  const activeSessionIdRef = useRef<string | null>(null);
+  const sessionsRef = useRef<ChatSession[]>(initialStore.sessions);
+  const activeSessionIdRef = useRef<string | null>(initialStore.activeSessionId);
   const hasHydratedRef = useRef(false);
   const serverReadyRef = useRef(false);
   const lastSyncedSignatureRef = useRef<string>("");
@@ -471,6 +478,7 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const hydrated = hydrateStore(storageKey);
     setSessions(hydrated.sessions);
     setActiveSessionId(hydrated.activeSessionId);
@@ -478,6 +486,41 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
     activeSessionIdRef.current = hydrated.activeSessionId;
     hasHydratedRef.current = true;
   }, [storageKey]);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+    activeSessionIdRef.current = activeSessionId;
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+    }
+
+    if (typeof window === "undefined") return;
+
+    const payload: PersistedChatStore = {
+      version: 2,
+      activeSessionId,
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        name: session.name,
+        isPinned: session.isPinned,
+        createdAt: session.createdAt.toISOString(),
+        updatedAt: session.updatedAt.toISOString(),
+        messages: session.messages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString(),
+          imageUrl: msg.imageUrl,
+        })),
+      })),
+    };
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [sessions, activeSessionId, storageKey]);
 
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -722,7 +765,7 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
     }
   }, [userId]);
 
-  const sendMessage = useCallback(async (content: string, imageUrl?: string) => {
+  const sendMessage = useCallback(async (content: string, imageUrl?: string, hiddenContext?: string) => {
     const sessionId = ensureActiveSession();
     const now = new Date();
     const userMsg: ChatMessage = {
@@ -761,6 +804,14 @@ export function useMedicalChat(options?: UseMedicalChatOptions) {
           ]
         : m.content,
     }));
+
+    // Prepend hidden context (e.g., OCR text) if provided
+    if (hiddenContext) {
+      apiMessages.unshift({
+        role: "user",
+        content: hiddenContext,
+      });
+    }
 
     await streamMedicalChat({
       messages: apiMessages as any,

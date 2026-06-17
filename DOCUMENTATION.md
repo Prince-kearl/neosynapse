@@ -218,7 +218,7 @@ neosynapse/
 │   │       │                    EncounterFilterBanner, TransitionTimeline
 │   │       ├─ layouts/          ProfessionalLayout.tsx
 │   │       └─ pages/            Dashboard, Patients, PatientDetail,
-│   │                            Encounters, Telemedicine, Transcripts,
+│   │                            Encounters, Appointments, Telemedicine, Transcripts,
 │   │                            Notes, Reports, Settings, Notifications
 │   │
 │   ├─ auth/
@@ -405,8 +405,22 @@ Localised in: English, Twi, Ga, Ewe, Hausa.
 #### 6.4 Appointments (`/patient/appointments`)
 
 - Lists patient appointments from `appointments` table.
-- Book new appointment: select professional, type, reason, datetime.
+- Filter tabs: **Upcoming** (pending + confirmed), **Past** (completed + cancelled).
 - Status badges: `pending` | `confirmed` | `in_progress` | `completed` | `cancelled`.
+- Priority badges: `routine` | `priority` | `urgent` | `emergency`.
+- **"Book New" button** navigates to `/patient/appointments/book` to create a new appointment request.
+
+#### 6.4.1 Appointment Booking (`/patient/appointments/book`)
+
+- Dedicated page for patients to request a scheduled telemedicine appointment.
+- **Doctor selection:** Choose from verified, available professionals with specialty and rating display.
+- **Date/time selection:** Calendar picker (next 30 days); time slots (09:00, 11:00, 14:00, 16:00).
+- **Schedule conflict detection:** Disables booked time slots for the selected doctor; prevents double-booking.
+- **Reason for visit:** Free-text input; triggers high-risk keyword detection (chest pain, shortness of breath, etc.).
+- **Priority selection:** Routine → Priority → Urgent → Emergency. High-risk cases display warning banner recommending urgent/emergency.
+- **Booking summary:** Shows doctor name, date/time, and priority before confirmation.
+- On confirm: Creates appointment with `status = "pending"`; sends alert notification to doctor if urgent/emergency.
+- Redirects to appointments list on success.
 
 #### 6.5 Telemedicine (`/patient/telemedicine`)
 
@@ -493,6 +507,7 @@ Real-time notification feed from `notifications` table.
 - Filter by status: `pending` | `in_progress` | `completed` | `cancelled`.
 - `EncounterFilterBanner` component provides quick status filter pills.
 - Click encounter → navigate to Telemedicine or Notes.
+- Scheduled appointment requests are reviewed separately under `/professional/appointments`.
 
 ### 7.5 Telemedicine (`/professional/telemedicine`)
 
@@ -1336,6 +1351,8 @@ supabase db push --yes
 | 2026-05-09 | Refined the native splash to a lighter minimal variant (logo only, no subtitle) to better match Apple launch-screen style | `resources/splash.svg`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png`, `ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png`, `android/app/src/main/res/drawable/splash.png`, `android/app/src/main/res/drawable-port-*/splash.png`, `android/app/src/main/res/drawable-land-*/splash.png`, `DOCUMENTATION.md` |
 | 2026-06-09 | Added native telemedicine push action buttons and deep-link handling for accept/reject on mobile notifications | `supabase/functions/send-push-notification/index.ts`, `src/shared/services/pushNotificationService.ts`, `src/mobile/pushNotifications.ts`, `DOCUMENTATION.md` |
 | 2026-06-09 | Added secure password recovery flow with reset confirmation page and improved forgot-password feedback | `src/auth/pages/ForgotPassword.tsx`, `src/auth/pages/ResetPassword.tsx`, `src/App.tsx`, `DOCUMENTATION.md` |
+| 2026-06-17 | Added professional appointment request review and schedule conflict prevention for doctor approval | `src/apps/professional/pages/Appointments.tsx`, `src/apps/professional/components/ProfessionalSidebar.tsx`, `src/App.tsx`, `src/apps/patient/pages/Telemedicine.tsx`, `DOCUMENTATION.md` |
+| 2026-06-17 | Created dedicated appointment booking page for patients with doctor selection, date/time picker, conflict detection, and priority-based alert routing | `src/apps/patient/pages/AppointmentBooking.tsx`, `src/App.tsx`, `src/apps/patient/pages/Appointments.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Fixed AI Assistant mobile keyboard overlap by making the bottom input/search composer track keyboard height so the text box stays visible while typing | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Added AI Assistant keyboard-open auto-scroll so the latest message stays visible when the mobile keyboard appears | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-05-09 | Improved AI Assistant keyboard handling reliability on native mobile by using Capacitor Keyboard event heights for composer offset with browser fallback logic | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
@@ -1346,4 +1363,5 @@ supabase db push --yes
 | 2026-04-14 | Fixed AI Assistant mobile conversation controls so the `+` new-conversation button stays inline beside the dropdown | `src/apps/patient/pages/AIAssistant.tsx`, `DOCUMENTATION.md` |
 | 2026-06-14 | Fixed Symptom Checker state persistence: extended localStorage to preserve full workflow state (step, intakeStep, assessmentFor, result); hydration logic validates result and handles edge cases; explicit "New Check" button now fully clears stored state | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-06-14 | Implemented sequential follow-up questions in AI Assistant: reinforced system prompt with CRITICAL section enforcing exactly one follow-up question per response (no lists, no multiple questions per message) | `supabase/functions/medical-chat/index.ts`, `DOCUMENTATION.md` |
+| 2026-06-17 | Separated OCR text from visible chat messages in AI Assistant: modified `useMedicalChat` to accept optional `hiddenContext` parameter sent to AI but not displayed; OCR/extracted text now hidden from user while AI receives full context | `src/hooks/useMedicalChat.ts`, `src/apps/patient/pages/AIAssistant.tsx` |
 | 2026-04-14 | Created this documentation file | `DOCUMENTATION.md` |

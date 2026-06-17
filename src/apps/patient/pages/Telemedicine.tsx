@@ -109,6 +109,59 @@ export default function PatientTelemedicine() {
   const [selectedPriority, setSelectedPriority] = useState<AppointmentPriority>("routine");
   const [isScheduling, setIsScheduling] = useState(false);
 
+  const formatDateSlotKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+  const {
+    data: doctorSchedule = [],
+    isLoading: doctorScheduleLoading,
+  } = useQuery<Array<{ id: string; scheduled_at: string | null; status: string }>>({
+    queryKey: ["doctor-schedule", selectedDoctor, scheduledDate?.toISOString()],
+    queryFn: async () => {
+      if (!selectedDoctor || !scheduledDate) return [];
+      const dayStart = new Date(scheduledDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("id, scheduled_at, status")
+        .eq("professional_id", selectedDoctor)
+        .in("status", ["pending", "confirmed"])
+        .gte("scheduled_at", dayStart.toISOString())
+        .lt("scheduled_at", dayEnd.toISOString());
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedDoctor && !!scheduledDate,
+    staleTime: 5 * 60_000,
+  });
+
+  const unavailableSlotKeys = useMemo(() => {
+    return new Set(
+      doctorSchedule
+        .map((appt) => {
+          if (!appt.scheduled_at) return "";
+          return formatDateSlotKey(new Date(appt.scheduled_at));
+        })
+        .filter(Boolean),
+    );
+  }, [doctorSchedule]);
+
+  const selectedScheduleSlotKey = useMemo(() => {
+    if (!scheduledDate || !scheduledTime) return "";
+    const selectedDateTime = new Date(scheduledDate);
+    const [hours, minutes] = scheduledTime.split(":").map(Number);
+    selectedDateTime.setHours(hours, minutes, 0, 0);
+    return formatDateSlotKey(selectedDateTime);
+  }, [scheduledDate, scheduledTime]);
+
+  const selectedSlotUnavailable = selectedScheduleSlotKey
+    ? unavailableSlotKeys.has(selectedScheduleSlotKey)
+    : false;
+
   const {
     data: professionalProfiles = [],
     isLoading: providersLoading,
@@ -268,6 +321,16 @@ export default function PatientTelemedicine() {
     const scheduledAt = new Date(scheduledDate);
     const [hours, minutes] = scheduledTime.split(":").map(Number);
     scheduledAt.setHours(hours, minutes, 0, 0);
+
+    if (selectedSlotUnavailable) {
+      toast({
+        title: "Booking conflict",
+        description: "Selected doctor already has an appointment at that time. Please choose a different slot or doctor.",
+        variant: "destructive",
+      });
+      setIsScheduling(false);
+      return;
+    }
 
     const { data, error } = await appointmentService.create({
       patient_id: user.id,
@@ -672,21 +735,33 @@ export default function PatientTelemedicine() {
                     <div>
                       <Label htmlFor="booking-time">Available time slots</Label>
                       <div className="grid grid-cols-2 gap-2">
-                        {TIME_SLOTS.map((slot) => (
-                          <button
-                            key={slot}
-                            type="button"
-                            className={cn(
-                              "rounded-2xl border px-3 py-2 text-sm font-medium text-left",
-                              slot === scheduledTime
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border bg-background hover:border-primary/20",
-                            )}
-                            onClick={() => setScheduledTime(slot)}
-                          >
-                            {slot}
-                          </button>
-                        ))}
+                        {TIME_SLOTS.map((slot) => {
+                          const slotDateTime = new Date(scheduledDate);
+                          const [hours, minutes] = slot.split(":").map(Number);
+                          slotDateTime.setHours(hours, minutes, 0, 0);
+                          const slotKey = formatDateSlotKey(slotDateTime);
+                          const slotUnavailable = unavailableSlotKeys.has(slotKey);
+
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              className={cn(
+                                "rounded-2xl border px-3 py-2 text-sm font-medium text-left transition",
+                                slotUnavailable
+                                  ? "border-destructive/30 bg-destructive/10 text-destructive opacity-80"
+                                  : slot === scheduledTime
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-background hover:border-primary/20",
+                              )}
+                              onClick={() => !slotUnavailable && setScheduledTime(slot)}
+                              disabled={slotUnavailable}
+                            >
+                              {slot}
+                              {slotUnavailable ? " • Booked" : ""}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -733,6 +808,12 @@ export default function PatientTelemedicine() {
                       </div>
                     )}
 
+                    {selectedSlotUnavailable && (
+                      <div className="rounded-2xl border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+                        This doctor already has a confirmed or pending appointment at the selected time. Choose another slot or switch to a different doctor.
+                      </div>
+                    )}
+
                     <div className="rounded-2xl border border-border bg-background/80 p-4 text-sm text-muted-foreground">
                       <p className="font-medium">Selected time</p>
                       <p>{availableSlotSummary}</p>
@@ -741,7 +822,7 @@ export default function PatientTelemedicine() {
                     <Button
                       className="w-full h-12 bg-primary hover:bg-primary/90 rounded-full text-base font-semibold"
                       onClick={handleScheduleAppointment}
-                      disabled={isScheduling}
+                      disabled={isScheduling || doctorScheduleLoading || selectedSlotUnavailable}
                     >
                       {isScheduling ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : null}
                       {isScheduling ? "Booking..." : "Schedule consultation"}

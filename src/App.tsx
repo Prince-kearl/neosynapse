@@ -31,6 +31,7 @@ import PatientDashboard from "@/apps/patient/pages/Dashboard";
 import PatientAIAssistant from "@/apps/patient/pages/AIAssistant";
 import PatientSymptomChecker from "@/apps/patient/pages/SymptomChecker";
 import PatientAppointments from "@/apps/patient/pages/Appointments";
+import PatientAppointmentBooking from "@/apps/patient/pages/AppointmentBooking";
 import PatientTelemedicine from "@/apps/patient/pages/Telemedicine";
 import PatientReports from "@/apps/patient/pages/Reports";
 import PatientProfile from "@/apps/patient/pages/Profile";
@@ -44,6 +45,7 @@ import ProfessionalPatients from "@/apps/professional/pages/Patients";
 import ProfessionalPatientDetail from "@/apps/professional/pages/PatientDetail";
 import ProfessionalEncounters from "@/apps/professional/pages/Encounters";
 import ProfessionalTelemedicine from "@/apps/professional/pages/Telemedicine";
+import ProfessionalAppointments from "@/apps/professional/pages/Appointments";
 import ProfessionalTranscripts from "@/apps/professional/pages/Transcripts";
 import ProfessionalNotes from "@/apps/professional/pages/Notes";
 import ProfessionalReports from "@/apps/professional/pages/Reports";
@@ -103,6 +105,7 @@ const App = () => (
                   <Route path="ai-assistant" element={<PatientAIAssistant />} />
                   <Route path="symptom-checker" element={<PatientSymptomChecker />} />
                   <Route path="appointments" element={<PatientAppointments />} />
+                  <Route path="appointments/book" element={<PatientAppointmentBooking />} />
                   <Route path="telemedicine" element={<PatientTelemedicine />} />
                   <Route path="reports" element={<PatientReports />} />
                   <Route path="reports/:reportId" element={<PatientReports />} />
@@ -119,6 +122,7 @@ const App = () => (
                   <Route path="patients" element={<ProfessionalPatients />} />
                   <Route path="patient/:patientId" element={<ProfessionalPatientDetail />} />
                   <Route path="encounters" element={<ProfessionalEncounters />} />
+                  <Route path="appointments" element={<ProfessionalAppointments />} />
                   <Route path="telemedicine" element={<ProfessionalTelemedicine />} />
                   <Route path="transcripts" element={<ProfessionalTranscripts />} />
                   <Route path="transcripts/:transcriptId" element={<ProfessionalTranscripts />} />

@@ -707,6 +707,11 @@ function AIAssistant() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{
+    fileName: string;
+    hiddenContext: string;
+    imageUrl?: string;
+  } | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   // Voice mode: manual listen/respond
   const [autoVoice, setAutoVoice] = useState(false); // auto-play TTS for voice-initiated msgs
@@ -1010,10 +1015,17 @@ function AIAssistant() {
   // ---- Text send ----
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+    const hasUpload = Boolean(pendingUpload);
+    if ((!trimmed && !hasUpload) || isLoading) return;
+
     setInput("");
+    const hiddenContext = pendingUpload?.hiddenContext;
+    const imageUrl = pendingUpload?.imageUrl;
+    setPendingUpload(null);
     setAutoVoice(false);
-    sendMessage(trimmed);
+    
+    // Pass visible message content, image, and hidden context separately
+    sendMessage(trimmed || "Please analyze the attached report.", imageUrl, hiddenContext);
   };
 
   // ---- Image upload ----
@@ -1028,20 +1040,20 @@ function AIAssistant() {
     try {
       // Run OCR on the image using the currently selected assistant language.
       const ocrText = await extractImageText(file, language);
-      if (ocrText && ocrText.replace(/\s/g, "").length > 20) {
-        // If OCR finds enough text, send both the text and the image
-        sendMessage(copy.imageWithOcrPrompt(ocrText), await fileToBase64(file));
-      } else {
-        // If not much text, just send the image for visual analysis
-        sendMessage(input.trim() || copy.analyzeImageFallback, await fileToBase64(file));
-      }
+      const base64 = await fileToBase64(file);
+
+      const hiddenContext = ocrText && ocrText.replace(/\s/g, "").length > 20
+        ? copy.imageWithOcrPrompt(ocrText)
+        : copy.uploadedReportImagePrompt(file.name);
+
+      setPendingUpload({ fileName: file.name, hiddenContext, imageUrl: base64 });
+      toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
     } catch (err) {
       toast({ title: copy.imageOcrFailedTitle, description: copy.imageOcrFailedDescription, variant: "destructive" });
-      // Fallback: send image only
       const base64 = await fileToBase64(file);
-      sendMessage(input.trim() || copy.analyzeImageFallback, base64);
+      setPendingUpload({ fileName: file.name, hiddenContext: copy.uploadedReportImagePrompt(file.name), imageUrl: base64 });
+      toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
     }
-    setInput("");
     e.target.value = "";
   };
 
@@ -1065,23 +1077,23 @@ function AIAssistant() {
       e.target.value = "";
       return;
     }
-    // For images, run OCR + vision prompt pipeline.
+
     if (file.type.startsWith("image/")) {
       try {
         const ocrText = await extractImageText(file, language);
         const base64 = await fileToBase64(file);
+        const hiddenContext = ocrText && ocrText.replace(/\s/g, "").length > 20
+          ? copy.imageWithOcrPrompt(ocrText)
+          : copy.uploadedReportImagePrompt(file.name);
 
-        if (ocrText && ocrText.replace(/\s/g, "").length > 20) {
-          sendMessage(copy.imageWithOcrPrompt(ocrText), base64);
-        } else {
-          sendMessage(copy.uploadedReportImagePrompt(file.name), base64);
-        }
+        setPendingUpload({ fileName: file.name, hiddenContext, imageUrl: base64 });
+        toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
       } catch {
         const base64 = await fileToBase64(file);
-        sendMessage(copy.uploadedReportImagePrompt(file.name), base64);
+        setPendingUpload({ fileName: file.name, hiddenContext: copy.uploadedReportImagePrompt(file.name), imageUrl: base64 });
+        toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
       }
     } else if (file.type === "application/pdf") {
-      // Extract text from PDF and send to AI
       try {
         setUploadStatus("Extracting text from PDF...");
         const text = await extractPdfText(file, {
@@ -1091,7 +1103,11 @@ function AIAssistant() {
           workerRef: ocrWorkerRef,
         });
         const preview = text.slice(0, 6000);
-        sendMessage(copy.uploadedPdfPrompt(file.name, preview));
+        setPendingUpload({
+          fileName: file.name,
+          hiddenContext: copy.uploadedPdfPrompt(file.name, preview),
+        });
+        toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
       } catch (err) {
         if (!isUploadCancelledError(err)) {
           toast({ title: copy.pdfFailedTitle, description: copy.pdfFailedDescription, variant: "destructive" });
@@ -1108,7 +1124,11 @@ function AIAssistant() {
         if (!preview.trim()) {
           throw new Error("No readable text content found.");
         }
-        sendMessage(copy.uploadedReportPrompt(file.name, preview));
+        setPendingUpload({
+          fileName: file.name,
+          hiddenContext: copy.uploadedReportPrompt(file.name, preview),
+        });
+        toast({ title: "Report attached", description: "Add your instructions and press send.", variant: "default" });
       } catch (error) {
         const description = error instanceof Error
           ? error.message
@@ -1863,6 +1883,24 @@ function AIAssistant() {
             }}
           >
             <div className="mx-auto w-full max-w-2xl">
+              {pendingUpload && (
+                <div className="mb-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm sm:px-5 sm:py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{pendingUpload.fileName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Attached report ready. Add instructions or press send.</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      onClick={() => setPendingUpload(null)}
+                      aria-label="Remove attached report"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center w-full rounded-full bg-card text-foreground border border-border shadow-sm px-4 py-2 gap-3" style={{ boxShadow: '0 2px 8px 0 rgba(0,0,0,0.12)' }}>
 
             {/* Plus icon (left) for upload */}
@@ -1913,7 +1951,7 @@ function AIAssistant() {
                   handleSend();
                 }
               }}
-              placeholder={isRecording ? copy.inputListeningPlaceholder : isTranscribing ? copy.inputTranscribingPlaceholder : copy.inputPlaceholder}
+              placeholder={isRecording ? copy.inputListeningPlaceholder : isTranscribing ? copy.inputTranscribingPlaceholder : pendingUpload ? "Add instructions for attached report" : copy.inputPlaceholder}
               disabled={inputDisabled || isRecording}
               className="flex-1 bg-transparent border-none outline-none text-base text-foreground caret-foreground px-2 placeholder:text-muted-foreground disabled:opacity-50"
               style={{ minWidth: 0 }}
@@ -1936,7 +1974,7 @@ function AIAssistant() {
               type="button"
               className="flex items-center justify-center w-10 h-10 rounded-full bg-primary hover:bg-primary/80 transition"
               onClick={handleSend}
-              disabled={!input.trim() || inputDisabled}
+              disabled={(!input.trim() && !pendingUpload) || inputDisabled}
               aria-label={copy.send}
               style={{ outline: 'none', border: 'none' }}
             >

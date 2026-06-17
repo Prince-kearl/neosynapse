@@ -134,7 +134,7 @@ export default function PatientAppointments() {
               Track and manage your medical appointments
             </p>
           </div>
-          <Button onClick={() => navigate("/patient/telemedicine?mode=schedule")} className="gap-2">
+          <Button onClick={() => navigate("/patient/appointments/book")} className="gap-2">
             <Plus className="w-4 h-4" />
             Book New
           </Button>
@@ -169,7 +169,7 @@ export default function PatientAppointments() {
                 title="No Upcoming Appointments"
                 description="Book a consultation with a healthcare professional."
                 actionLabel="Book Consultation"
-                onAction={() => navigate("/patient/telemedicine?mode=schedule")}
+                onAction={() => navigate("/patient/appointments/book")}
                 iconContainerClassName="bg-accent/10"
               />
             )}
