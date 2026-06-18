@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureNativePushRegistration } from "@/mobile/pushNotifications";
 
@@ -19,6 +20,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,6 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (event === "SIGNED_OUT") {
+          queryClient.clear();
+        } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+          queryClient.removeQueries({ queryKey: ["user-profile"] });
+          queryClient.removeQueries({ queryKey: ["user-roles"] });
+          queryClient.removeQueries({ queryKey: ["profile"] });
+          queryClient.removeQueries({ queryKey: ["patient-profile"] });
+          queryClient.removeQueries({ queryKey: ["pro-profile"] });
+        }
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
@@ -43,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   const signUp = async (
     email: string,

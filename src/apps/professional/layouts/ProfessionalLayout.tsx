@@ -4,6 +4,7 @@ import { ProfessionalMobileNav } from "../components/ProfessionalMobileNav";
 import { ProfessionalIncomingCallListener } from "../components/ProfessionalIncomingCallListener";
 import { ProfessionalSettingsRuntime } from "../components/ProfessionalSettingsRuntime";
 import { MobileTopActions } from "@/components/common/MobileTopActions";
+import { AdminReturnToDashboard } from "@/components/AdminReturnToDashboard";
 
 export function ProfessionalLayout() {
   return (
@@ -17,6 +18,7 @@ export function ProfessionalLayout() {
           notificationsPath="/professional/notifications"
         />
         <div className="flex-1 min-w-0 pb-20 lg:min-h-0 lg:overflow-y-auto lg:pb-0">
+          <AdminReturnToDashboard portalName="professional" />
           <Outlet />
         </div>
         <ProfessionalMobileNav />

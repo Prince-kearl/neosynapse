@@ -1,66 +1,39 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
-import {
-  Loader2, Mail, Lock, Eye, EyeOff, User,
-  CheckCircle, XCircle, Stethoscope, Award, FileText,
-} from "lucide-react";
+import { Eye, EyeOff, Lock, Loader2, Mail, ShieldCheck, XCircle } from "lucide-react";
 import type { Invitation } from "@/shared/types/healthcare";
 import { BrandMark } from "@/components/BrandMark";
 
 const acceptSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters").max(100),
-  password: z.string().min(6, "Password must be at least 6 characters").max(100),
-  confirmPassword: z.string(),
-}).refine((d) => d.password === d.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
+  password: z.string().min(1, "Enter the password for the invited account"),
 });
 
-export default function InviteAccept() {
-  type RequiredField = "fullName" | "password" | "confirmPassword";
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
+export default function InviteAccept() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [configWarning, setConfigWarning] = useState<string | null>(null);
-
-  // Required fields
-  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
-  // Optional professional fields
-  const [professionType, setProfessionType] = useState("");
-  const [specialty, setSpecialty] = useState("");
-  const [licenseNumber, setLicenseNumber] = useState("");
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const touched = useTouchedFields<RequiredField>();
-
-  const fullNameError = fullName.trim().length < 2 ? "Name must be at least 2 characters" : undefined;
-  const passwordError = password.length < 6 ? "Password must be at least 6 characters" : undefined;
-  const confirmPasswordError = confirmPassword !== password ? "Passwords do not match" : undefined;
-
-  const showFullNameError = touched.isTouched("fullName") && !!fullNameError;
-  const showPasswordError = touched.isTouched("password") && !!passwordError;
-  const showConfirmPasswordError = touched.isTouched("confirmPassword") && !!confirmPasswordError;
 
   useEffect(() => {
     async function verifyInvitation() {
       if (!token) {
-        setError("Invalid invitation link — no token provided");
+        setError("Invalid invitation link. No token was provided.");
         setLoading(false);
         return;
       }
@@ -69,11 +42,11 @@ export default function InviteAccept() {
         .from("invitations")
         .select("*")
         .eq("token", token)
-        .eq("status", "pending")
+        .in("status", ["pending", "sent"])
         .maybeSingle();
 
       if (fetchErr || !data) {
-        setError("Invitation not found, already used, or has been revoked");
+        setError("Invitation not found, already used, or has been revoked.");
         setLoading(false);
         return;
       }
@@ -91,13 +64,12 @@ export default function InviteAccept() {
     verifyInvitation();
   }, [token]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!invitation) return;
-    setError(null);
-    setConfigWarning(null);
 
-    const validation = acceptSchema.safeParse({ fullName, password, confirmPassword });
+    setError(null);
+    const validation = acceptSchema.safeParse({ password });
     if (!validation.success) {
       setError(validation.error.errors[0].message);
       return;
@@ -105,20 +77,30 @@ export default function InviteAccept() {
 
     setIsSubmitting(true);
     try {
-      // Call the secure edge function to handle everything server-side
+      const invitedEmail = normalizeEmail(invitation.email);
+      const { data: authData, error: signInErr } = await supabase.auth.signInWithPassword({
+        email: invitedEmail,
+        password,
+      });
+
+      if (signInErr || !authData.session?.access_token || !authData.user?.email) {
+        setError("Sign in failed. Use the existing account credentials for the invited email.");
+        return;
+      }
+
+      if (normalizeEmail(authData.user.email) !== invitedEmail) {
+        await supabase.auth.signOut();
+        setError(`This invitation is for ${invitation.email}. Please sign in with that exact account.`);
+        return;
+      }
+
       const { data, error: fnErr } = await supabase.functions.invoke("accept-invitation", {
-        body: {
-          token: invitation.token,
-          fullName,
-          password,
-          professionType: professionType || undefined,
-          specialty: specialty || undefined,
-          licenseNumber: licenseNumber || undefined,
-        },
+        body: { token: invitation.token },
+        headers: { Authorization: `Bearer ${authData.session.access_token}` },
       });
 
       if (fnErr) {
-        setError("Failed to create account. Please try again.");
+        setError("Invitation could not be accepted. Please try again.");
         return;
       }
 
@@ -127,69 +109,49 @@ export default function InviteAccept() {
         return;
       }
 
-      // Account created and auto-confirmed — sign in immediately
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: invitation.email,
-        password,
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["user-profile", authData.user.id] }),
+        queryClient.invalidateQueries({ queryKey: ["user-roles", authData.user.id] }),
+        queryClient.invalidateQueries({ queryKey: ["profile", authData.user.id] }),
+      ]);
 
-      if (signInErr) {
-        const isEmailConfirmationEnabled = signInErr.message.includes("Email not confirmed");
-
-        if (isEmailConfirmationEnabled) {
-          setConfigWarning(
-            "Admin/Dev warning: Supabase email confirmation is enabled. New users must verify email before first login."
-          );
-          setError("Account created. Please verify your email, then sign in.");
-        } else {
-          setError("Account created, but automatic sign-in failed. Please sign in manually.");
-        }
-        return;
-      }
-
-      // Signed in successfully — redirect based on role
       setSuccess(true);
-      const target = invitation.role === "admin" ? "/admin/dashboard" : "/professional/dashboard";
-      setTimeout(() => navigate(target, { replace: true }), 1500);
+      const target = data?.role === "admin" ? "/admin/dashboard" : "/professional/dashboard";
+      setTimeout(() => navigate(target, { replace: true }), 1200);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ─── Loading state ─────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  // ─── Success state ─────────────────────────────────────────────
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="max-w-sm text-center space-y-4">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center">
-            <CheckCircle className="w-10 h-10 text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-sm space-y-4 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
+            <ShieldCheck className="h-10 w-10 text-primary" />
           </div>
-          <h1 className="font-display text-2xl font-bold">Welcome aboard!</h1>
-          <p className="text-muted-foreground">
-            Your account has been created. Redirecting to your workspace…
-          </p>
-          <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />
+          <h1 className="font-display text-2xl font-bold">Invitation accepted</h1>
+          <p className="text-muted-foreground">Your access has been updated. Redirecting to your workspace...</p>
+          <Loader2 className="mx-auto h-5 w-5 animate-spin text-primary" />
         </div>
       </div>
     );
   }
 
-  // ─── Error state (no valid invitation) ─────────────────────────
   if (error && !invitation) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="max-w-sm text-center space-y-4">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-destructive/10 flex items-center justify-center">
-            <XCircle className="w-10 h-10 text-destructive" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-sm space-y-4 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-destructive/10">
+            <XCircle className="h-10 w-10 text-destructive" />
           </div>
           <h1 className="font-display text-2xl font-bold">Invalid Invitation</h1>
           <p className="text-muted-foreground">{error}</p>
@@ -201,202 +163,91 @@ export default function InviteAccept() {
     );
   }
 
-  // ─── Accept form ───────────────────────────────────────────────
-  const isProfessional = invitation?.role === "professional";
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="p-4 flex items-center gap-3">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="flex items-center gap-3 p-4">
         <Link to="/" className="flex items-center gap-2">
           <BrandMark />
           <span className="font-display text-xl font-bold">Neo Synapse</span>
         </Link>
       </header>
 
-      {/* Form */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center">
             <h1 className="font-display text-2xl font-bold">Accept Invitation</h1>
-            <p className="text-muted-foreground mt-1">
-              You've been invited to join as a{" "}
-              <span className="text-primary font-medium capitalize">{invitation?.role}</span>
+            <p className="mt-1 text-muted-foreground">
+              Sign in as the invited account to join as a{" "}
+              <span className="font-medium capitalize text-primary">{invitation?.role}</span>
             </p>
           </div>
 
-          <div className="bg-muted/50 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <Mail className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm">{invitation?.email}</span>
+          <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <p className="text-sm leading-6 text-muted-foreground">
+                This link only grants access after the invited email signs in. If someone else opens the link, the server will reject the invitation.
+              </p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            {configWarning && (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                {configWarning}
-              </div>
-            )}
-
-            {/* Full Name */}
             <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name *</Label>
+              <Label>Invited email</Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Dr. Jane Smith"
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value);
-                    touched.touch("fullName");
-                  }}
-                  onBlur={() => touched.touch("fullName")}
-                  aria-invalid={showFullNameError}
-                  className="pl-10 h-12 rounded-xl"
-                  required
+                  value={invitation?.email || ""}
+                  className="h-12 rounded-xl bg-muted/60 pl-10"
+                  readOnly
+                  aria-readonly
                 />
               </div>
-              {showFullNameError && <p className="text-xs text-destructive">{fullNameError}</p>}
             </div>
 
-            {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password">Create Password *</Label>
+              <Label htmlFor="password">Existing account password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    touched.touch("password");
-                  }}
-                  onBlur={() => touched.touch("password")}
-                  aria-invalid={showPasswordError}
-                  className="pl-10 pr-10 h-12 rounded-xl"
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="h-12 rounded-xl pl-10 pr-10"
+                  autoComplete="current-password"
                   required
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((value) => !value)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {showPasswordError ? (
-                <p className="text-xs text-destructive">{passwordError}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">At least 6 characters</p>
-              )}
             </div>
-
-            {/* Confirm Password */}
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password *</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    touched.touch("confirmPassword");
-                  }}
-                  onBlur={() => touched.touch("confirmPassword")}
-                  aria-invalid={showConfirmPasswordError}
-                  className="pl-10 h-12 rounded-xl"
-                  required
-                />
-              </div>
-              {showConfirmPasswordError && <p className="text-xs text-destructive">{confirmPasswordError}</p>}
-            </div>
-
-            {/* Optional professional fields */}
-            {isProfessional && (
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Stethoscope className="w-4 h-4" />
-                  <span>Professional Details (optional — can be completed later)</span>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="professionType">Profession Type</Label>
-                  <div className="relative">
-                    <Award className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="professionType"
-                      type="text"
-                      placeholder="e.g. Physician, Nurse, Pharmacist"
-                      value={professionType}
-                      onChange={(e) => setProfessionType(e.target.value)}
-                      className="pl-10 h-12 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="specialty">Specialty</Label>
-                  <div className="relative">
-                    <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="specialty"
-                      type="text"
-                      placeholder="e.g. Cardiology, Pediatrics"
-                      value={specialty}
-                      onChange={(e) => setSpecialty(e.target.value)}
-                      className="pl-10 h-12 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="licenseNumber">License Number</Label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="licenseNumber"
-                      type="text"
-                      placeholder="e.g. MC-123456"
-                      value={licenseNumber}
-                      onChange={(e) => setLicenseNumber(e.target.value)}
-                      className="pl-10 h-12 rounded-xl"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
 
             <Button
               type="submit"
-              className="w-full h-12 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+              className="h-12 w-full rounded-xl font-semibold"
               disabled={isSubmitting}
             >
-              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Accept & Create Account"}
+              {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign in & Accept Invitation"}
             </Button>
           </form>
 
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link to="/auth/sign-in" className="text-primary font-medium hover:underline">
-                Sign in
-              </Link>
-            </p>
-          </div>
+          <p className="text-center text-sm text-muted-foreground">
+            Do not have access to this email account? Ask an administrator to issue a new invitation.
+          </p>
         </div>
       </div>
     </div>

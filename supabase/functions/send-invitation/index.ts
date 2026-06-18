@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
                   You've been invited to join Neo Synapse as a <strong>${invitation.role}</strong>.
                 </p>
                 <p style="color: #555; font-size: 16px; line-height: 1.6;">
-                  Click the button below to create your account and get started:
+                  Click the button below, then sign in with ${invitation.email} to accept access. The invitation cannot be accepted by another email account.
                 </p>
                 <div style="text-align: center; margin: 32px 0;">
                   <a href="${inviteLink}" 

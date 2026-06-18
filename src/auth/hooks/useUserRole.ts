@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole, Profile } from "@/shared/types/healthcare";
+import { getPrimaryRoleFromRoles } from "@/auth/rolePriority";
 
 export function useUserRole() {
   const { user } = useAuth();
@@ -86,13 +87,7 @@ export function useUserRole() {
     ...(profile?.role ? [profile.role as UserRole] : []),
   ]));
   // Primary role for backward compatibility (priority: admin > professional > patient)
-  const role: UserRole | null = roles.includes("admin")
-    ? "admin"
-    : roles.includes("professional")
-    ? "professional"
-    : roles.includes("patient")
-    ? "patient"
-    : null;
+  const role = getPrimaryRoleFromRoles(roles, profile?.role);
 
   const isLoading = profileLoading || rolesLoading;
 

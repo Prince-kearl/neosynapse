@@ -14,6 +14,8 @@ describe("invitation sharing links", () => {
     const shareUrl = buildWhatsAppShareUrl(inviteLink, "professional");
 
     expect(message).toContain("professional");
+    expect(message).toContain("sign in with the invited email account");
+    expect(message).not.toContain("create your account");
     expect(decodeURIComponent(shareUrl)).toContain(inviteLink);
     expect(shareUrl).toMatch(/^https:\/\/wa\.me\/\?text=/);
   });

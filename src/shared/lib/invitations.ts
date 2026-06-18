@@ -4,7 +4,7 @@ export const buildInvitationLink = (origin: string, token: string) => {
 };
 
 export const buildInvitationMessage = (inviteLink: string, role: string) =>
-  `You're invited to join Neo Synapse as a ${role}. Use this secure invitation link to create your account: ${inviteLink}`;
+  `You're invited to join Neo Synapse as a ${role}. Open this secure invitation link and sign in with the invited email account to accept access: ${inviteLink}`;
 
 export const buildWhatsAppShareUrl = (inviteLink: string, role: string) =>
   `https://wa.me/?text=${encodeURIComponent(buildInvitationMessage(inviteLink, role))}`;

@@ -7,20 +7,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { getPrimaryRoleFromRoles, ROLE_PRIORITY } from "@/auth/rolePriority";
 
 const roleStyles: Record<string, string> = {
   patient: "border-blue-500/50 text-blue-500",
   professional: "border-emerald-500/50 text-emerald-500",
   admin: "border-destructive/50 text-destructive",
-};
-
-const rolePriority = ["admin", "professional", "patient"];
-
-const getPrimaryRole = (roles: string[], fallbackRole?: string | null) => {
-  for (const role of rolePriority) {
-    if (roles.includes(role)) return role;
-  }
-  return fallbackRole || null;
 };
 
 export default function AdminUsers() {
@@ -53,7 +45,7 @@ export default function AdminUsers() {
 
       return (profiles || []).map((profile) => {
         const roles = roleMap.get(profile.user_id) || [];
-        const primaryRole = getPrimaryRole(roles, profile.role);
+        const primaryRole = getPrimaryRoleFromRoles(roles, profile.role);
 
         return {
           ...profile,
@@ -94,8 +86,8 @@ export default function AdminUsers() {
       users.flatMap((u: any) => (u.roles?.length ? u.roles : u.primaryRole ? [u.primaryRole] : []))
     )
   ).sort((a, b) => {
-    const aIdx = rolePriority.indexOf(a);
-    const bIdx = rolePriority.indexOf(b);
+    const aIdx = ROLE_PRIORITY.indexOf(a as any);
+    const bIdx = ROLE_PRIORITY.indexOf(b as any);
     if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
     if (aIdx === -1) return 1;
     if (bIdx === -1) return -1;

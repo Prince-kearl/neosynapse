@@ -26,12 +26,13 @@ import {
   type PatientProfileMeta,
 } from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
+import { getRoleLabel } from "@/auth/rolePriority";
 
 export default function PatientProfile() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, signOut, isLoading: authLoading } = useAuth();
-  const { profile } = useUserRole();
+  const { profile, role, roles } = useUserRole();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [medicalHistoryDialogOpen, setMedicalHistoryDialogOpen] = useState(false);
   const [consentDialogOpen, setConsentDialogOpen] = useState(false);
@@ -577,7 +578,10 @@ export default function PatientProfile() {
             <div className="flex-1">
               <h1 className="font-display text-xl font-bold text-foreground">{displayName}</h1>
               <p className="text-muted-foreground text-sm">{user.email}</p>
-              <p className="text-xs text-primary mt-1">Patient Account</p>
+              <p className="text-xs text-primary mt-1">
+                {getRoleLabel(role)}
+                {roles.includes("patient") && role !== "patient" ? " • Patient access enabled" : ""}
+              </p>
             </div>
           </div>
         </div>

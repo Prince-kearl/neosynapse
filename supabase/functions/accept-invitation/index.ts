@@ -12,18 +12,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { token, fullName, password, professionType, specialty, licenseNumber } = await req.json();
+    const { token, professionType, specialty, licenseNumber } = await req.json();
 
-    if (!token || !fullName || !password) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Missing invitation token" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (password.length < 6) {
-      return new Response(JSON.stringify({ error: "Password must be at least 6 characters" }), {
-        status: 400,
+    const authHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Please sign in with the invited account before accepting this invitation" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -34,12 +35,29 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const supabaseUser = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const jwt = authHeader.replace("Bearer ", "");
+    const { data: authData, error: authErr } = await supabaseUser.auth.getUser(jwt);
+    const signedInUser = authData?.user;
+
+    if (authErr || !signedInUser?.id || !signedInUser.email) {
+      return new Response(JSON.stringify({ error: "Your session could not be verified. Please sign in again." }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // 1. Validate invitation token
     const { data: invitation, error: invErr } = await supabaseAdmin
       .from("invitations")
       .select("*")
       .eq("token", token)
-      .eq("status", "pending")
+      .in("status", ["pending", "sent"])
       .maybeSingle();
 
     if (invErr || !invitation) {
@@ -56,42 +74,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2. Create auth user with auto-confirm (invited users are pre-verified)
-    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-      email: invitation.email,
-      password,
-      email_confirm: true, // Auto-confirm since they were invited
-      user_metadata: {
-        full_name: fullName,
-        display_name: fullName,
-        role: invitation.role,
-      },
-    });
+    const invitedEmail = String(invitation.email || "").trim().toLowerCase();
+    const signedInEmail = signedInUser.email.trim().toLowerCase();
 
-    if (authErr) {
-      // Handle "already registered" case
-      if (authErr.message?.includes("already been registered") || authErr.message?.includes("already exists")) {
-        return new Response(JSON.stringify({ error: "An account with this email already exists. Please sign in instead." }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      console.error("Auth creation error:", authErr);
-      return new Response(JSON.stringify({ error: "Failed to create account" }), {
-        status: 500,
+    if (signedInEmail !== invitedEmail) {
+      return new Response(JSON.stringify({
+        error: `This invitation is for ${invitation.email}. Please sign in with that account to accept it.`,
+      }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = authData.user.id;
+    const userId = signedInUser.id;
 
-    // 3. Ensure profile exists with correct role (trigger should handle this, but update to be sure)
+    // 2. Ensure profile exists with correct role.
     await supabaseAdmin
       .from("profiles")
-      .update({ role: invitation.role, full_name: fullName, display_name: fullName })
+      .upsert({
+        user_id: userId,
+        role: invitation.role,
+      }, { onConflict: "user_id" });
+
+    await supabaseAdmin
+      .from("profiles")
+      .update({ role: invitation.role })
       .eq("user_id", userId);
 
-    // 4. Create professional_profile if role is professional
+    // 3. Create professional_profile if role is professional.
     if (invitation.role === "professional") {
       await supabaseAdmin
         .from("professional_profiles")
@@ -105,18 +115,32 @@ Deno.serve(async (req) => {
         }, { onConflict: "user_id" });
     }
 
-    // 5. Insert role into user_roles table
+    // 4. Insert role into user_roles table.
     await supabaseAdmin
       .from("user_roles")
       .upsert({ user_id: userId, role: invitation.role }, { onConflict: "user_id,role" });
 
-    // 6. Mark invitation as accepted
+    if (invitation.role === "admin") {
+      await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .in("role", ["patient", "professional"]);
+    } else if (invitation.role === "professional") {
+      await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("role", "patient");
+    }
+
+    // 5. Mark invitation as accepted.
     await supabaseAdmin
       .from("invitations")
       .update({ status: "accepted" })
       .eq("id", invitation.id);
 
-    // 6. Log audit event
+    // 6. Log audit event.
     await supabaseAdmin.from("audit_logs").insert({
       actor_id: userId,
       action: "invitation_accepted",
