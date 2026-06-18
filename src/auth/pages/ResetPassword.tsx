@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
-
-const passwordSchema = z.string().min(8, { message: "Password must be at least 8 characters" }).max(100);
-const emailSchema = z.string().trim().email({ message: "Invalid email address" }).max(255);
+import { emailSchema, normalizeEmail, passwordSchema } from "@/shared/lib/inputValidation";
 
 function parseRecoveryParams() {
   const searchParams = new URLSearchParams(window.location.search);
@@ -118,7 +115,7 @@ export default function ResetPassword() {
 
     setIsResending(true);
     try {
-      const { error: resendErr } = await supabase.auth.resetPasswordForEmail(resendEmail, {
+      const { error: resendErr } = await supabase.auth.resetPasswordForEmail(normalizeEmail(resendEmail), {
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
 

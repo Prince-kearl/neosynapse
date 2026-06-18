@@ -79,6 +79,7 @@ export default function ProfessionalTelemedicine() {
   const intentionalEndRef = useRef(false);
   const consumedDeepLinkRef = useRef<string | null>(null);
   const consumedAppointmentStartRef = useRef<string | null>(null);
+  const transcriptSaveInFlightRef = useRef(false);
   const previousPendingEncounterIdsRef = useRef<Set<string>>(new Set());
   const ringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const notificationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -413,6 +414,28 @@ export default function ProfessionalTelemedicine() {
       });
     },
   });
+
+  const saveActiveRecording = useCallback(async () => {
+    if (transcriptSaveInFlightRef.current) return null;
+    transcriptSaveInFlightRef.current = true;
+    try {
+      const savedTranscriptId = await stopAndSaveRecording();
+      if (savedTranscriptId) {
+        setLastSavedTranscriptId(savedTranscriptId);
+      }
+      return savedTranscriptId;
+    } finally {
+      transcriptSaveInFlightRef.current = false;
+    }
+  }, [stopAndSaveRecording]);
+
+  useEffect(() => {
+    const callNoLongerActive = callState === "ended" || callState === "error" || connectionState === "disconnected" || connectionState === "failed";
+    const hasRecordingToSave = recorderState === "recording" || recorderState === "processing";
+    if (!selectedRoomConsentRecording || !selectedEncounterId || !callNoLongerActive || !hasRecordingToSave) return;
+
+    void saveActiveRecording();
+  }, [callState, connectionState, recorderState, saveActiveRecording, selectedEncounterId, selectedRoomConsentRecording]);
 
   // Fetch active telemedicine encounters for this professional
   const { data: waitingEncounters = [], isLoading, refetch } = useQuery({
@@ -875,10 +898,7 @@ export default function ProfessionalTelemedicine() {
 
   const handleEndCall = useCallback(async () => {
     intentionalEndRef.current = true;
-    const savedTranscriptId = await stopAndSaveRecording();
-    if (savedTranscriptId) {
-      setLastSavedTranscriptId(savedTranscriptId);
-    }
+    await saveActiveRecording();
     await endCall();
     setCallState("ended");
 
@@ -895,7 +915,7 @@ export default function ProfessionalTelemedicine() {
         .update({ status: "completed" })
         .eq("id", selectedAppointmentRef.current);
     }
-  }, [endCall, selectedEncounterId, stopAndSaveRecording]);
+  }, [endCall, saveActiveRecording, selectedEncounterId]);
 
   const handleJoinCall = useCallback(async () => {
     if (!selectedEncounterId) return;

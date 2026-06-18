@@ -9,10 +9,11 @@ import { useUserRole } from "@/auth/hooks/useUserRole";
 import { getDefaultRouteForRole, isRouteAllowedForPrimaryRole } from "@/auth/roleRouting";
 import { Loader2, Mail, Lock, Eye, EyeOff, Download } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
+import { legacyPasswordSchema, normalizeEmail, signInEmailSchema } from "@/shared/lib/inputValidation";
 
 const signInSchema = z.object({
-  email: z.string().trim().email({ message: "Invalid email address" }).max(255),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }).max(100),
+  email: signInEmailSchema,
+  password: legacyPasswordSchema,
 });
 
 export default function SignIn() {
@@ -50,7 +51,7 @@ export default function SignIn() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(normalizeEmail(email), password);
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
           setError("Invalid email or password");

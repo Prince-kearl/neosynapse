@@ -23,7 +23,7 @@ serve(async (req) => {
     apiFormData.append("file", audioFile);
     apiFormData.append("model_id", "scribe_v2");
     apiFormData.append("tag_audio_events", "false");
-    apiFormData.append("diarize", "false");
+    apiFormData.append("diarize", "true");
 
     const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",

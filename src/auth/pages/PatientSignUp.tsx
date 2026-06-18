@@ -9,16 +9,27 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import { Loader2, Mail, Lock, Eye, EyeOff, User, Download } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
+import {
+  emailSchema,
+  getDateOfBirthValidationError,
+  getEmailValidationError,
+  getPhoneValidationError,
+  legacyPasswordSchema,
+  normalizeEmail,
+  optionalDateOfBirthSchema,
+  optionalPhoneSchema,
+  requiredNameSchema,
+} from "@/shared/lib/inputValidation";
 
 const signUpSchema = z.object({
-  fullName: z.string().min(2, { message: "Name must be at least 2 characters" }).max(100),
-  email: z.string().trim().email({ message: "Invalid email address" }).max(255),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }).max(100),
-  dateOfBirth: z.string().optional(),
+  fullName: requiredNameSchema,
+  email: emailSchema,
+  password: legacyPasswordSchema,
+  dateOfBirth: optionalDateOfBirthSchema,
   gender: z.string().optional(),
-  phone: z.string().optional(),
+  phone: optionalPhoneSchema,
   emergencyContactName: z.string().optional(),
-  emergencyContactPhone: z.string().optional(),
+  emergencyContactPhone: optionalPhoneSchema,
   preferredLanguage: z.string().optional(),
 });
 
@@ -44,8 +55,11 @@ export default function PatientSignUp() {
   const navigate = useNavigate();
 
   const fullNameError = fullName.trim().length < 2 ? "Name must be at least 2 characters" : undefined;
-  const emailError = z.string().trim().email().safeParse(email).success ? undefined : "Invalid email address";
+  const emailError = getEmailValidationError(email);
   const passwordError = password.length < 6 ? "Password must be at least 6 characters" : undefined;
+  const dateOfBirthError = getDateOfBirthValidationError(dateOfBirth);
+  const phoneError = getPhoneValidationError(phone);
+  const emergencyPhoneError = getPhoneValidationError(emergencyContactPhone);
 
   const showFullNameError = touched.isTouched("fullName") && !!fullNameError;
   const showEmailError = touched.isTouched("email") && !!emailError;
@@ -76,16 +90,17 @@ export default function PatientSignUp() {
     try {
       const metadata = {
         role: "patient",
-        full_name: fullName,
-        display_name: fullName,
+        full_name: fullName.trim(),
+        display_name: fullName.trim(),
         date_of_birth: dateOfBirth || null,
         gender: gender || null,
-        phone: phone || null,
-        emergency_contact_name: emergencyContactName || null,
-        emergency_contact_phone: emergencyContactPhone || null,
+        phone: phone.trim() || null,
+        emergency_contact_name: emergencyContactName.trim() || null,
+        emergency_contact_phone: emergencyContactPhone.trim() || null,
         preferred_language: preferredLanguage || "en",
       };
-      const { error, session } = await signUp(email, password, metadata);
+      const normalizedEmail = normalizeEmail(email);
+      const { error, session } = await signUp(normalizedEmail, password, metadata);
       if (error) {
         if (error.message.includes("already registered")) {
           setError("An account with this email already exists");
@@ -94,7 +109,7 @@ export default function PatientSignUp() {
         }
       } else {
         if (!session) {
-          const { error: signInError } = await signIn(email, password);
+          const { error: signInError } = await signIn(normalizedEmail, password);
           if (signInError) {
             const isEmailConfirmationEnabled = signInError.message.includes("Email not confirmed");
 
@@ -241,8 +256,10 @@ export default function PatientSignUp() {
                 type="date"
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
+                aria-invalid={!!dateOfBirthError}
                 className="h-12 rounded-xl"
               />
+              {dateOfBirthError && <p className="text-xs text-destructive">{dateOfBirthError}</p>}
             </div>
 
             <div className="space-y-2">
@@ -268,8 +285,10 @@ export default function PatientSignUp() {
                 placeholder="+233 XX XXX XXXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                aria-invalid={!!phoneError}
                 className="h-12 rounded-xl"
               />
+              {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
             </div>
 
             <div className="space-y-2">
@@ -292,8 +311,10 @@ export default function PatientSignUp() {
                 placeholder="+233 XX XXX XXXX"
                 value={emergencyContactPhone}
                 onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                aria-invalid={!!emergencyPhoneError}
                 className="h-12 rounded-xl"
               />
+              {emergencyPhoneError && <p className="text-xs text-destructive">{emergencyPhoneError}</p>}
             </div>
 
             <div className="space-y-2">

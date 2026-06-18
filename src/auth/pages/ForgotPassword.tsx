@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
-
-const emailSchema = z.string().trim().email({ message: "Invalid email address" });
+import { emailSchema, normalizeEmail } from "@/shared/lib/inputValidation";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -28,7 +26,8 @@ export default function ForgotPassword() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const normalizedEmail = normalizeEmail(email);
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
 

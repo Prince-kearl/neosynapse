@@ -27,6 +27,7 @@ import {
 } from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
 import { getRoleLabel } from "@/auth/rolePriority";
+import { getDateOfBirthValidationError, getPhoneValidationError } from "@/shared/lib/inputValidation";
 
 export default function PatientProfile() {
   const navigate = useNavigate();
@@ -111,6 +112,9 @@ export default function PatientProfile() {
 
   const notificationSummary = getNotificationSummary(notificationSettingsMeta);
   const privacySummary = getPrivacySummary(privacySecuritySettingsMeta);
+  const formDateOfBirthError = getDateOfBirthValidationError(formData.date_of_birth);
+  const formPhoneError = getPhoneValidationError(formData.phone);
+  const formEmergencyPhoneError = getPhoneValidationError(formData.emergency_contact_phone);
 
   const buildInsuranceInfoPatch = (patch: Partial<PatientProfileMeta>) =>
     mergePatientProfileMeta(patientProfile?.insurance_info, patch);
@@ -189,8 +193,19 @@ export default function PatientProfile() {
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!user) throw new Error("Not authenticated");
+      const validationError =
+        getDateOfBirthValidationError(data.date_of_birth) ||
+        getPhoneValidationError(data.phone) ||
+        getPhoneValidationError(data.emergency_contact_phone);
+      if (validationError) throw new Error(validationError);
+
       const { error } = await patientProfileService.upsert(user.id, {
-        ...data,
+        date_of_birth: data.date_of_birth || null,
+        gender: data.gender || null,
+        phone: data.phone.trim() || null,
+        emergency_contact_name: data.emergency_contact_name.trim() || null,
+        emergency_contact_phone: data.emergency_contact_phone.trim() || null,
+        preferred_language: data.preferred_language || "en",
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
@@ -628,7 +643,9 @@ export default function PatientProfile() {
                           type="date"
                           value={formData.date_of_birth}
                           onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                          aria-invalid={!!formDateOfBirthError}
                         />
+                        {formDateOfBirthError && <p className="text-xs text-destructive">{formDateOfBirthError}</p>}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="gender">Gender</Label>
@@ -652,7 +669,9 @@ export default function PatientProfile() {
                           placeholder="+233 XX XXX XXXX"
                           value={formData.phone}
                           onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          aria-invalid={!!formPhoneError}
                         />
+                        {formPhoneError && <p className="text-xs text-destructive">{formPhoneError}</p>}
                       </div>
                       <Separator />
                       <p className="text-sm font-medium">Emergency Contact</p>
@@ -673,7 +692,9 @@ export default function PatientProfile() {
                           placeholder="+233 XX XXX XXXX"
                           value={formData.emergency_contact_phone}
                           onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                          aria-invalid={!!formEmergencyPhoneError}
                         />
+                        {formEmergencyPhoneError && <p className="text-xs text-destructive">{formEmergencyPhoneError}</p>}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="language">Preferred Language</Label>
@@ -709,7 +730,7 @@ export default function PatientProfile() {
                         <Button
                           className="flex-1"
                           onClick={() => saveMutation.mutate(formData)}
-                          disabled={saveMutation.isPending || clearPersonalDetailsMutation.isPending}
+                          disabled={saveMutation.isPending || clearPersonalDetailsMutation.isPending || !!formDateOfBirthError || !!formPhoneError || !!formEmergencyPhoneError}
                         >
                           {saveMutation.isPending ? (
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />

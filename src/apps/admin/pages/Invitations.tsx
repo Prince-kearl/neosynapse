@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import { buildInvitationLink, buildWhatsAppShareUrl } from "@/shared/lib/invitations";
+import { getEmailValidationError, normalizeEmail } from "@/shared/lib/inputValidation";
 
 type InvitationRow = {
   id: string;
@@ -56,12 +57,8 @@ export default function AdminInvitations() {
   const [facilityId, setFacilityId] = useState<string>("");
   const touched = useTouchedFields<"email">();
 
-  const emailValue = email.trim();
-  const emailError = !emailValue
-    ? "Email is required"
-    : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)
-    ? undefined
-    : "Enter a valid email address";
+  const emailValue = normalizeEmail(email);
+  const emailError = getEmailValidationError(emailValue);
   const showEmailError = touched.isTouched("email") && !!emailError;
   const isInviteFormValid = !emailError;
 
@@ -93,7 +90,7 @@ export default function AdminInvitations() {
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("send-invitation", {
         body: {
-          email,
+          email: emailValue,
           role,
           invited_by: user!.id,
           facility_id: facilityId || null,

@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { DoctorSelect } from "@/apps/patient/components/DoctorSelect";
 import { TimeSlotPicker } from "@/apps/patient/components/TimeSlotPicker";
 import { AppointmentBookingForm } from "@/apps/patient/components/AppointmentBookingForm";
+import { getEmailValidationError, getPhoneValidationError } from "@/shared/lib/inputValidation";
 
 const SCHEDULE_LOOKAHEAD_DAYS = 30;
 
@@ -200,9 +201,6 @@ export default function AppointmentBookingPage() {
 
   const selectedSlotUnavailable = selectedScheduleSlotKey ? unavailableSlotKeys.has(selectedScheduleSlotKey) : false;
 
-  const validateEmail = (value: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-
   const getValidationErrors = useCallback(() => {
     const errors: Record<string, string> = {};
 
@@ -243,14 +241,14 @@ export default function AppointmentBookingPage() {
       errors.fullName = "Enter your full name.";
     }
 
-    if (!email.trim()) {
-      errors.email = "Enter your email address.";
-    } else if (!validateEmail(email)) {
-      errors.email = "Enter a valid email address.";
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      errors.email = emailError;
     }
 
-    if (!phone.trim()) {
-      errors.phone = "Enter your phone number.";
+    const phoneError = getPhoneValidationError(phone, { required: true });
+    if (phoneError) {
+      errors.phone = phoneError;
     }
 
     if (selectedSlotUnavailable) {

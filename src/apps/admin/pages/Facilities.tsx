@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
+import { getPhoneValidationError } from "@/shared/lib/inputValidation";
 
 export default function AdminFacilities() {
   const queryClient = useQueryClient();
@@ -22,11 +23,7 @@ export default function AdminFacilities() {
   const nameValue = name.trim();
   const phoneValue = phone.trim();
   const nameError = !nameValue ? "Facility name is required" : undefined;
-  const phoneError = !phoneValue
-    ? undefined
-    : /^[+()\-\s\d]{7,20}$/.test(phoneValue)
-    ? undefined
-    : "Enter a valid phone number";
+  const phoneError = getPhoneValidationError(phoneValue);
 
   const showNameError = touched.isTouched("name") && !!nameError;
   const showPhoneError = touched.isTouched("phone") && !!phoneError;
@@ -67,10 +64,10 @@ export default function AdminFacilities() {
   const createFacility = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("facilities").insert({
-        name,
+        name: nameValue,
         facility_type: facilityType || null,
-        location: location || null,
-        contact_phone: phone || null,
+        location: location.trim() || null,
+        contact_phone: phoneValue || null,
       });
       if (error) throw error;
     },

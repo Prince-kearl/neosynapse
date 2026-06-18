@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureNativePushRegistration } from "@/mobile/pushNotifications";
+import { getEmailValidationError, normalizeEmail } from "@/shared/lib/inputValidation";
 
 interface AuthContextType {
   user: User | null;
@@ -61,10 +62,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     metadata?: Record<string, unknown>
   ) => {
+    const normalizedEmail = normalizeEmail(email);
+    const emailValidationError = getEmailValidationError(normalizedEmail);
+    if (emailValidationError) {
+      return { error: new Error(emailValidationError), session: null, user: null };
+    }
+
     const emailRedirectTo = `${window.location.origin}/auth/sign-in`;
 
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
       options: {
         emailRedirectTo,
@@ -80,8 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    const normalizedEmail = normalizeEmail(email);
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
     
