@@ -28,6 +28,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { getRoleLabel } from "@/auth/rolePriority";
 import { getDateOfBirthValidationError, getPhoneValidationError } from "@/shared/lib/inputValidation";
+import { isConsentGrantedByDefault } from "@/shared/lib/consents";
 
 export default function PatientProfile() {
   const navigate = useNavigate();
@@ -103,6 +104,7 @@ export default function PatientProfile() {
 
   const latestDataSharingConsent = getLatestConsentByType("data_sharing");
   const latestRecordingConsent = getLatestConsentByType("recording");
+  const recordingConsentGranted = isConsentGrantedByDefault(latestRecordingConsent);
   const insuranceInfo = getInsuranceInfo(patientProfile?.insurance_info);
   const profileMeta = getPatientProfileMeta(insuranceInfo);
   const savedLocationsMeta = profileMeta.saved_locations;
@@ -145,7 +147,7 @@ export default function PatientProfile() {
   const initializeConsentForm = () => {
     setConsentData({
       dataSharing: !!latestDataSharingConsent?.granted,
-      recording: !!latestRecordingConsent?.granted,
+      recording: recordingConsentGranted,
     });
     setConsentDialogOpen(true);
   };
@@ -774,7 +776,7 @@ export default function PatientProfile() {
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">Consent Settings</p>
                     <p className="text-sm text-muted-foreground break-words">
-                      Data sharing: {latestDataSharingConsent?.granted ? "On" : "Off"} • Recording: {latestRecordingConsent?.granted ? "On" : "Off"}
+                      Data sharing: {latestDataSharingConsent?.granted ? "On" : "Off"} • Recording: {recordingConsentGranted ? "On" : "Off"}
                     </p>
                   </div>
                 </div>
@@ -802,7 +804,7 @@ export default function PatientProfile() {
                       <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                         <div className="min-w-0">
                           <p className="font-medium">Recording Consent</p>
-                          <p className="text-xs text-muted-foreground">Allow consultation recording and transcription.</p>
+                          <p className="text-xs text-muted-foreground">On by default for telemedicine documentation. You can turn it off anytime.</p>
                         </div>
                         <Switch
                           className="shrink-0"

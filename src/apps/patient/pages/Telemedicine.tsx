@@ -90,7 +90,7 @@ export default function PatientTelemedicine() {
   const [selectedDoctor, setSelectedDoctor] = useState<string | null>(null);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [consentRecording, setConsentRecording] = useState(false);
+  const [consentRecording, setConsentRecording] = useState(true);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [encounterId, setEncounterId] = useState<string | null>(null);
   const [isStartingConsultation, setIsStartingConsultation] = useState(false);

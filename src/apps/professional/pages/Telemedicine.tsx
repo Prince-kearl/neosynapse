@@ -19,6 +19,7 @@ import { toast } from "@/hooks/use-toast";
 import { getSessionStateMeta, isActiveSessionState } from "@/shared/lib/sessionStates";
 import { getStaleInProgressResolution } from "@/shared/lib/professionalSessions";
 import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
+import { isConsentGrantedByDefault } from "@/shared/lib/consents";
 
 type CallState = "list" | "pre-call" | "joining" | "active" | "ended" | "error";
 
@@ -576,7 +577,7 @@ export default function ProfessionalTelemedicine() {
       return false;
     }
 
-    return !!data?.[0]?.granted;
+    return isConsentGrantedByDefault(data?.[0]);
   }, []);
 
   /** Open pre-call settings for an encounter */
