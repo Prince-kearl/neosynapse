@@ -38,6 +38,9 @@ const priorityLabels: Record<string, string> = {
   emergency: "Emergency",
 };
 
+const appointmentActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function PatientAppointments() {
   const { isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -64,9 +67,9 @@ export default function PatientAppointments() {
     
     return (
       <div className="bg-card rounded-2xl border border-border p-4 space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${
               isTelemedicine ? "bg-primary/10" : "bg-secondary"
             }`}>
               {isTelemedicine ? (
@@ -75,7 +78,7 @@ export default function PatientAppointments() {
                 <Building2 className="w-5 h-5 text-secondary-foreground" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="font-medium capitalize">{appointment.appointment_type.replace("_", " ")}</p>
               <p className="text-xs text-muted-foreground">
                 {appointment.scheduled_at 
@@ -91,13 +94,13 @@ export default function PatientAppointments() {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center sm:justify-end">
             {appointment.priority && (
-              <Badge className={priorityColors[appointment.priority] || priorityColors.routine}>
+              <Badge className={`w-fit rounded-full px-3 py-1 text-xs ${priorityColors[appointment.priority] || priorityColors.routine}`}>
                 {priorityLabels[appointment.priority] || appointment.priority}
               </Badge>
             )}
-            <Badge className={statusColors[appointment.status] || statusColors.pending}>
+            <Badge className={`w-fit rounded-full px-3 py-1 text-xs ${statusColors[appointment.status] || statusColors.pending}`}>
               {statusLabels[appointment.status] || appointment.status}
             </Badge>
           </div>
@@ -110,12 +113,12 @@ export default function PatientAppointments() {
         )}
 
         {isUpcoming && isTelemedicine && (
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" className="flex-1" onClick={() => navigate("/patient/telemedicine")}>
-              <Video className="w-4 h-4 mr-1" />
+          <div className="grid grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:border-t-0 sm:pt-2">
+            <Button size="sm" className={appointmentActionButtonClass} onClick={() => navigate("/patient/telemedicine")}>
+              <Video className="w-4 h-4" />
               Join Call
             </Button>
-            <Button size="sm" variant="outline">Reschedule</Button>
+            <Button size="sm" variant="outline" className={appointmentActionButtonClass}>Reschedule</Button>
           </div>
         )}
       </div>

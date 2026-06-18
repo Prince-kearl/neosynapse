@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   ArrowLeft, Bell, Globe, Moon, Smartphone, Shield, Eye, Trash2, 
-  BellRing, FileText, HeartPulse, Sparkles, CheckCircle2
+  BellRing, FileText, HeartPulse, Sparkles, CheckCircle2, Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -337,6 +337,17 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Health Data</h2>
           <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
+            <Link to="/downloads" className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
+              <div className="flex min-w-0 items-center gap-3">
+                <Download className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="font-medium">Download Mobile App</p>
+                  <p className="text-sm text-muted-foreground">Install Neo Synapse on Android</p>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm text-primary">Open</span>
+            </Link>
+            <Separator />
             <div className="flex items-center justify-between gap-3 p-4">
               <div className="flex min-w-0 items-center gap-3">
                 <HeartPulse className="w-5 h-5 shrink-0 text-muted-foreground" />

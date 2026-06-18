@@ -11,11 +11,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 
 const navItems = [
   { title: "Dashboard", url: "/professional/dashboard", icon: LayoutDashboard },
@@ -51,9 +51,7 @@ export function ProfessionalSidebar() {
       {/* Logo */}
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center flex-shrink-0">
-            <Activity className="w-5 h-5 text-accent-foreground" />
-          </div>
+          <BrandMark />
           {!collapsed && (
             <div className="animate-fade-in overflow-hidden">
               <h1 className="font-display text-xl font-bold text-foreground">Neo Synapse</h1>

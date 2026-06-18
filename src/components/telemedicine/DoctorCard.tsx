@@ -25,7 +25,7 @@ export function DoctorCard({ doctor, selected, onSelect }: DoctorCardProps) {
           ? "ring-2 ring-primary glow-green"
           : doctor.available
           ? "hover:border-primary/50 border border-transparent"
-          : "opacity-50 cursor-not-allowed"
+          : "cursor-not-allowed border border-border bg-muted/40"
       }`}
     >
       <div className="flex items-center gap-3">

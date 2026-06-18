@@ -23,6 +23,9 @@ const statusConfig: Record<string, string> = {
   finalized: "bg-green-500/10 text-green-500 border-green-500/20",
 };
 
+const noteActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function ProfessionalNotes() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -620,18 +623,18 @@ export default function ProfessionalNotes() {
                   rows={14}
                   className="w-full resize-y rounded-xl border border-border bg-muted/30 p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={saveDraft} disabled={isSavingDraft || selectedNote.status === "finalized"}>
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:border-t-0 sm:pt-0">
+                  <Button size="sm" variant="outline" className={noteActionButtonClass} onClick={saveDraft} disabled={isSavingDraft || selectedNote.status === "finalized"}>
                     {isSavingDraft ? "Saving..." : "Save Draft"}
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={submitForReview} disabled={isSubmittingReview || selectedNote.status !== "draft"}>
+                  <Button size="sm" variant="secondary" className={noteActionButtonClass} onClick={submitForReview} disabled={isSubmittingReview || selectedNote.status !== "draft"}>
                     {isSubmittingReview ? "Submitting..." : "Submit For Review"}
                   </Button>
-                  <Button size="sm" onClick={finalizeNote} disabled={isFinalizing || selectedNote.status !== "review"}>
+                  <Button size="sm" className={noteActionButtonClass} onClick={finalizeNote} disabled={isFinalizing || selectedNote.status !== "review"}>
                     {isFinalizing ? "Finalizing..." : "Finalize Note"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={deleteNote} disabled={isDeletingNote} className="text-destructive hover:text-destructive">
-                    <Trash2 className="w-4 h-4 mr-2" />
+                  <Button size="sm" variant="outline" onClick={deleteNote} disabled={isDeletingNote} className={`${noteActionButtonClass} text-destructive hover:text-destructive`}>
+                    <Trash2 className="w-4 h-4" />
                     {isDeletingNote ? "Deleting..." : "Delete Note"}
                   </Button>
                 </div>
@@ -642,39 +645,43 @@ export default function ProfessionalNotes() {
                     emptyLabel="No note transitions recorded yet."
                   />
                 )}
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:border-t-0 sm:pt-0">
                   <Button
                     variant="outline"
                     size="sm"
+                    className={noteActionButtonClass}
                     onClick={() => navigate(`/professional/encounters?encounterId=${selectedNote.encounter_id}`)}
                   >
-                    <ClipboardList className="mr-2 h-4 w-4" />
+                    <ClipboardList className="h-4 w-4" />
                     Open Encounter
                   </Button>
                   {selectedNote.encounters?.encounter_type === "telemedicine" && selectedNote.status !== "finalized" && (
                     <Button
                       variant="outline"
                       size="sm"
+                      className={noteActionButtonClass}
                       onClick={() => navigate(`/professional/telemedicine?encounterId=${selectedNote.encounter_id}`)}
                     >
-                      <Video className="mr-2 h-4 w-4" />
+                      <Video className="h-4 w-4" />
                       Open Call
                     </Button>
                   )}
                   <Button
                     size="sm"
+                    className={noteActionButtonClass}
                     onClick={() => navigate(`/professional/transcripts?encounterId=${selectedNote.encounter_id}`)}
                   >
-                    <FileText className="mr-2 h-4 w-4" />
+                    <FileText className="h-4 w-4" />
                     Open Transcript Queue
                   </Button>
                   {selectedNoteReport && (
                     <Button
                       variant="outline"
                       size="sm"
+                      className={noteActionButtonClass}
                       onClick={() => navigate(`/professional/reports/${selectedNoteReport.id}`)}
                     >
-                      <FileCheck className="mr-2 h-4 w-4" />
+                      <FileCheck className="h-4 w-4" />
                       Open Synced Report
                     </Button>
                   )}

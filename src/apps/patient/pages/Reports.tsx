@@ -36,6 +36,9 @@ const urgencyConfig: Record<string, { label: string; className: string }> = {
   emergency: { label: "Emergency", className: "border-red-500/30 bg-red-500/10 text-red-700" },
 };
 
+const reportActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-transparent sm:bg-transparent";
+
 export default function PatientReports() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -414,15 +417,15 @@ export default function PatientReports() {
                     </div>
                   );
                 })()}
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button size="sm" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportJson(selectedReport)}>
-                    <Download className="w-4 h-4 mr-1" /> Export JSON
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-3 sm:flex sm:border-t-0 sm:pt-0">
+                  <Button size="sm" className={reportActionButtonClass} onClick={() => downloadReportJson(selectedReport)}>
+                    <Download className="w-4 h-4" /> Export JSON
                   </Button>
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportPdf(selectedReport)}>
-                    <Download className="w-4 h-4 mr-1" /> Download PDF
+                  <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => downloadReportPdf(selectedReport)}>
+                    <Download className="w-4 h-4" /> Download PDF
                   </Button>
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => shareReport(selectedReport)}>
-                    <Share2 className="w-4 h-4 mr-1" /> Share
+                  <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => shareReport(selectedReport)}>
+                    <Share2 className="w-4 h-4" /> Share
                   </Button>
                 </div>
               </>
@@ -469,38 +472,38 @@ export default function PatientReports() {
                       <span>•</span>
                       <span>{report.report_type}</span>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+                    <div className="grid w-full grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:border-t-0 sm:pt-0">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
+                        className={reportActionButtonClass}
                         onClick={() => navigate(`/patient/reports/${report.id}`)}
                       >
-                        <Eye className="w-4 h-4 mr-1" /> View
+                        <Eye className="w-4 h-4" /> View
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
+                        className={reportActionButtonClass}
                         onClick={() => navigate(`/patient/reports/${report.id}?action=export`)}
                       >
-                        <Download className="w-4 h-4 mr-1" /> Export
+                        <Download className="w-4 h-4" /> Export
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
+                        className={reportActionButtonClass}
                         onClick={() => void downloadReportPdf(report)}
                       >
-                        <Download className="w-4 h-4 mr-1" /> PDF
+                        <Download className="w-4 h-4" /> PDF
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
+                        className={reportActionButtonClass}
                         onClick={() => void shareReport(report)}
                       >
-                        <Share2 className="w-4 h-4 mr-1" /> Share
+                        <Share2 className="w-4 h-4" /> Share
                       </Button>
                     </div>
                   </div>

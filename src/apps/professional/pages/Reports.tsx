@@ -34,6 +34,9 @@ const urgencyConfig: Record<string, { label: string; className: string }> = {
   emergency: { label: "Emergency", className: "border-red-500/30 bg-red-500/10 text-red-700" },
 };
 
+const reportActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function ProfessionalReports() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -464,15 +467,15 @@ export default function ProfessionalReports() {
                     </div>
                   );
                 })()}
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:border-t-0 sm:pt-0">
                   {getLinkedNoteId(selectedReport) && (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      className={reportActionButtonClass}
                       onClick={() => navigate(`/professional/notes/${getLinkedNoteId(selectedReport)}/edit?encounterId=${selectedReport.encounter_id}`)}
                     >
-                      <FileText className="w-4 h-4 mr-1" />
+                      <FileText className="w-4 h-4" />
                       Open Source Note
                     </Button>
                   )}
@@ -480,10 +483,10 @@ export default function ProfessionalReports() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      className={reportActionButtonClass}
                       onClick={() => navigate(`/professional/encounters?encounterId=${selectedReport.encounter_id}`)}
                     >
-                      <ClipboardList className="w-4 h-4 mr-1" />
+                      <ClipboardList className="w-4 h-4" />
                       Open Encounter
                     </Button>
                   )}
@@ -491,19 +494,19 @@ export default function ProfessionalReports() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      className={reportActionButtonClass}
                       onClick={() => navigate(`/professional/transcripts/${getLinkedTranscriptId(selectedReport)}`)}
                     >
                       Open Transcript
                     </Button>
                   )}
-                  <Button size="sm" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportJson(selectedReport)}>
-                    <Download className="w-4 h-4 mr-1" /> Export JSON
+                  <Button size="sm" className={reportActionButtonClass} onClick={() => downloadReportJson(selectedReport)}>
+                    <Download className="w-4 h-4" /> Export JSON
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="w-full sm:w-auto justify-start sm:justify-center"
+                    className={reportActionButtonClass}
                     onClick={() => persistReportStatus("draft", setIsSavingDraft)}
                     disabled={isSavingDraft || getReportStatus(selectedReport) === "finalized"}
                   >
@@ -512,7 +515,7 @@ export default function ProfessionalReports() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="w-full sm:w-auto justify-start sm:justify-center"
+                    className={reportActionButtonClass}
                     onClick={() => persistReportStatus("review", setIsSubmittingReview)}
                     disabled={isSubmittingReview || getReportStatus(selectedReport) !== "draft"}
                   >
@@ -520,7 +523,7 @@ export default function ProfessionalReports() {
                   </Button>
                   <Button
                     size="sm"
-                    className="w-full sm:w-auto justify-start sm:justify-center"
+                    className={reportActionButtonClass}
                     onClick={() => persistReportStatus("finalized", setIsFinalizing)}
                     disabled={isFinalizing || getReportStatus(selectedReport) !== "review"}
                   >
@@ -547,34 +550,38 @@ export default function ProfessionalReports() {
           <div className="space-y-3">
             {reports.map((report: any) => (
               <div key={report.id} className="bg-card rounded-2xl p-4 border border-border">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <div className="space-y-4 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
+                  <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+                    <div className="w-11 h-11 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center sm:h-12 sm:w-12">
                       <FileCheck className="w-6 h-6 text-primary" />
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium break-words">{report.patientName}</p>
-                      <p className="text-sm text-muted-foreground break-words">
-                        {report.report_type} • {new Date(report.created_at).toLocaleDateString("en-GB", {
-                          day: "numeric", month: "short",
-                        })}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-semibold break-words">{report.patientName}</p>
+                          <p className="text-sm text-muted-foreground break-words">
+                            {report.report_type} • {new Date(report.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric", month: "short",
+                            })}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs capitalize ${getReportStatusClass(getReportStatus(report))}`}>
+                          {getReportStatus(report)}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
-                    <Badge variant="outline" className={`col-span-2 justify-center sm:col-span-1 sm:justify-start ${getReportStatusClass(getReportStatus(report))}`}>
-                      {getReportStatus(report)}
-                    </Badge>
-                    <Button variant="ghost" size="sm" className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3" onClick={() => navigate(`/professional/reports/${report.id}`)}>
-                      <Eye className="w-4 h-4 mr-1" /> View
+                  <div className="grid w-full grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
+                    <Button variant="ghost" size="sm" className={reportActionButtonClass} onClick={() => navigate(`/professional/reports/${report.id}`)}>
+                      <Eye className="w-4 h-4" /> View
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-full justify-start px-2 sm:w-auto sm:justify-center sm:px-3"
+                      className={reportActionButtonClass}
                       onClick={() => navigate(`/professional/reports/${report.id}?action=export`)}
                     >
-                      <Download className="w-4 h-4 mr-1" /> Export
+                      <Download className="w-4 h-4" /> Export
                     </Button>
                   </div>
                 </div>

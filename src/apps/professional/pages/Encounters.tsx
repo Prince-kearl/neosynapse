@@ -24,6 +24,9 @@ const stateTabs: Array<{ value: "all" | SessionState; label: string }> = [
   { value: "cancelled", label: SESSION_STATE_META.cancelled.label },
 ];
 
+const encounterActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function ProfessionalEncounters() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,47 +92,52 @@ export default function ProfessionalEncounters() {
 
   const EncounterCard = ({ enc }: { enc: any }) => (
     <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className={cn("w-12 h-12 rounded-full flex items-center justify-center font-semibold", getSessionStateMeta(enc.status).avatarClassName)}>
+      <div className="space-y-4 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
+        <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+          <div className={cn("w-11 h-11 shrink-0 rounded-full flex items-center justify-center font-semibold sm:h-12 sm:w-12", getSessionStateMeta(enc.status).avatarClassName)}>
             {(nameMap[enc.patient_id] || "P").charAt(0)}
           </div>
-          <div className="min-w-0">
-            <p className="truncate font-medium">{nameMap[enc.patient_id] || "Patient"}</p>
-            <p className="text-sm text-muted-foreground">
-              {new Date(enc.created_at).toLocaleString("en-GB", { 
-                day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
-              })}
-              {" • "}{enc.encounter_type === "telemedicine" ? "Video" : "In-person"}
-            </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{nameMap[enc.patient_id] || "Patient"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {new Date(enc.created_at).toLocaleString("en-GB", {
+                    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                  })}
+                  {" • "}{enc.encounter_type === "telemedicine" ? "Video" : "In-person"}
+                </p>
+              </div>
+              <Badge variant="outline" className={cn("w-fit shrink-0 rounded-full px-3 py-1 text-xs", getSessionStateMeta(enc.status).badgeClassName)}>
+                {getSessionStateMeta(enc.status).label}
+              </Badge>
+            </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
-          <Badge variant="outline" className={cn("whitespace-nowrap", getSessionStateMeta(enc.status).badgeClassName)}>
-            {getSessionStateMeta(enc.status).label}
-          </Badge>
+
+        <div className="grid grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
           <Button
             size="sm"
             variant="outline"
-            className="shrink-0"
+            className={encounterActionButtonClass}
             onClick={() => navigate(`/professional/notes?encounterId=${enc.id}`)}
           >
-            <FileText className="w-4 h-4 mr-1" />
+            <FileText className="w-4 h-4" />
             Notes{noteCountByEncounter[enc.id] ? ` (${noteCountByEncounter[enc.id]})` : ""}
           </Button>
           {enc.encounter_type === "telemedicine" && (
             <Button
               size="sm"
               variant="outline"
-              className="shrink-0"
+              className={encounterActionButtonClass}
               onClick={() => navigate(`/professional/transcripts?encounterId=${enc.id}`)}
             >
               Transcript
             </Button>
           )}
           {isActiveSessionState(enc.status) && enc.encounter_type === "telemedicine" && (
-            <Button size="sm" className="shrink-0" onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
-              <Video className="w-4 h-4 mr-1" /> Join
+            <Button size="sm" className={encounterActionButtonClass} onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
+              <Video className="w-4 h-4" /> Join
             </Button>
           )}
         </div>

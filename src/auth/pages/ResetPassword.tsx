@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { Activity, CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
+import { CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 
 const passwordSchema = z.string().min(8, { message: "Password must be at least 8 characters" }).max(100);
 const emailSchema = z.string().trim().email({ message: "Invalid email address" }).max(255);
@@ -145,9 +146,7 @@ export default function ResetPassword() {
       <div className="min-h-screen bg-background flex flex-col">
         <header className="p-4 flex items-center gap-3">
           <Link to="/auth/sign-in" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center glow-green">
-              <Activity className="w-5 h-5 text-primary-foreground" />
-            </div>
+            <BrandMark />
             <span className="font-display text-xl font-bold">Neo Synapse</span>
           </Link>
         </header>
@@ -174,9 +173,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="p-4 flex items-center gap-3">
         <Link to="/auth/sign-in" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center glow-green">
-            <Activity className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <BrandMark />
           <span className="font-display text-xl font-bold">Neo Synapse</span>
         </Link>
       </header>

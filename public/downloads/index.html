@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Download Neo Synapse</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: #f8fafc;
+        color: #101828;
+      }
+
+      main {
+        width: min(100% - 32px, 960px);
+        margin: 0 auto;
+        padding: 32px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0 28px;
+        font-weight: 800;
+        font-size: 22px;
+      }
+
+      .brand img {
+        width: 44px;
+        height: 44px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 18px;
+      }
+
+      .cards {
+        display: grid;
+        gap: 16px;
+      }
+
+      .card {
+        border: 1px solid #d0d5dd;
+        border-radius: 22px;
+        background: #ffffff;
+        padding: 24px;
+        box-shadow: 0 18px 50px rgb(16 24 40 / 0.08);
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(32px, 8vw, 56px);
+        line-height: 1.2;
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 20px;
+      }
+
+      p {
+        margin: 0 0 22px;
+        color: #667085;
+        line-height: 1.55;
+      }
+
+      ol {
+        margin: 16px 0 0;
+        padding-left: 20px;
+        color: #344054;
+        line-height: 1.7;
+      }
+
+      a.button {
+        display: inline-flex;
+        width: 100%;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #00c1ca;
+        color: #ffffff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      small {
+        display: block;
+        margin-top: 14px;
+        color: #667085;
+        line-height: 1.45;
+      }
+
+      @media (min-width: 760px) {
+        .hero {
+          grid-template-columns: 1fr 1fr;
+          align-items: start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img src="/favicon.ico" alt="Neo Synapse" />
+        <span>Neo Synapse</span>
+      </div>
+
+      <section class="hero">
+        <div>
+          <h1>Install Neo Synapse on your phone</h1>
+          <p>
+            Android users can download the APK directly. iPhone and iPad users can add Neo Synapse to the Home Screen from Safari.
+          </p>
+        </div>
+
+        <div class="cards">
+          <section class="card">
+            <h2>Android app download</h2>
+            <p>Install the latest Android build of the Neo Synapse mobile app.</p>
+            <a class="button" href="/downloads/neo-synapse-debug.apk" download>Download Android APK</a>
+            <small>
+              If the download is unavailable, generate it with
+              <code>npm run mobile:apk:export</code> before deploying the site.
+            </small>
+          </section>
+
+          <section class="card">
+            <h2>iPhone or iPad</h2>
+            <p>Use Safari to add Neo Synapse to your Home Screen. This does not require an Apple Developer account.</p>
+            <ol>
+              <li>Open this page in Safari.</li>
+              <li>Tap the Share button.</li>
+              <li>Choose Add to Home Screen.</li>
+              <li>Tap Add.</li>
+            </ol>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -18,6 +18,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
+const transcriptActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function ProfessionalTranscripts() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -291,9 +294,10 @@ export default function ProfessionalTranscripts() {
                 <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
                   {JSON.stringify(selectedTranscript.transcript_json ?? {}, null, 2)}
                 </pre>
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:border-t-0 sm:pt-0">
                   <Button
                     size="sm"
+                    className={transcriptActionButtonClass}
                     onClick={() => navigate(`/professional/notes?encounterId=${selectedTranscript.encounter_id}`)}
                   >
                     Open Notes Queue
@@ -301,10 +305,11 @@ export default function ProfessionalTranscripts() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    className={transcriptActionButtonClass}
                     onClick={generateDocumentationFromTranscript}
                     disabled={isGeneratingDraft}
                   >
-                    <Sparkles className="mr-2 h-4 w-4" />
+                    <Sparkles className="h-4 w-4" />
                     {isGeneratingDraft ? "Generating..." : "Generate Report + SOAP/SOP"}
                   </Button>
                 </div>
@@ -332,34 +337,36 @@ export default function ProfessionalTranscripts() {
               const ready = hasContent(transcript.transcript_json);
               return (
                 <div key={transcript.id} className="bg-card rounded-2xl p-4 border border-border">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-center gap-4">
-                      <div className="w-12 h-12 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <div className="space-y-4 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
+                    <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+                      <div className="w-11 h-11 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center sm:h-12 sm:w-12">
                         <FileText className="w-6 h-6 text-primary" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{patientName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(transcript.created_at).toLocaleDateString("en-GB", {
-                            day: "numeric", month: "short", year: "numeric",
-                          })} • {enc?.encounter_type || "consultation"}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">{patientName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(transcript.created_at).toLocaleDateString("en-GB", {
+                                day: "numeric", month: "short", year: "numeric",
+                              })} • {enc?.encounter_type || "consultation"}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs ${ready ? "border-emerald-500/50 text-emerald-500" : "border-yellow-500/50 text-yellow-500"}`}>
+                            {ready ? "ready" : "processing"}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                      <Badge variant="outline" className={
-                        ready ? "border-emerald-500/50 text-emerald-500" : "border-yellow-500/50 text-yellow-500"
-                      }>
-                        {ready ? "ready" : "processing"}
-                      </Badge>
+                    <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 sm:flex sm:justify-end sm:border-t-0 sm:pt-0">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-full sm:w-auto"
+                        className={transcriptActionButtonClass}
                         disabled={!ready}
                         onClick={() => navigate(`/professional/transcripts/${transcript.id}`)}
                       >
-                        <Eye className="w-4 h-4 mr-1" /> Review
+                        <Eye className="w-4 h-4" /> Review
                       </Button>
                     </div>
                   </div>

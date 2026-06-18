@@ -71,6 +71,7 @@ const AdminNotificationTemplates = lazy(() => import("@/apps/admin/pages/Notific
 // Not Found
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const DownloadApp = lazy(() => import("./pages/DownloadApp"));
 
 const queryClient = new QueryClient();
 
@@ -101,6 +102,8 @@ const App = () => (
                 {/* Root redirect */}
                 <Route path="/" element={<RoleRedirect />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/downloads" element={<DownloadApp />} />
+                <Route path="/download" element={<Navigate to="/downloads" replace />} />
 
                 {/* Auth routes */}
                 <Route path="/auth/sign-in" element={<SignIn />} />

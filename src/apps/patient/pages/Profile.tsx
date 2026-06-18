@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { 
   User, Settings, ChevronRight, LogOut, HeartPulse, 
-  Stethoscope, Shield, Bell, MapPin, CreditCard, Loader2, Save
+  Stethoscope, Shield, Bell, MapPin, CreditCard, Loader2, Save, Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -1169,6 +1169,20 @@ export default function PatientProfile() {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-foreground">Privacy Policy</p>
               <p className="text-sm text-muted-foreground">How Neo Synapse handles health data</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </Link>
+          <Separator />
+          <Link
+            to="/downloads"
+            className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Download className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground">Download Mobile App</p>
+              <p className="text-sm text-muted-foreground">Install Neo Synapse on Android</p>
             </div>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </Link>

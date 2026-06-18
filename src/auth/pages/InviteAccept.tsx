@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import {
-  Loader2, Mail, Lock, Eye, EyeOff, Activity, User,
+  Loader2, Mail, Lock, Eye, EyeOff, User,
   CheckCircle, XCircle, Stethoscope, Award, FileText,
 } from "lucide-react";
 import type { Invitation } from "@/shared/types/healthcare";
+import { BrandMark } from "@/components/BrandMark";
 
 const acceptSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters").max(100),
@@ -208,9 +209,7 @@ export default function InviteAccept() {
       {/* Header */}
       <header className="p-4 flex items-center gap-3">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center glow-green">
-            <Activity className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <BrandMark />
           <span className="font-display text-xl font-bold">Neo Synapse</span>
         </Link>
       </header>

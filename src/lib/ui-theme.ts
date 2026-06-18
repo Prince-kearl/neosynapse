@@ -20,10 +20,10 @@ export type AppThemeSettings = {
 };
 
 export const DEFAULT_CUSTOM_PALETTE = {
-  primary: "#22c55e",
-  accent: "#14b8a6",
+  primary: "#00c1ca",
+  accent: "#00c1ca",
   secondary: "#0f766e",
-  ring: "#22c55e",
+  ring: "#00c1ca",
 } as const;
 
 type ColorPreset = {
@@ -36,11 +36,11 @@ type ColorPreset = {
 
 export const APP_COLOR_PRESETS: Record<AppColorPresetKey, ColorPreset> = {
   medical_green: {
-    label: "Medical Green",
-    primary: "142 71% 45%",
-    accent: "160 60% 40%",
+    label: "Neo Synapse Cyan",
+    primary: "183 100% 40%",
+    accent: "183 100% 40%",
     secondary: "180 98% 16%",
-    ring: "142 71% 45%",
+    ring: "183 100% 40%",
   },
   light_blue: {
     label: "Light Blue",

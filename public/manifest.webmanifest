@@ -1,0 +1,20 @@
+{
+  "name": "Neo Synapse",
+  "short_name": "Neo Synapse",
+  "description": "AI-powered medical assistance, appointments, telemedicine, reports, and health records.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00c1ca",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48 64x64 128x128 256x256",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["health", "medical", "productivity"]
+}

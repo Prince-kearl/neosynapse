@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Activity, ArrowLeft, Bell, Brain, Database, FileText, Lock, Shield, Stethoscope, UserCheck } from "lucide-react";
+import { ArrowLeft, Bell, Brain, Database, FileText, Lock, Shield, Stethoscope, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/BrandMark";
 
 const updatedAt = "18 June 2026";
 
@@ -69,9 +70,7 @@ export default function PrivacyPolicy() {
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 p-4">
           <Link to="/" className="flex min-w-0 items-center gap-2">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary">
-              <Activity className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <BrandMark />
             <span className="truncate font-display text-lg font-bold">Neo Synapse</span>
           </Link>
           <Button variant="outline" size="sm" onClick={() => navigate(-1)}>

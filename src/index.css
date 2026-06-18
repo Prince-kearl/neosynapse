@@ -14,20 +14,20 @@
     --popover: 210 20% 96%;
     --popover-foreground: 220 10% 12%;
 
-    /* Primary - Medical Green */
-    --primary: 142 71% 45%;
+    /* Primary - Neo Synapse Cyan (#00c1ca) */
+    --primary: 183 100% 40%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Deep Teal */
     --secondary: 180 98% 16%;
-    --secondary-foreground: 142 71% 20%;
+    --secondary-foreground: 0 0% 100%;
 
     /* Muted */
     --muted: 210 16% 86%;
     --muted-foreground: 220 10% 45%;
 
     /* Accent - Teal glow */
-    --accent: 160 60% 40%;
+    --accent: 183 100% 40%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive */
@@ -37,29 +37,29 @@
     /* Borders & inputs */
     --border: 210 18% 84%;
     --input: 210 18% 84%;
-    --ring: 142 71% 45%;
+    --ring: 183 100% 40%;
 
     --radius: 0.75rem;
 
     /* Sidebar */
     --sidebar-background: 210 14% 96%;
     --sidebar-foreground: 210 10% 45%;
-    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary: 183 100% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 210 16% 86%;
-    --sidebar-accent-foreground: 142 71% 20%;
+    --sidebar-accent-foreground: 183 100% 20%;
     --sidebar-border: 210 18% 84%;
-    --sidebar-ring: 142 71% 45%;
+    --sidebar-ring: 183 100% 40%;
 
     /* Neo Synapse Custom Tokens */
-    --price: 142 55% 50%;
+    --price: 183 100% 40%;
     --price-badge: 142 50% 20%;
-    --distance: 160 60% 50%;
+    --distance: 183 100% 40%;
     --category-pill: 210 16% 86%;
-    --category-pill-active: 142 71% 45%;
-    --budget-slider: 142 71% 45%;
+    --category-pill-active: 183 100% 40%;
+    --budget-slider: 183 100% 40%;
     --food-card-shadow: 210 18% 80%;
-    --star: 142 71% 45%;
+    --star: 183 100% 40%;
 
     /* Medical glow */
     --glow-primary: 0 0% 0% / 0;
@@ -74,35 +74,35 @@
     --card-foreground: 0 0% 98%;
     --popover: 215 25% 15%;
     --popover-foreground: 0 0% 98%;
-    --primary: 142 71% 45%;
+    --primary: 183 100% 40%;
     --primary-foreground: 0 0% 100%;
     --secondary: 180 98% 16%;
-    --secondary-foreground: 142 71% 70%;
+    --secondary-foreground: 0 0% 100%;
     --muted: 215 25% 18%;
     --muted-foreground: 240 5% 65%;
-    --accent: 160 60% 40%;
+    --accent: 183 100% 40%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 100%;
     --border: 215 20% 22%;
     --input: 215 20% 22%;
-    --ring: 142 71% 45%;
+    --ring: 183 100% 40%;
     --sidebar-background: 215 28% 12%;
     --sidebar-foreground: 240 5% 65%;
-    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary: 183 100% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 25% 18%;
-    --sidebar-accent-foreground: 142 71% 70%;
+    --sidebar-accent-foreground: 183 100% 70%;
     --sidebar-border: 215 20% 20%;
-    --sidebar-ring: 142 71% 45%;
-    --price: 142 55% 50%;
+    --sidebar-ring: 183 100% 40%;
+    --price: 183 100% 40%;
     --price-badge: 142 50% 20%;
-    --distance: 160 60% 50%;
+    --distance: 183 100% 40%;
     --category-pill: 215 25% 18%;
-    --category-pill-active: 142 71% 45%;
-    --budget-slider: 142 71% 45%;
+    --category-pill-active: 183 100% 40%;
+    --budget-slider: 183 100% 40%;
     --food-card-shadow: 215 30% 5%;
-    --star: 142 71% 45%;
+    --star: 183 100% 40%;
   }
 
   .light {
@@ -115,11 +115,11 @@
     --popover-foreground: 220 10% 12%;
     --border: 210 18% 84%;
     --input: 210 18% 84%;
-    --ring: 142 71% 45%;
+    --ring: 183 100% 40%;
     --sidebar-background: 210 14% 96%;
     --sidebar-foreground: 210 10% 45%;
     --sidebar-accent: 210 16% 86%;
-    --sidebar-accent-foreground: 142 71% 20%;
+    --sidebar-accent-foreground: 183 100% 20%;
     --food-card-shadow: 210 18% 80%;
   }
 }

@@ -44,6 +44,9 @@ const statusStyles: Record<string, string> = {
   expired: "border-muted-foreground/50 text-muted-foreground",
 };
 
+const invitationActionButtonClass =
+  "h-10 justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-transparent sm:bg-transparent";
+
 export default function AdminInvitations() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -257,56 +260,67 @@ export default function AdminInvitations() {
           <section>
             <h2 className="font-display text-base font-semibold text-yellow-400 mb-3">Active ({actionable.length})</h2>
             <div className="space-y-3">
-              {actionable.map((inv) => (
-                <div key={inv.id} className="bg-card rounded-2xl p-3 sm:p-4 border border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${
+              {actionable.map((inv) => {
+                const statusClassName = statusStyles[inv.status] || statusStyles.pending;
+
+                return (
+                <div key={inv.id} className="bg-card rounded-2xl border border-border p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className={`w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center ${
                       inv.status === "sent" ? "bg-blue-500/10" : "bg-yellow-500/10"
                     }`}>
-                      {inv.status === "sent" 
+                      {inv.status === "sent"
                         ? <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
                         : <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-500" />
                       }
                     </div>
-                    <div className="min-w-0">
-                      <p className="break-all text-sm font-medium sm:text-base">{inv.email}</p>
-                      <p className="flex flex-wrap gap-x-1 text-xs text-muted-foreground sm:text-sm">
-                        <span className="capitalize">{inv.role}</span>
-                        <span>•</span>
-                        <span>Expires {new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                        {inv.status === "pending" && <span className="basis-full text-yellow-500 sm:basis-auto">Email not delivered</span>}
-                      </p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="break-all text-sm font-semibold leading-5 sm:text-base">{inv.email}</p>
+                          <p className="mt-0.5 flex flex-wrap gap-x-1 text-xs text-muted-foreground sm:text-sm">
+                            <span className="capitalize">{inv.role}</span>
+                            <span>•</span>
+                            <span>Expires {new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                          </p>
+                        </div>
+                        <Badge variant="outline" className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs capitalize ${statusClassName}`}>{inv.status}</Badge>
+                      </div>
+                      {inv.status === "pending" && (
+                        <p className="mt-1 text-xs font-medium text-yellow-500">Email not delivered</p>
+                      )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
-                    <Badge variant="outline" className={`flex h-9 items-center justify-center ${statusStyles[inv.status] || statusStyles.pending}`}>{inv.status}</Badge>
-                    <Button variant="ghost" size="sm" className="h-9 justify-center px-2" onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
-                      <Copy className="w-4 h-4 mr-1" />
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 sm:mt-0 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
+                    <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
+                      <Copy className="w-4 h-4" />
                       Copy
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-9 justify-center px-2" onClick={() => shareViaWhatsApp(inv)} title="Share invite link via WhatsApp">
-                      <MessageCircle className="w-4 h-4 mr-1" />
+                    <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => shareViaWhatsApp(inv)} title="Share invite link via WhatsApp">
+                      <MessageCircle className="w-4 h-4" />
                       WhatsApp
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-9 justify-center px-2"
+                      className={invitationActionButtonClass}
                       onClick={() => resendInvite.mutate(inv)}
                       disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
                       title="Resend invitation email"
                     >
                       {resendInvite.isPending && resendInvite.variables?.id === inv.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <RotateCw className="w-4 h-4 mr-1" />}
+                        : <RotateCw className="w-4 h-4" />}
                       Resend
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-9 justify-center px-2" onClick={() => revokeInvite.mutate(inv.id)}>
-                      <XCircle className="w-4 h-4 mr-1" /> Revoke
+                    <Button variant="ghost" size="sm" className={`${invitationActionButtonClass} text-destructive hover:text-destructive`} onClick={() => revokeInvite.mutate(inv.id)}>
+                      <XCircle className="w-4 h-4" /> Revoke
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -317,44 +331,46 @@ export default function AdminInvitations() {
             <h2 className="font-display text-base font-semibold text-muted-foreground mb-3">History ({history.length})</h2>
             <div className="space-y-3">
               {history.map((inv) => (
-                <div key={inv.id} className="bg-card rounded-2xl p-3 sm:p-4 border border-border flex flex-col gap-3 opacity-70 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl bg-muted flex items-center justify-center">
+                <div key={inv.id} className="bg-card rounded-2xl border border-border p-4 opacity-75 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-xl bg-muted flex items-center justify-center">
                       <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" />
                     </div>
-                    <div className="min-w-0">
-                      <p className="break-all text-sm font-medium sm:text-base">{inv.email}</p>
-                      <p className="text-sm text-muted-foreground capitalize">{inv.role}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="break-all text-sm font-semibold leading-5 sm:text-base">{inv.email}</p>
+                          <p className="text-sm text-muted-foreground capitalize">{inv.role}</p>
+                        </div>
+                        <Badge variant="outline" className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs capitalize ${statusStyles[inv.status] || ""}`}>{inv.status}</Badge>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
-                    <Badge variant="outline" className={`flex h-9 items-center justify-center ${statusStyles[inv.status] || ""}`}>{inv.status}</Badge>
-                    {inv.status === "expired" && (
-                      <>
-                      <Button variant="ghost" size="sm" className="h-9 justify-center px-2" onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
-                        <Copy className="w-4 h-4 mr-1" />
+                  {inv.status === "expired" && (
+                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 sm:mt-0 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
+                      <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
+                        <Copy className="w-4 h-4" />
                         Copy
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-9 justify-center px-2" onClick={() => shareViaWhatsApp(inv)} title="Share expired invitation via WhatsApp">
-                        <MessageCircle className="w-4 h-4 mr-1" />
+                      <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => shareViaWhatsApp(inv)} title="Share expired invitation via WhatsApp">
+                        <MessageCircle className="w-4 h-4" />
                         WhatsApp
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-9 justify-center px-2"
+                        className={invitationActionButtonClass}
                         onClick={() => resendInvite.mutate(inv)}
                         disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
                         title="Resend expired invitation"
                       >
                         {resendInvite.isPending && resendInvite.variables?.id === inv.id
                           ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : <RotateCw className="w-4 h-4 mr-1" />}
+                          : <RotateCw className="w-4 h-4" />}
                         Resend
                       </Button>
-                      </>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

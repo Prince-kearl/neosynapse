@@ -17,7 +17,9 @@
     "mobile:android": "npx cap open android",
     "mobile:ios": "npx cap open ios",
     "mobile:run:android": "npx cap run android",
-    "mobile:run:ios": "npx cap run ios"
+    "mobile:run:ios": "npx cap run ios",
+    "mobile:apk:debug": "export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}; npm run mobile:build && cd android && ./gradlew assembleDebug",
+    "mobile:apk:export": "npm run mobile:apk:debug && mkdir -p public/downloads dist/downloads && cp android/app/build/outputs/apk/debug/app-debug.apk public/downloads/neo-synapse-debug.apk && cp android/app/build/outputs/apk/debug/app-debug.apk dist/downloads/neo-synapse-debug.apk"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",

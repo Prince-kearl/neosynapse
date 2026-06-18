@@ -47,6 +47,9 @@ const templateTypeOptions = [
 
 const toTitle = (value: string) => value.replace(/_/g, " ");
 
+const templateActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function AdminTemplates() {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, Partial<TemplateDraft>>>({});
@@ -501,20 +504,21 @@ export default function AdminTemplates() {
                               />
                             </div>
 
-                            <div className="flex flex-wrap gap-2 justify-end">
+                            <div className="grid grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:flex-wrap sm:justify-end sm:border-t-0 sm:pt-0">
                               <Button
                                 variant="outline"
-                                className="text-destructive hover:text-destructive"
+                                className={`${templateActionButtonClass} text-destructive hover:text-destructive`}
                                 onClick={() => deleteTemplate.mutate(template.id)}
                                 disabled={deleteTemplate.isPending}
                               >
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                <Trash2 className="w-4 h-4" /> Delete
                               </Button>
                               <Button
+                                className={templateActionButtonClass}
                                 onClick={() => updateTemplate.mutate({ id: template.id, patch: drafts[template.id] || {} })}
                                 disabled={updateTemplate.isPending || !drafts[template.id]}
                               >
-                                <Save className="w-4 h-4 mr-2" /> Save
+                                <Save className="w-4 h-4" /> Save
                               </Button>
                             </div>
 

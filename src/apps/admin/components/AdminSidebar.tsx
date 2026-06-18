@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Mail, Building2, ShieldCheck, 
-  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, Activity, SlidersHorizontal, BellDot,
+  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, SlidersHorizontal, BellDot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 
 const navItems = [
   { title: "Dashboard", url: "/admin/dashboard", icon: LayoutDashboard },
@@ -28,9 +29,7 @@ export function AdminSidebar() {
     <aside className={cn("hidden lg:flex h-screen bg-sidebar border-r border-sidebar-border flex-col transition-all duration-300 shadow-sidebar sticky top-0", collapsed ? "w-20" : "w-64")}>
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-destructive/20 flex items-center justify-center flex-shrink-0">
-            <Activity className="w-5 h-5 text-destructive" />
-          </div>
+          <BrandMark />
           {!collapsed && (
             <div className="animate-fade-in overflow-hidden">
               <h1 className="font-display text-xl font-bold text-foreground">Neo Synapse</h1>

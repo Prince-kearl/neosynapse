@@ -64,7 +64,7 @@ export function NotificationCenterPage({ heading, subheading, settingsPath }: No
             size="sm"
             onClick={() => markAllAsRead()}
             disabled={unreadCount === 0 || isMarkingAllRead}
-            className="w-full sm:w-auto"
+            className="min-h-11 w-full text-sm font-semibold text-secondary-foreground disabled:text-secondary-foreground sm:min-h-9 sm:w-auto"
           >
             {isMarkingAllRead ? "Updating..." : "Mark all read"}
           </Button>

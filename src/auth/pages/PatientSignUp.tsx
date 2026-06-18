@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
-import { Loader2, Mail, Lock, Eye, EyeOff, Activity, User } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff, User, Download } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 
 const signUpSchema = z.object({
   fullName: z.string().min(2, { message: "Name must be at least 2 characters" }).max(100),
@@ -119,13 +120,18 @@ export default function PatientSignUp() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="p-4 flex items-center gap-3">
+      <header className="flex items-center justify-between gap-3 p-4">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center glow-green">
-            <Activity className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <BrandMark />
           <span className="font-display text-xl font-bold">Neo Synapse</span>
         </Link>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/downloads">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Download app</span>
+            <span className="sm:hidden">App</span>
+          </Link>
+        </Button>
       </header>
 
       {/* Form */}
@@ -334,6 +340,12 @@ export default function PatientSignUp() {
                 Sign in
               </Link>
             </p>
+            <Button variant="secondary" className="mt-4 h-11 w-full rounded-xl font-semibold" asChild>
+              <Link to="/downloads">
+                <Download className="h-4 w-4" />
+                Download mobile app
+              </Link>
+            </Button>
           </div>
 
           <div className="bg-muted/50 rounded-xl p-4 text-center">

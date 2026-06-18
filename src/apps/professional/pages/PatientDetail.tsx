@@ -13,6 +13,9 @@ import { buildClinicalNoteMarkdown, getClinicalNoteTitle } from "@/shared/lib/cl
 import { getLinkedNoteId, getLinkedTranscriptId, getReportSourceLabel, getReportStatus, getReportSummary, getReportTitle, toReportTitleCase } from "@/shared/lib/reports";
 import type { MedicalHistory } from "@/shared/types/healthcare";
 
+const patientDetailActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 export default function PatientDetail() {
   const navigate = useNavigate();
   const { patientId } = useParams<{ patientId: string }>();
@@ -317,10 +320,11 @@ export default function PatientDetail() {
                           encounterType: note.encounters?.encounter_type || "Consultation",
                         })}
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-3 sm:flex sm:flex-wrap sm:border-t-0 sm:pt-0">
                         <Button
                           size="sm"
                           variant="outline"
+                          className={patientDetailActionButtonClass}
                           onClick={() => navigate(`/professional/notes/${note.id}/edit?encounterId=${note.encounter_id}`)}
                         >
                           Open Note
@@ -328,12 +332,14 @@ export default function PatientDetail() {
                         <Button
                           size="sm"
                           variant="outline"
+                          className={patientDetailActionButtonClass}
                           onClick={() => navigate(`/professional/encounters?encounterId=${note.encounter_id}`)}
                         >
                           Open Encounter
                         </Button>
                         <Button
                           size="sm"
+                          className={patientDetailActionButtonClass}
                           onClick={() => navigate(`/professional/transcripts?encounterId=${note.encounter_id}`)}
                         >
                           Open Transcript
@@ -384,10 +390,11 @@ export default function PatientDetail() {
                       <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm leading-6 text-muted-foreground">
                         {getReportSummary(report)}
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:border-t-0 sm:pt-0">
                         <Button
                           size="sm"
                           variant="outline"
+                          className={patientDetailActionButtonClass}
                           onClick={() => navigate(`/professional/reports/${report.id}`)}
                         >
                           Open Report
@@ -396,6 +403,7 @@ export default function PatientDetail() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className={patientDetailActionButtonClass}
                             onClick={() => navigate(`/professional/notes/${noteId}/edit?encounterId=${report.encounter_id}`)}
                           >
                             Open Source Note
@@ -405,6 +413,7 @@ export default function PatientDetail() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className={patientDetailActionButtonClass}
                             onClick={() => navigate(`/professional/transcripts/${transcriptId}`)}
                           >
                             Open Transcript
@@ -413,6 +422,7 @@ export default function PatientDetail() {
                         {report.encounter_id && (
                           <Button
                             size="sm"
+                            className={patientDetailActionButtonClass}
                             onClick={() => navigate(`/professional/encounters?encounterId=${report.encounter_id}`)}
                           >
                             Open Encounter

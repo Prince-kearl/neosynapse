@@ -58,6 +58,9 @@ const canConfirmAppointment = (appointment: Appointment, appointments: Appointme
 
 const asStringArray = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []);
 
+const appointmentActionButtonClass =
+  "h-10 w-full justify-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm font-medium hover:bg-muted/70 sm:h-9 sm:w-auto sm:border-border sm:bg-transparent";
+
 const renderSnapshotList = (label: string, values: string[], variant: "secondary" | "destructive" = "secondary") => {
   if (values.length === 0) return null;
   return (
@@ -145,17 +148,17 @@ export default function ProfessionalAppointments() {
     return (
       <div key={appointment.id} className="bg-card rounded-2xl border border-border p-4 space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-medium text-lg truncate">{patientName}</p>
             <p className="text-sm text-muted-foreground">
               {appointment.appointment_type.replace("_", " ")} • {appointment.reason_for_visit || "No reason provided"}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={priorityColors[appointment.priority || "routine"]}>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Badge className={`w-fit rounded-full px-3 py-1 text-xs ${priorityColors[appointment.priority || "routine"]}`}>
               {priorityLabels[appointment.priority || "routine"]}
             </Badge>
-            <Badge className={statusColors[appointment.status] || statusColors.pending}>
+            <Badge className={`w-fit rounded-full px-3 py-1 text-xs ${statusColors[appointment.status] || statusColors.pending}`}>
               {statusLabels[appointment.status] || appointment.status}
             </Badge>
           </div>
@@ -245,36 +248,36 @@ export default function ProfessionalAppointments() {
         </div>
 
         {appointment.status === "pending" && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <div className="grid grid-cols-2 gap-2 border-t border-border pt-3 sm:flex sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
             <Button
               size="sm"
               variant="outline"
               onClick={() => handleChangeStatus(appointment, "cancelled")}
-              className="w-full sm:w-auto"
+              className={`${appointmentActionButtonClass} text-destructive hover:text-destructive`}
             >
-              <XCircle className="w-4 h-4 mr-2" />
+              <XCircle className="w-4 h-4" />
               Decline
             </Button>
             <Button
               size="sm"
-              className="w-full sm:w-auto"
+              className={appointmentActionButtonClass}
               onClick={() => handleChangeStatus(appointment, "confirmed")}
               disabled={hasConflict}
             >
-              <CheckCircle2 className="w-4 h-4 mr-2" />
+              <CheckCircle2 className="w-4 h-4" />
               Confirm
             </Button>
           </div>
         )}
 
         {appointment.status === "confirmed" && appointment.appointment_type === "telemedicine" && (
-          <div className="flex justify-end">
+          <div className="border-t border-border pt-3 sm:flex sm:justify-end sm:border-t-0 sm:pt-0">
             <Button
               size="sm"
-              className="w-full sm:w-auto"
+              className={appointmentActionButtonClass}
               onClick={() => navigate(`/professional/telemedicine?appointmentId=${appointment.id}&action=start`)}
             >
-              <Video className="w-4 h-4 mr-2" />
+              <Video className="w-4 h-4" />
               Start Call
             </Button>
           </div>
