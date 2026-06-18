@@ -221,11 +221,12 @@ export const appointmentService = {
     facility_id?: string;
     appointment_type: string;
     reason_for_visit?: string;
+    medical_history_snapshot?: Record<string, unknown> | null;
     scheduled_at?: string;
     priority?: AppointmentPriority;
     status?: AppointmentStatus;
   }) =>
-    supabase.from("appointments").insert(data),
+    supabase.from("appointments").insert(data).select("id").single(),
 
   /** Update status */
   updateStatus: (id: string, status: string) =>

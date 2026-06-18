@@ -24,6 +24,7 @@ import {
   auditLogService,
   appSettingsService,
 } from "@/shared/services/healthcare";
+import { getStaleInProgressResolution } from "@/shared/lib/professionalSessions";
 
 // ─── Profile Hooks ──────────────────────────────────────────────
 
@@ -271,7 +272,42 @@ export function useProfessionalEncounters() {
     queryFn: async () => {
       const { data, error } = await encounterService.getForProfessional(user!.id);
       if (error) throw error;
-      return data || [];
+      const encounters = data || [];
+      const inProgressIds = encounters.filter((enc: any) => enc.status === "in_progress").map((enc: any) => enc.id);
+
+      if (inProgressIds.length === 0) return encounters;
+
+      const { data: rooms, error: roomError } = await supabase
+        .from("consultation_rooms")
+        .select("id, encounter_id, status")
+        .in("encounter_id", inProgressIds);
+
+      if (roomError) {
+        console.error("Failed to verify live consultation rooms:", roomError);
+        return encounters;
+      }
+
+      const roomList = rooms || [];
+      return Promise.all(
+        encounters.map(async (enc: any) => {
+          const relatedRooms = roomList.filter((room: any) => room.encounter_id === enc.id);
+          const resolution = getStaleInProgressResolution(enc, relatedRooms);
+          if (!resolution) return enc;
+
+          const endedAt = enc.ended_at || new Date().toISOString();
+          const { error: updateError } = await supabase
+            .from("encounters")
+            .update({ status: resolution, ended_at: endedAt })
+            .eq("id", enc.id);
+
+          if (updateError) {
+            console.error("Failed to reconcile stale encounter:", updateError);
+            return enc;
+          }
+
+          return { ...enc, status: resolution, ended_at: endedAt };
+        }),
+      );
     },
     enabled: !!user,
   });
@@ -313,6 +349,46 @@ export function useProfessionalNotes() {
       return data || [];
     },
     enabled: !!user,
+  });
+}
+
+export function useClinicalNotesForAssignedPatient(patientId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pro-patient-clinical-notes", user?.id, patientId],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const { data, error } = await supabase
+        .from("clinical_notes")
+        .select("*, encounters!inner(id, professional_id, patient_id, encounter_type, created_at)")
+        .eq("encounters.professional_id", user!.id)
+        .eq("encounters.patient_id", patientId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && !!patientId,
+  });
+}
+
+export function useReportsForAssignedPatient(patientId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["pro-patient-reports", user?.id, patientId],
+    queryFn: async () => {
+      if (!patientId) return [];
+      const { data, error } = await supabase
+        .from("medical_reports")
+        .select("*, encounters!inner(id, professional_id, patient_id, encounter_type, created_at)")
+        .eq("encounters.professional_id", user!.id)
+        .eq("encounters.patient_id", patientId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && !!patientId,
   });
 }
 

@@ -1,73 +1,64 @@
-# Welcome to your Lovable project
+# NeoSynapse
 
-## Project info
+NeoSynapse is a multi-role healthcare platform for patients, healthcare professionals, and administrators. It ships as a Vite/React web app and is wrapped for Android/iOS with Capacitor.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+The full system overview, architecture notes, schema summary, Edge Function details, and operational checklist live in [DOCUMENTATION.md](DOCUMENTATION.md).
 
-## How can I edit this code?
+## Core Apps
 
-There are several ways of editing your application.
+- Patient app: AI health assistant, structured symptom triage, appointments, telemedicine, medical reports, medical history, notifications, and settings.
+- Professional app: dashboard, patient access, encounter queue, appointments, telemedicine, transcripts, clinical notes, reports, and notifications.
+- Admin app: user and role management, invitations, facilities, audit logs, templates, quick actions, notifications, push tests, and tenant-wide theming.
 
-**Use Lovable**
+## Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- React 18, TypeScript, Vite, React Router, TanStack Query
+- Tailwind CSS, shadcn/ui, Radix UI
+- Supabase Auth, Postgres/RLS, Realtime, Storage, and Edge Functions
+- Google Gemini for medical chat and symptom triage
+- ElevenLabs for speech-to-text and text-to-speech
+- Capacitor 8 for Android and iOS shells
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The Vite dev server runs at `http://localhost:5173` by default.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Required frontend environment variables:
 
-**Use GitHub Codespaces**
+```sh
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Verification
 
-## What technologies are used for this project?
+```sh
+npm run test
+npm run build
+```
 
-This project is built with:
+For the mobile wrapper:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```sh
+npm run mobile:build
+```
 
-## How can I deploy this project?
+This builds the web app and syncs the output into the Android and iOS Capacitor projects.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Supabase
 
-## Can I connect a custom domain to my Lovable project?
+Project config is in `supabase/config.toml`. Migrations live in `supabase/migrations`, and Edge Functions live in `supabase/functions`.
 
-Yes, you can!
+Common deployment commands:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```sh
+supabase db push --yes
+supabase functions deploy
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+See [DOCUMENTATION.md](DOCUMENTATION.md) for required Supabase secrets, RLS notes, function behavior, and the production validation checklist.

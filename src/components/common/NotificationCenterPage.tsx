@@ -52,8 +52,8 @@ export function NotificationCenterPage({ heading, subheading, settingsPath }: No
       </div>
 
       <div className="p-4 max-w-2xl mx-auto space-y-4">
-        <section className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between gap-4">
-          <div>
+        <section className="bg-card rounded-2xl border border-border p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h2 className="font-semibold mb-1">Notification Center</h2>
             <p className="text-sm text-muted-foreground">
               New alerts, reminders, and system updates appear here in real time.
@@ -64,20 +64,21 @@ export function NotificationCenterPage({ heading, subheading, settingsPath }: No
             size="sm"
             onClick={() => markAllAsRead()}
             disabled={unreadCount === 0 || isMarkingAllRead}
+            className="w-full sm:w-auto"
           >
             {isMarkingAllRead ? "Updating..." : "Mark all read"}
           </Button>
         </section>
 
-        <section className="bg-card rounded-2xl border border-border p-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Settings className="w-5 h-5 text-muted-foreground" />
-            <div>
+        <section className="bg-card rounded-2xl border border-border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <Settings className="w-5 h-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
               <p className="font-medium">Notification Preferences</p>
               <p className="text-sm text-muted-foreground">Manage channels and alert types</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate(settingsPath)}>
+          <Button variant="outline" size="sm" onClick={() => navigate(settingsPath)} className="w-full sm:w-auto">
             Open Settings <ChevronRight className="w-4 h-4 ml-1" />
           </Button>
         </section>

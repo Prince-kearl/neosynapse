@@ -10,8 +10,18 @@ import { normalizeLabResults } from "@/shared/lib/labResults";
 import { useMyReports } from "@/shared/hooks/useHealthcare";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { toast } from "@/hooks/use-toast";
-import html2pdf from "html2pdf.js";
-import { marked } from "marked";
+import {
+  asReportRecord as asRecord,
+  formatReportDateTime as formatDateTime,
+  getReportFileName,
+  getReportMarkdown,
+  getReportRecommendedAction,
+  getReportSummary,
+  getReportTitle,
+  reportArray as asStringArray,
+  reportText as asText,
+  toReportTitleCase as toTitleCase,
+} from "@/shared/lib/reports";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -26,34 +36,6 @@ const urgencyConfig: Record<string, { label: string; className: string }> = {
   emergency: { label: "Emergency", className: "border-red-500/30 bg-red-500/10 text-red-700" },
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-
-const asText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
-
-const asStringArray = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
-    : [];
-
-const toTitleCase = (value: string): string =>
-  value
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-const formatDateTime = (value: unknown): string => {
-  if (typeof value !== "string") return "Not available";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not available";
-  return date.toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 export default function PatientReports() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -66,20 +48,7 @@ export default function PatientReports() {
   const [isTranslating, setIsTranslating] = useState(false);
   const selectedReport = reportId ? reports.find((r: any) => r.id === reportId) : null;
 
-  const getReportTitle = (report: any) => {
-    const reportData = report?.report_json as Record<string, unknown> | null;
-    return (reportData?.title as string) || `${report?.report_type || "medical"} report`;
-  };
-
-  const getReportMarkdown = (report: any) => {
-    const reportData = report?.report_json as Record<string, unknown> | null;
-    const markdown = typeof reportData?.markdown === "string" ? reportData.markdown : "";
-    if (markdown.trim()) return markdown;
-    return `# ${getReportTitle(report)}\n\n\`\`\`json\n${JSON.stringify(report?.report_json ?? {}, null, 2)}\n\`\`\``;
-  };
-
-  const toFileName = (report: any) =>
-    `${String(getReportTitle(report)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "medical-report"}-${new Date(report.created_at || Date.now()).toISOString().slice(0, 10)}.pdf`;
+  const toFileName = (report: any) => getReportFileName(report);
 
   const translateReportContent = async (summary: string, recommendedAction: string) => {
     if (!selectedReport) return;
@@ -108,6 +77,10 @@ export default function PatientReports() {
 
   const buildPdfBlob = async (report: any): Promise<Blob> => {
     const markdown = getReportMarkdown(report);
+    const [{ default: html2pdf }, { marked }] = await Promise.all([
+      import("html2pdf.js"),
+      import("marked"),
+    ]);
     const html = marked.parse(markdown);
     const container = document.createElement("div");
     container.innerHTML = html;
@@ -251,11 +224,11 @@ export default function PatientReports() {
               <>
                 {(() => {
                   const reportData = asRecord(selectedReport.report_json) || {};
-                  const patient = asRecord(reportData.patient) || {};
+                  const patient = asRecord(reportData.patient);
                   const urgencyKey = asText(reportData.urgency).toLowerCase();
                   const urgency = urgencyConfig[urgencyKey] || null;
-                  const summary = asText(reportData.summary) || "No summary is available for this report yet.";
-                  const recommendedAction = asText(reportData.recommended_action) || "No recommended next step was provided.";
+                  const summary = getReportSummary(selectedReport);
+                  const recommendedAction = getReportRecommendedAction(selectedReport);
                   const reportType = asText(selectedReport.report_type) || "medical_report";
                   const symptoms = asStringArray(reportData.symptoms);
                   const warningSigns = asStringArray(reportData.warning_signs);
@@ -265,7 +238,7 @@ export default function PatientReports() {
                   const possibleConditions = Array.isArray(reportData.possible_conditions)
                     ? reportData.possible_conditions
                       .map((item) => asRecord(item))
-                      .filter(Boolean)
+                      .filter((item) => Object.keys(item).length > 0)
                       .map((item) => ({
                         name: asText(item?.name) || "Unknown condition",
                         likelihood: asText(item?.likelihood) || "unknown",

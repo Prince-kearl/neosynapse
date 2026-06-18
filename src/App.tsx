@@ -4,17 +4,20 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AppThemeSync } from "@/components/AppThemeSync";
+import { NotificationRuntime } from "@/components/NotificationRuntime";
 
 // Auth pages
-import SignIn from "@/auth/pages/SignIn";
-import PatientSignUp from "@/auth/pages/PatientSignUp";
-import InviteAccept from "@/auth/pages/InviteAccept";
-import ForgotPassword from "@/auth/pages/ForgotPassword";
-import ResetPassword from "@/auth/pages/ResetPassword";
-import RoleRedirect from "@/auth/pages/RoleRedirect";
+const SignIn = lazy(() => import("@/auth/pages/SignIn"));
+const PatientSignUp = lazy(() => import("@/auth/pages/PatientSignUp"));
+const InviteAccept = lazy(() => import("@/auth/pages/InviteAccept"));
+const ForgotPassword = lazy(() => import("@/auth/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/auth/pages/ResetPassword"));
+const RoleRedirect = lazy(() => import("@/auth/pages/RoleRedirect"));
 
 // Guards
 import { PatientGuard } from "@/auth/guards/PatientGuard";
@@ -22,53 +25,60 @@ import { ProfessionalGuard } from "@/auth/guards/ProfessionalGuard";
 import { AdminGuard } from "@/auth/guards/AdminGuard";
 
 // Layouts
-import { PatientLayout } from "@/apps/patient/layouts/PatientLayout";
-import { ProfessionalLayout } from "@/apps/professional/layouts/ProfessionalLayout";
-import { AdminLayout } from "@/apps/admin/layouts/AdminLayout";
+const PatientLayout = lazy(() => import("@/apps/patient/layouts/PatientLayout").then((module) => ({ default: module.PatientLayout })));
+const ProfessionalLayout = lazy(() => import("@/apps/professional/layouts/ProfessionalLayout").then((module) => ({ default: module.ProfessionalLayout })));
+const AdminLayout = lazy(() => import("@/apps/admin/layouts/AdminLayout").then((module) => ({ default: module.AdminLayout })));
 
 // Patient pages
-import PatientDashboard from "@/apps/patient/pages/Dashboard";
-import PatientAIAssistant from "@/apps/patient/pages/AIAssistant";
-import PatientSymptomChecker from "@/apps/patient/pages/SymptomChecker";
-import PatientAppointments from "@/apps/patient/pages/Appointments";
-import PatientAppointmentBooking from "@/apps/patient/pages/AppointmentBooking";
-import PatientTelemedicine from "@/apps/patient/pages/Telemedicine";
-import PatientReports from "@/apps/patient/pages/Reports";
-import PatientProfile from "@/apps/patient/pages/Profile";
-import PatientSettings from "@/apps/patient/pages/Settings";
-import PatientNotifications from "@/apps/patient/pages/Notifications";
-import PatientMedicalHistorySetup from "@/apps/patient/pages/MedicalHistorySetup";
+const PatientDashboard = lazy(() => import("@/apps/patient/pages/Dashboard"));
+const PatientAIAssistant = lazy(() => import("@/apps/patient/pages/AIAssistant"));
+const PatientSymptomChecker = lazy(() => import("@/apps/patient/pages/SymptomChecker"));
+const PatientAppointments = lazy(() => import("@/apps/patient/pages/Appointments"));
+const PatientAppointmentBooking = lazy(() => import("@/apps/patient/pages/AppointmentBooking"));
+const PatientTelemedicine = lazy(() => import("@/apps/patient/pages/Telemedicine"));
+const PatientReports = lazy(() => import("@/apps/patient/pages/Reports"));
+const PatientProfile = lazy(() => import("@/apps/patient/pages/Profile"));
+const PatientSettings = lazy(() => import("@/apps/patient/pages/Settings"));
+const PatientNotifications = lazy(() => import("@/apps/patient/pages/Notifications"));
+const PatientMedicalHistorySetup = lazy(() => import("@/apps/patient/pages/MedicalHistorySetup"));
 
 // Professional pages
-import ProfessionalDashboard from "@/apps/professional/pages/Dashboard";
-import ProfessionalPatients from "@/apps/professional/pages/Patients";
-import ProfessionalPatientDetail from "@/apps/professional/pages/PatientDetail";
-import ProfessionalEncounters from "@/apps/professional/pages/Encounters";
-import ProfessionalTelemedicine from "@/apps/professional/pages/Telemedicine";
-import ProfessionalAppointments from "@/apps/professional/pages/Appointments";
-import ProfessionalTranscripts from "@/apps/professional/pages/Transcripts";
-import ProfessionalNotes from "@/apps/professional/pages/Notes";
-import ProfessionalReports from "@/apps/professional/pages/Reports";
-import ProfessionalSettings from "@/apps/professional/pages/Settings";
-import ProfessionalNotifications from "@/apps/professional/pages/Notifications";
+const ProfessionalDashboard = lazy(() => import("@/apps/professional/pages/Dashboard"));
+const ProfessionalPatients = lazy(() => import("@/apps/professional/pages/Patients"));
+const ProfessionalPatientDetail = lazy(() => import("@/apps/professional/pages/PatientDetail"));
+const ProfessionalEncounters = lazy(() => import("@/apps/professional/pages/Encounters"));
+const ProfessionalTelemedicine = lazy(() => import("@/apps/professional/pages/Telemedicine"));
+const ProfessionalAppointments = lazy(() => import("@/apps/professional/pages/Appointments"));
+const ProfessionalTranscripts = lazy(() => import("@/apps/professional/pages/Transcripts"));
+const ProfessionalNotes = lazy(() => import("@/apps/professional/pages/Notes"));
+const ProfessionalReports = lazy(() => import("@/apps/professional/pages/Reports"));
+const ProfessionalSettings = lazy(() => import("@/apps/professional/pages/Settings"));
+const ProfessionalNotifications = lazy(() => import("@/apps/professional/pages/Notifications"));
 
 // Admin pages
-import AdminDashboard from "@/apps/admin/pages/Dashboard";
-import AdminUsers from "@/apps/admin/pages/Users";
-import AdminInvitations from "@/apps/admin/pages/Invitations";
-import AdminFacilities from "@/apps/admin/pages/Facilities";
-import AdminRoles from "@/apps/admin/pages/Roles";
-import AdminTemplates from "@/apps/admin/pages/Templates";
-import AdminAudit from "@/apps/admin/pages/Audit";
-import AdminSettings from "@/apps/admin/pages/Settings";
-import AdminQuickActions from "@/apps/admin/pages/QuickActions";
-import AdminNotifications from "@/apps/admin/pages/Notifications";
-import AdminNotificationTemplates from "@/apps/admin/pages/NotificationTemplates";
+const AdminDashboard = lazy(() => import("@/apps/admin/pages/Dashboard"));
+const AdminUsers = lazy(() => import("@/apps/admin/pages/Users"));
+const AdminInvitations = lazy(() => import("@/apps/admin/pages/Invitations"));
+const AdminFacilities = lazy(() => import("@/apps/admin/pages/Facilities"));
+const AdminRoles = lazy(() => import("@/apps/admin/pages/Roles"));
+const AdminTemplates = lazy(() => import("@/apps/admin/pages/Templates"));
+const AdminAudit = lazy(() => import("@/apps/admin/pages/Audit"));
+const AdminSettings = lazy(() => import("@/apps/admin/pages/Settings"));
+const AdminQuickActions = lazy(() => import("@/apps/admin/pages/QuickActions"));
+const AdminNotifications = lazy(() => import("@/apps/admin/pages/Notifications"));
+const AdminNotificationTemplates = lazy(() => import("@/apps/admin/pages/NotificationTemplates"));
 
 // Not Found
-import NotFound from "./pages/NotFound";
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 
 const queryClient = new QueryClient();
+
+const RouteFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -76,6 +86,7 @@ const App = () => (
       <AuthProvider>
         <AppThemeSync />
         <LanguageProvider>
+          <NotificationRuntime />
           <TooltipProvider>
             <Toaster />
             <Sonner />
@@ -85,9 +96,11 @@ const App = () => (
                 v7_relativeSplatPath: true,
               }}
             >
+              <Suspense fallback={<RouteFallback />}>
               <Routes>
                 {/* Root redirect */}
                 <Route path="/" element={<RoleRedirect />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
 
                 {/* Auth routes */}
                 <Route path="/auth/sign-in" element={<SignIn />} />
@@ -165,6 +178,7 @@ const App = () => (
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </Suspense>
             </BrowserRouter>
           </TooltipProvider>
         </LanguageProvider>

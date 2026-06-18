@@ -139,20 +139,20 @@ export default function AdminUsers() {
         ) : filtered.length > 0 ? (
           <div className="space-y-3">
             {filtered.map((u: any) => (
-              <div key={u.id} className="bg-card rounded-2xl p-4 border border-border flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+              <div key={u.id} className="bg-card rounded-2xl p-4 border border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="w-12 h-12 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
                     {(u.full_name || u.display_name || "?").charAt(0)}
                   </div>
-                  <div>
-                    <p className="font-medium">{u.full_name || u.display_name || "Unnamed"}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{u.full_name || u.display_name || "Unnamed"}</p>
                     <p className="text-xs text-muted-foreground">
                       Joined {new Date(u.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {(u.roles || []).map((role: string) => (
                       <Badge key={role} variant="outline" className={roleStyles[role] || ""}>{role}</Badge>
                     ))}
@@ -165,6 +165,7 @@ export default function AdminUsers() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={() => toggleStatus.mutate({
                       userId: u.user_id,
                       newStatus: u.status === "active" ? "suspended" : "active",

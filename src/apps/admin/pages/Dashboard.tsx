@@ -10,6 +10,8 @@ import { useUserRole } from "@/auth/hooks/useUserRole";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { MetricCard } from "@/components/common/MetricCard";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { useAdminSettings } from "@/shared/hooks/useAdminSettings";
+import type { AuditLog } from "@/shared/types/healthcare";
 import type { LucideIcon } from "lucide-react";
 
 type QuickAction = {
@@ -64,8 +66,11 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { profile } = useUserRole();
+  const { settings } = useAdminSettings();
 
   const displayName = profile?.display_name || profile?.full_name || "Admin";
+  const retentionDays = Number(settings.dataRetentionDays) || 90;
+  const auditCutoffIso = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Fetch counts
   const { data: userCount = 0 } = useQuery({
@@ -105,13 +110,19 @@ export default function AdminDashboard() {
   });
 
   // Recent audit logs
-  const { data: recentLogs = [] } = useQuery({
-    queryKey: ["admin-recent-logs"],
+  const { data: recentLogs = [] } = useQuery<AuditLog[]>({
+    queryKey: ["admin-recent-logs", settings.dataRetentionDays],
     queryFn: async () => {
-      const { data, error } = await supabase.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(5);
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("*")
+        .gte("created_at", auditCutoffIso)
+        .order("created_at", { ascending: false })
+        .limit(5);
       if (error) return [];
-      return data || [];
+      return (data || []) as AuditLog[];
     },
+    enabled: settings.auditLoggingVisible,
   });
 
   // Pending verifications
@@ -202,6 +213,9 @@ export default function AdminDashboard() {
     { label: "Active Facilities", value: facilityCount, icon: Building2, color: "text-accent" },
     { label: "Clinicians", value: proCount, icon: ShieldCheck, color: "text-emerald-400" },
   ];
+  const shouldShowActionAlert =
+    settings.systemAlerts &&
+    (pendingVerifications > 0 || (settings.newRegistrations && pendingInvites > 0));
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -216,7 +230,7 @@ export default function AdminDashboard() {
         <RoleSwitcher currentPath={window.location.pathname} />
 
         {/* Alerts */}
-        {(pendingVerifications > 0 || pendingInvites > 0) && (
+        {shouldShowActionAlert && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-1">
               <Activity className="w-5 h-5 text-yellow-500" />
@@ -226,7 +240,7 @@ export default function AdminDashboard() {
               {pendingVerifications > 0 && (
                 <p>{pendingVerifications} professional(s) awaiting verification.</p>
               )}
-              {pendingInvites > 0 && (
+              {settings.newRegistrations && pendingInvites > 0 && (
                 <p>{pendingInvites} invitation(s) still pending acceptance.</p>
               )}
             </div>
@@ -265,6 +279,7 @@ export default function AdminDashboard() {
         </section>
 
         {/* Recent Activity */}
+        {settings.auditLoggingVisible && (
         <section className="bg-card rounded-2xl p-5 border border-border">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-semibold flex items-center gap-2">
@@ -277,7 +292,7 @@ export default function AdminDashboard() {
           </div>
           {recentLogs.length > 0 ? (
             <div className="space-y-2">
-              {recentLogs.map((log: any) => (
+              {recentLogs.map((log) => (
                 <div key={log.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
                   <div>
                     <p className="text-sm font-medium">{log.action}</p>
@@ -295,6 +310,7 @@ export default function AdminDashboard() {
             <EmptyStateCard icon={ScrollText} title="No recent activity recorded." compact />
           )}
         </section>
+        )}
       </div>
     </div>
   );

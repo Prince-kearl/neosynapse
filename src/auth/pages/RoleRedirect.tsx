@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
+import { getDefaultRouteForRole } from "@/auth/roleRouting";
 import { Loader2 } from "lucide-react";
 
 export default function RoleRedirect() {
@@ -19,7 +20,5 @@ export default function RoleRedirect() {
     return <Navigate to="/auth/sign-in" replace />;
   }
 
-  if (role === "professional") return <Navigate to="/professional/dashboard" replace />;
-  if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
-  return <Navigate to="/patient/dashboard" replace />;
+  return <Navigate to={getDefaultRouteForRole(role)} replace />;
 }

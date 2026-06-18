@@ -6,15 +6,14 @@ import { Switch } from "@/components/ui/switch";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
+import { SUPPORTED_LANGUAGES, useLanguage, type LanguageCode } from "@/contexts/LanguageContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMyProfile } from "@/shared/hooks/useHealthcare";
 import { useAppSettings } from "@/shared/hooks/useHealthcare";
-import { profileService } from "@/shared/services/healthcare";
+import { useAdminSettings } from "@/shared/hooks/useAdminSettings";
 import { appSettingsService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
-import { APP_COLOR_PRESETS, DEFAULT_CUSTOM_PALETTE, type AppColorPresetKey, applyAppThemeSettings } from "@/lib/ui-theme";
+import { APP_COLOR_PRESETS, DEFAULT_CUSTOM_PALETTE, type AppColorPresetKey, type AppThemeSettings, applyAppThemeSettings } from "@/lib/ui-theme";
 
 export default function AdminSettings() {
   const navigate = useNavigate();
@@ -22,7 +21,7 @@ export default function AdminSettings() {
   const { user, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { profile } = useUserRole();
-  const { data: myProfile } = useMyProfile();
+  const { settings: adminSettings, saveSettingsMutation } = useAdminSettings();
   const { data: appSettings } = useAppSettings();
   const [customPalette, setCustomPalette] = useState({
     primary: DEFAULT_CUSTOM_PALETTE.primary,
@@ -31,12 +30,11 @@ export default function AdminSettings() {
     ring: DEFAULT_CUSTOM_PALETTE.ring,
   });
 
-  const settings = ((myProfile?.settings_json as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
   const uiSettings = {
-    systemAlerts: settings.system_alerts !== false,
-    newRegistrations: settings.new_registrations === true,
-    auditLoggingVisible: settings.audit_logging_visible !== false,
-    dataRetentionDays: typeof settings.data_retention_days === "string" ? settings.data_retention_days : "90",
+    systemAlerts: adminSettings.systemAlerts,
+    newRegistrations: adminSettings.newRegistrations,
+    auditLoggingVisible: adminSettings.auditLoggingVisible,
+    dataRetentionDays: adminSettings.dataRetentionDays,
     colorMode: appSettings?.app_color_mode === "custom" ? "custom" : "preset",
     colorPreset: (typeof appSettings?.app_color_preset === "string" ? appSettings.app_color_preset : "medical_green") as AppColorPresetKey,
     uiRadius: typeof appSettings?.app_ui_radius === "string" ? appSettings.app_ui_radius : "0.75rem",
@@ -52,7 +50,7 @@ export default function AdminSettings() {
     app_custom_ring_hex: customPalette.ring,
     app_ui_radius: uiSettings.uiRadius,
     app_ui_scale: uiSettings.uiScale,
-  };
+  } satisfies AppThemeSettings;
 
   useEffect(() => {
     setCustomPalette({
@@ -68,7 +66,7 @@ export default function AdminSettings() {
       const { error } = await appSettingsService.update({
         ...nextAppSettings,
         updated_by: user?.id,
-      } as any);
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -89,22 +87,6 @@ export default function AdminSettings() {
     });
   };
 
-  const saveSettingsMutation = useMutation({
-    mutationFn: async (nextSettings: Record<string, unknown>) => {
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await profileService.updateSettings(user.id, nextSettings);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-      queryClient.invalidateQueries({ queryKey: ["user-profile", user?.id] });
-    },
-    onError: (error) => {
-      toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
-    },
-  });
-
   const persistSettings = (nextSettings: Record<string, unknown>, successMessage?: string) => {
     saveSettingsMutation.mutate(nextSettings, {
       onSuccess: () => {
@@ -112,7 +94,19 @@ export default function AdminSettings() {
           toast({ title: successMessage });
         }
       },
+      onError: (error) => {
+        toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
+      },
     });
+  };
+
+  const handleThemeChange = (theme: string) => {
+    persistSettings({ ...adminSettings.raw, theme }, `Theme set to ${theme}`);
+  };
+
+  const handleLanguageChange = (value: LanguageCode) => {
+    setLanguage(value);
+    persistSettings({ ...adminSettings.raw, language: value }, "Language updated");
   };
 
   return (
@@ -151,7 +145,7 @@ export default function AdminSettings() {
               <Moon className="w-5 h-5 text-muted-foreground" />
               <span className="font-medium">Theme</span>
             </div>
-            <ThemeToggle />
+            <ThemeToggle onThemeChange={handleThemeChange} />
 
             <div className="pt-2 border-t border-border/70 space-y-3">
               <div className="flex items-center gap-3">
@@ -293,7 +287,7 @@ export default function AdminSettings() {
                     value={uiSettings.uiRadius}
                     onValueChange={(value) => {
                       const nextAppSettings = { app_ui_radius: value };
-                      applyAppThemeSettings(nextAppSettings as any);
+                      applyAppThemeSettings(nextAppSettings);
                       persistAppSettings(nextAppSettings, "Corner radius updated");
                     }}
                   >
@@ -314,7 +308,7 @@ export default function AdminSettings() {
                     value={uiSettings.uiScale}
                     onValueChange={(value) => {
                       const nextAppSettings = { app_ui_scale: value };
-                      applyAppThemeSettings(nextAppSettings as any);
+                      applyAppThemeSettings(nextAppSettings);
                       persistAppSettings(nextAppSettings, "Text scale updated");
                     }}
                   >
@@ -352,13 +346,13 @@ export default function AdminSettings() {
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
                   persistSettings(
-                    { ...settings, system_alerts: checked },
+                    { ...adminSettings.raw, system_alerts: checked },
                     checked ? "System alerts enabled" : "System alerts disabled"
                   )
                 }
               />
             </div>
-            <div className="border-t border-border flex items-center justify-between p-4">
+            <div className="border-t border-border flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <div>
@@ -371,7 +365,7 @@ export default function AdminSettings() {
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
                   persistSettings(
-                    { ...settings, new_registrations: checked },
+                    { ...adminSettings.raw, new_registrations: checked },
                     checked ? "Registration alerts enabled" : "Registration alerts disabled"
                   )
                 }
@@ -397,7 +391,7 @@ export default function AdminSettings() {
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
                   persistSettings(
-                    { ...settings, audit_logging_visible: checked },
+                    { ...adminSettings.raw, audit_logging_visible: checked },
                     checked ? "Audit logging details visible" : "Audit logging details hidden"
                   )
                 }
@@ -415,12 +409,12 @@ export default function AdminSettings() {
                 value={uiSettings.dataRetentionDays}
                 onValueChange={(value) =>
                   persistSettings(
-                    { ...settings, data_retention_days: value },
+                    { ...adminSettings.raw, data_retention_days: value },
                     `Data retention set to ${value} days`
                   )
                 }
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger className="w-full sm:w-[120px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -438,19 +432,16 @@ export default function AdminSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Language</h2>
           <div className="bg-card rounded-2xl p-4 border border-border">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Globe className="w-5 h-5 text-muted-foreground" />
                 <span className="font-medium">App Language</span>
               </div>
               <Select
                 value={language}
-                onValueChange={(value) => {
-                  setLanguage(value as typeof language);
-                  toast({ title: "Language updated" });
-                }}
+                onValueChange={(value) => handleLanguageChange(value as LanguageCode)}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
+import { getDefaultRouteForRole, isRouteAllowedForPrimaryRole } from "@/auth/roleRouting";
 import { Loader2, Mail, Lock, Eye, EyeOff, Activity } from "lucide-react";
 
 const signInSchema = z.object({
@@ -28,14 +29,10 @@ export default function SignIn() {
 
   useEffect(() => {
     if (user && !isLoading && !roleLoading && role) {
-      if (from) {
+      if (isRouteAllowedForPrimaryRole(role, from)) {
         navigate(from, { replace: true });
-      } else if (role === "patient") {
-        navigate("/patient/dashboard", { replace: true });
-      } else if (role === "professional") {
-        navigate("/professional/dashboard", { replace: true });
-      } else if (role === "admin") {
-        navigate("/admin/dashboard", { replace: true });
+      } else {
+        navigate(getDefaultRouteForRole(role), { replace: true });
       }
     }
   }, [user, isLoading, roleLoading, role, navigate, from]);
@@ -161,6 +158,13 @@ export default function SignIn() {
               <Link to="/auth/patient-sign-up" className="text-primary font-medium hover:underline">
                 Create an account
               </Link>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Review how health data is handled in our{" "}
+              <Link to="/privacy" className="text-primary font-medium hover:underline">
+                Privacy Policy
+              </Link>
+              .
             </p>
             <p className="text-xs text-muted-foreground">
               Healthcare professionals and administrators are invite-only

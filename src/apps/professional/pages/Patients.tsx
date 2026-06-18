@@ -45,20 +45,20 @@ export default function ProfessionalPatients() {
                 className="bg-card rounded-2xl p-4 border border-border hover:border-primary/50 transition-colors cursor-pointer"
                 onClick={() => navigate(`/professional/patient/${patient.patient_id}`)}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="w-12 h-12 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg">
                       {patient.name.charAt(0)}
                     </div>
-                    <div>
-                      <p className="font-medium text-lg">{patient.name}</p>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-lg">{patient.name}</p>
                       <p className="text-sm text-muted-foreground">
                         {patient.encounterCount} encounter{patient.encounterCount !== 1 ? "s" : ""} • Last: {new Date(patient.lastEncounter).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                       </p>
                       <Badge variant="outline" className="mt-1 text-xs">{patient.lastType}</Badge>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  <ChevronRight className="w-5 h-5 shrink-0 text-muted-foreground" />
                 </div>
               </div>
             ))}

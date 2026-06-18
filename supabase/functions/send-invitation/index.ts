@@ -23,7 +23,27 @@ interface InvitationPayload {
   role: "professional" | "admin";
   invited_by: string;
   facility_id?: string | null;
+  invitation_id?: string;
 }
+
+const getResendErrorMessage = async (response: Response) => {
+  let raw = "";
+  try {
+    raw = await response.text();
+  } catch {
+    raw = "";
+  }
+
+  if (response.status === 403 && raw.includes("verify a domain")) {
+    return "Email delivery is blocked by Resend because the sender domain is not verified for external recipients. The invitation was created; copy and share the invite link manually, or verify a sending domain and set RESEND_FROM_EMAIL.";
+  }
+
+  if (response.status === 403 && raw.includes("You can only send testing emails")) {
+    return "Resend is still in testing mode for this sender. The invitation was created; copy and share the invite link manually, or verify a sending domain and set RESEND_FROM_EMAIL.";
+  }
+
+  return `Resend API error: ${response.status}${raw ? ` - ${raw}` : ""}`;
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -81,7 +101,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, role, invited_by, facility_id }: InvitationPayload = await req.json();
+    const { email, role, invited_by, facility_id, invitation_id }: InvitationPayload = await req.json();
 
     if (!email || !role) {
       return new Response(JSON.stringify({ error: "Email and role are required" }), {
@@ -90,24 +110,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 1. Create the invitation record
-    const { data: invitation, error: insertErr } = await supabaseAdmin
-      .from("invitations")
-      .insert({
-        email,
-        role,
-        invited_by: invited_by || userId,
-        facility_id: facility_id || null,
-      })
-      .select()
-      .single();
+    const normalizedEmail = email.trim().toLowerCase();
+    let invitation;
 
-    if (insertErr) {
-      console.error("Insert error:", insertErr);
-      return new Response(JSON.stringify({ error: insertErr.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (invitation_id) {
+      const { data: existingInvitation, error: invitationErr } = await supabaseAdmin
+        .from("invitations")
+        .select("*")
+        .eq("id", invitation_id)
+        .maybeSingle();
+
+      if (invitationErr || !existingInvitation) {
+        return new Response(JSON.stringify({ error: "Invitation not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      invitation = existingInvitation;
+    } else {
+      // 1. Create the invitation record
+      const { data: createdInvitation, error: insertErr } = await supabaseAdmin
+        .from("invitations")
+        .insert({
+          email: normalizedEmail,
+          role,
+          invited_by: invited_by || userId,
+          facility_id: facility_id || null,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        console.error("Insert error:", insertErr);
+        return new Response(JSON.stringify({ error: insertErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      invitation = createdInvitation;
     }
 
     // 2. Build the invite link
@@ -117,7 +159,7 @@ Deno.serve(async (req) => {
     if (!appUrl) {
       console.warn("APP_URL secret not set — invitation links will use request origin as fallback");
     }
-    const origin = req.headers.get("origin") || appUrl || "https://localhost:3000";
+    const origin = appUrl || req.headers.get("origin") || "https://localhost:3000";
     const inviteLink = `${origin}/auth/invite-accept?token=${invitation.token}`;
 
     // 3. Send the email
@@ -125,6 +167,7 @@ Deno.serve(async (req) => {
     //       Without it, invitations are created but emails are NOT sent.
     //       Get your API key from https://resend.com/api-keys
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const emailFrom = Deno.env.get("RESEND_FROM_EMAIL") || Deno.env.get("EMAIL_FROM") || "Neo Synapse <onboarding@resend.dev>";
     let emailSent = false;
     let emailError: string | null = null;
 
@@ -137,15 +180,14 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            // TODO: Update 'from' to use your verified domain in Resend
-            from: "MedConnect <noreply@resend.dev>",
-            to: [email],
-            subject: `You've been invited to join as a ${role}`,
+            from: emailFrom,
+            to: [invitation.email],
+            subject: `You've been invited to join Neo Synapse as a ${invitation.role}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #1a1a2e; font-size: 24px;">You're Invited!</h1>
+                <h1 style="color: #1a1a2e; font-size: 24px;">You're invited to Neo Synapse</h1>
                 <p style="color: #555; font-size: 16px; line-height: 1.6;">
-                  You've been invited to join MedConnect as a <strong>${role}</strong>.
+                  You've been invited to join Neo Synapse as a <strong>${invitation.role}</strong>.
                 </p>
                 <p style="color: #555; font-size: 16px; line-height: 1.6;">
                   Click the button below to create your account and get started:
@@ -171,8 +213,7 @@ Deno.serve(async (req) => {
         if (emailResponse.ok) {
           emailSent = true;
         } else {
-          const errBody = await emailResponse.text();
-          emailError = `Resend API error: ${emailResponse.status} - ${errBody}`;
+          emailError = await getResendErrorMessage(emailResponse);
           console.error("Email send failed:", emailError);
         }
       } catch (err: unknown) {
@@ -196,10 +237,10 @@ Deno.serve(async (req) => {
     // 5. Log audit event
     await supabaseAdmin.from("audit_logs").insert({
       actor_id: userId,
-      action: emailSent ? "invitation_sent" : "invitation_created_no_email",
+      action: emailSent ? "invitation_sent" : invitation_id ? "invitation_resend_no_email" : "invitation_created_no_email",
       entity_type: "invitation",
       entity_id: invitation.id,
-      metadata: { email, role, email_sent: emailSent, email_error: emailError },
+      metadata: { email: invitation.email, role: invitation.role, email_sent: emailSent, email_error: emailError },
     });
 
     return new Response(JSON.stringify({

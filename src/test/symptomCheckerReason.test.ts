@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isGenericConditionReason, validatePossibleConditionReason } from "@/apps/patient/pages/symptomCheckerUtils";
+import {
+  hasDuplicateConditionReasons,
+  isGenericConditionReason,
+  reasonMirrorsDefinition,
+  validatePossibleConditionReason,
+} from "@/apps/patient/pages/symptomCheckerUtils";
 
 describe("Symptom Checker possible condition reasoning", () => {
   it("validates generated possible_conditions.reason structure from a sample symptom payload", () => {
@@ -66,5 +71,38 @@ describe("Symptom Checker possible condition reasoning", () => {
   it("rejects generic placeholder reasoning", () => {
     expect(isGenericConditionReason("This is a leading possibility based on the symptoms provided.")).toBe(true);
     expect(isGenericConditionReason("This is a plausible possibility, but more information is needed.")).toBe(true);
+  });
+
+  it("detects duplicate condition explanations", () => {
+    const duplicateReason = "Fever and sore throat can fit this condition because both symptoms commonly occur together in respiratory infections.";
+
+    expect(
+      hasDuplicateConditionReasons([
+        { reason: duplicateReason },
+        { reason: duplicateReason },
+      ]),
+    ).toBe(true);
+
+    expect(
+      hasDuplicateConditionReasons([
+        { reason: "Fever and sore throat point toward a viral respiratory illness because they often occur together with fatigue." },
+        { reason: "Chest tightness with cough keeps bronchitis in consideration because airway irritation can cause both symptoms." },
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects reason text that only mirrors the definition", () => {
+    expect(
+      reasonMirrorsDefinition(
+        "Gastritis is inflammation of the stomach lining.",
+        "Gastritis is inflammation of the stomach lining.",
+      ),
+    ).toBe(true);
+    expect(
+      reasonMirrorsDefinition(
+        "Upper abdominal burning after meals can suggest gastritis because stomach-lining irritation often worsens with food or acid.",
+        "Gastritis is inflammation of the stomach lining.",
+      ),
+    ).toBe(false);
   });
 });

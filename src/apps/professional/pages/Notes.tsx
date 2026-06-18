@@ -1,4 +1,4 @@
-import { PenTool, Clock, CheckCircle, Edit, Loader2, Plus, Trash2 } from "lucide-react";
+import { PenTool, Clock, CheckCircle, Edit, Loader2, Plus, Trash2, FileText, Video, ClipboardList, FileCheck } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useProfessionalEncounters, useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { useProfessionalEncounters, useProfessionalNotes, useProfessionalReports, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { clinicalNoteService, medicalReportService, auditLogService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
 import { supabase } from "@/integrations/supabase/client";
+import { buildClinicalNoteMarkdown, buildReportJsonFromClinicalNote, getClinicalNoteTitle } from "@/shared/lib/clinicalNotes";
+import { isReportLinkedToNote } from "@/shared/lib/reports";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
 const statusConfig: Record<string, string> = {
   draft: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
@@ -23,11 +26,13 @@ const statusConfig: Record<string, string> = {
 export default function ProfessionalNotes() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { settings } = useProfessionalSettings();
   const queryClient = useQueryClient();
   const { noteId } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: encounters = [] } = useProfessionalEncounters();
   const { data: notes = [], isLoading } = useProfessionalNotes();
+  const { data: reports = [] } = useProfessionalReports();
   const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
   const filteredNotes = encounterFilterId
@@ -45,6 +50,9 @@ export default function ProfessionalNotes() {
   const reviewNotes = filteredNotes.filter((n: any) => n.status === "review");
   const finalizedNotes = filteredNotes.filter((n: any) => n.status === "finalized");
   const selectedNote = noteId ? notes.find((n: any) => n.id === noteId) : null;
+  const selectedNoteReport = selectedNote
+    ? reports.find((report: any) => isReportLinkedToNote(report, selectedNote.id) || report.encounter_id === selectedNote.encounter_id)
+    : null;
   const defaultTab = encounterFilterId && reviewNotes.length > 0 && draftNotes.length === 0 ? "review" : "draft";
   const [noteEditorText, setNoteEditorText] = useState("{}");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -177,14 +185,14 @@ export default function ProfessionalNotes() {
     const patientId = note?.encounters?.patient_id;
     if (!patientId) return;
 
-    const reportPayload = {
-      status: "finalized",
-      source: "clinical_note_finalized",
-      note_id: note.id,
-      encounter_id: note.encounter_id,
-      generated_at: new Date().toISOString(),
-      clinical_note: finalJson,
-    };
+    const reportPayload = buildReportJsonFromClinicalNote({
+      noteId: note.id,
+      encounterId: note.encounter_id,
+      finalJson,
+      patientName: nameMap[patientId] || "Patient",
+      doctorName: user?.email || "Healthcare professional",
+      encounterType: note?.encounters?.encounter_type || "Consultation",
+    });
 
     const { data: existingReports, error: existingError } = await medicalReportService.getForEncounter(note.encounter_id);
     if (existingError) {
@@ -193,7 +201,11 @@ export default function ProfessionalNotes() {
     }
 
     if (existingReports && existingReports.length > 0) {
-      const targetReport = existingReports[0];
+      const targetReport =
+        existingReports.find((report: any) => {
+          const json = report.report_json as Record<string, unknown> | null;
+          return json?.note_id === note.id || report.report_type === "clinical_summary";
+        }) || existingReports[0];
       const { error } = await medicalReportService.update(targetReport.id, {
         report_json: {
           ...(targetReport.report_json as Record<string, unknown> | null),
@@ -277,6 +289,13 @@ export default function ProfessionalNotes() {
     }
 
     setIsSubmittingReview(true);
+    const { error: saveError } = await clinicalNoteService.updateDraft(selectedNote.id, parsed);
+    if (saveError) {
+      setIsSubmittingReview(false);
+      toast({ title: "Failed to save draft", description: saveError.message, variant: "destructive" });
+      return;
+    }
+
     const { error } = await clinicalNoteService.submitForReview(selectedNote.id);
     setIsSubmittingReview(false);
 
@@ -551,6 +570,19 @@ export default function ProfessionalNotes() {
                   <span>•</span>
                   <span>Status: {selectedNote.status}</span>
                 </div>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">{getClinicalNoteTitle(selectedNote.final_json ?? selectedNote.draft_json)}</h3>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                    {buildClinicalNoteMarkdown(selectedNote.final_json ?? selectedNote.draft_json ?? {}, {
+                      patientName: selectedNote.encounters?.patient_id ? nameMap[selectedNote.encounters.patient_id] : "Patient",
+                      doctorName: user?.email || "Healthcare professional",
+                      encounterType: selectedNote.encounters?.encounter_type || "Consultation",
+                    })}
+                  </div>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                     <SelectTrigger className="sm:w-72">
@@ -603,25 +635,49 @@ export default function ProfessionalNotes() {
                     {isDeletingNote ? "Deleting..." : "Delete Note"}
                   </Button>
                 </div>
-                <TransitionTimeline
-                  title="Note Transition History"
-                  events={selectedNoteAuditTimeline}
-                  emptyLabel="No note transitions recorded yet."
-                />
-                <div className="flex gap-2">
+                {settings.activityLoggingVisible && (
+                  <TransitionTimeline
+                    title="Note Transition History"
+                    events={selectedNoteAuditTimeline}
+                    emptyLabel="No note transitions recorded yet."
+                  />
+                )}
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/professional/encounters?encounterId=${selectedNote.encounter_id}`)}
                   >
+                    <ClipboardList className="mr-2 h-4 w-4" />
                     Open Encounter
                   </Button>
+                  {selectedNote.encounters?.encounter_type === "telemedicine" && selectedNote.status !== "finalized" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/professional/telemedicine?encounterId=${selectedNote.encounter_id}`)}
+                    >
+                      <Video className="mr-2 h-4 w-4" />
+                      Open Call
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={() => navigate(`/professional/transcripts?encounterId=${selectedNote.encounter_id}`)}
                   >
+                    <FileText className="mr-2 h-4 w-4" />
                     Open Transcript Queue
                   </Button>
+                  {selectedNoteReport && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/professional/reports/${selectedNoteReport.id}`)}
+                    >
+                      <FileCheck className="mr-2 h-4 w-4" />
+                      Open Synced Report
+                    </Button>
+                  )}
                 </div>
               </>
             )}
@@ -629,7 +685,7 @@ export default function ProfessionalNotes() {
         )}
 
         <Tabs defaultValue={defaultTab}>
-          <TabsList className="bg-muted">
+          <TabsList className="h-auto flex-wrap justify-start bg-muted">
             <TabsTrigger value="draft" className="gap-2">
               <PenTool className="w-4 h-4" />
               Drafts ({draftNotes.length})

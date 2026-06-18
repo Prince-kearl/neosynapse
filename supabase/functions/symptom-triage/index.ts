@@ -77,6 +77,47 @@ function isTemplatedReason(reason: string): boolean {
   return templatedReasonPatterns.some((pattern) => pattern.test(reason));
 }
 
+function normalizeClinicalText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function reasonMirrorsDefinition(reason: unknown, definition: unknown): boolean {
+  if (typeof reason !== "string" || typeof definition !== "string") return false;
+  const normalizedReason = normalizeClinicalText(reason);
+  const normalizedDefinition = normalizeClinicalText(definition);
+  return normalizedReason.length > 0 && normalizedReason === normalizedDefinition;
+}
+
+function hasDuplicateReasons(conditions: any[]): boolean {
+  const seen = new Set<string>();
+  return conditions.some((condition) => {
+    if (typeof condition?.reason !== "string") return false;
+    const normalized = normalizeClinicalText(condition.reason);
+    if (!normalized) return false;
+    if (seen.has(normalized)) return true;
+    seen.add(normalized);
+    return false;
+  });
+}
+
+function hasInvalidConditionReasons(result: unknown): boolean {
+  if (!shouldRewriteReasons(result)) return false;
+  const conditions = (result as any).possible_conditions;
+  return (
+    hasDuplicateReasons(conditions) ||
+    conditions.some((condition: any) =>
+      typeof condition.reason !== "string" ||
+      condition.reason.trim().length < 50 ||
+      isTemplatedReason(condition.reason) ||
+      reasonMirrorsDefinition(condition.reason, condition.definition)
+    )
+  );
+}
+
 function shouldRewriteReasons(result: unknown): result is { possible_conditions: Array<{ name?: string; likelihood?: string; reason?: string }> } {
   return (
     typeof result === "object" && result !== null &&
@@ -97,6 +138,7 @@ function isCompleteCondition(condition: any): boolean {
     typeof condition.causes === "string" && condition.causes.trim().length > 0 &&
     typeof condition.symptoms === "string" && condition.symptoms.trim().length > 0 &&
     typeof condition.treatments === "string" && condition.treatments.trim().length > 0 &&
+    typeof condition.first_aid === "string" && condition.first_aid.trim().length > 0 &&
     Array.isArray(condition.sources) && condition.sources.length > 0 &&
     condition.sources.every((source: any) => typeof source === "string" && source.trim().length > 0)
   );
@@ -125,10 +167,12 @@ async function rewriteIncompleteResult(
 
 REWRITE PASS:
 - Return the same full triage result object.
-- Ensure every possible_conditions entry includes name, likelihood, reason, definition, causes, symptoms, treatments, and sources.
+- Ensure every possible_conditions entry includes name, likelihood, reason, definition, causes, symptoms, treatments, first_aid, and sources.
 - Do not omit or remove any of those fields.
 - Preserve the same urgency, summary, recommended_action, questions, and warning_signs values.
 - If a field is missing in a condition, add it with a concise and clinically accurate value.
+- If reasons are duplicated, generic, or identical to definitions, rewrite them into unique symptom-specific explanations.
+- Add practical first_aid instructions for each condition: safe self-care steps the patient can take now, plus when to seek urgent help.
 - Return the result using the triage_assessment function call only.`;
 
   const response = await fetch(provider.url, {
@@ -207,13 +251,15 @@ async function rewriteGenericReasons(
   const rewritePrompt = `${systemPrompt}
 
 REWRITE PASS:
-- Rewrite only the reason field for each item in possible_conditions.
+- Rewrite only the reason and first_aid fields for each item in possible_conditions.
 - Keep urgency, summary, recommended_action, questions, and warning_signs unchanged.
 - Replace placeholder or generic reason text with symptom-specific clinical reasoning.
 - Do not use general phrases such as "This is a leading possibility based on the symptoms provided." or "This is a plausible possibility, but more information is needed."
 - Each reason must explicitly reference the reported symptoms and explain why the condition is being considered.
 - Each reason should explain why the assigned likelihood is high, medium, or low.
 - Do not repeat the same wording across multiple conditions.
+- Do not copy the condition definition into the reason.
+- Each first_aid field must give practical immediate self-care steps specific to that condition and must not replace professional care.
 - Reasons must read like a clinician explaining the symptoms to a patient.
 - If the previous result contains all condition names and likelihoods, preserve them exactly.
 - Return the same JSON structure using the triage_assessment function call only.`;
@@ -265,11 +311,7 @@ async function ensureConditionReasons(
 ) {
   if (
     shouldRewriteReasons(result) &&
-    (result as any).possible_conditions.some((condition: any) =>
-      typeof condition.reason !== "string" ||
-      condition.reason.trim().length < 30 ||
-      isTemplatedReason(condition.reason)
-    )
+    hasInvalidConditionReasons(result)
   ) {
     const rewritten = await rewriteGenericReasons(provider, systemPrompt, userMessage, result);
     if (rewritten && shouldRewriteReasons(rewritten)) {
@@ -304,9 +346,10 @@ const triageTool = {
               causes: { type: "string" },
               symptoms: { type: "string" },
               treatments: { type: "string" },
+              first_aid: { type: "string" },
               sources: { type: "array", items: { type: "string" } },
             },
-            required: ["name", "likelihood", "reason", "definition", "causes", "symptoms", "treatments", "sources"],
+            required: ["name", "likelihood", "reason", "definition", "causes", "symptoms", "treatments", "first_aid", "sources"],
           },
         },
         recommended_action: { type: "string" },
@@ -326,7 +369,7 @@ serve(async (req) => {
   }
 
   try {
-    const { symptoms, age, gender, language, medicalHistoryContext } = await req.json();
+    const { symptoms, age, gender, language, medicalHistoryContext, assessmentFor, patientContext, patientName } = await req.json();
     const provider = resolveProvider();
 
     const systemPrompt = `
@@ -355,11 +398,12 @@ For EVERY condition you suggest, you MUST provide:
 5. Common causes or risk factors
 6. Key symptoms that support the condition
 7. Typical treatments or management approaches
-8. Trusted medical sources or organizations
+8. First aid or immediate self-care instructions the patient can follow safely now
+9. Trusted medical sources or organizations
 
 The reasoning is the most important part.
 
-Each condition object must include all of the keys listed above. Do not omit definition, causes, symptoms, treatments, or sources.
+Each condition object must include all of the keys listed above. Do not omit definition, causes, symptoms, treatments, first_aid, or sources.
 If any of these fields are missing, the response is invalid and must be rewritten before returning.
 
 The reasoning must:
@@ -372,6 +416,7 @@ The reasoning must:
 - Read like a doctor’s explanation to a patient.
 - Be unique for every condition.
 - Be dynamically generated from the patient’s symptoms.
+- Be different from the definition field.
 
 DO NOT use generic explanations.
 
@@ -412,6 +457,7 @@ A patient reading the explanation should immediately understand:
 - Which of their symptoms support the condition
 - Why the condition is being considered
 - Why it received its likelihood ranking
+- What immediate first aid or self-care is appropriate while monitoring symptoms
 
 Example:
 
@@ -443,6 +489,8 @@ Return:
 
 "treatments": "Typical treatments or management approaches.",
 
+"first_aid": "Immediate self-care steps and when to seek urgent help.",
+
 "sources": ["Trusted medical source 1", "Trusted medical source 2"]
 
 }
@@ -451,7 +499,7 @@ Return:
 
 }
 
-Ensure every condition object includes definition, causes, symptoms, treatments, and sources in the returned JSON.
+Ensure every condition object includes definition, causes, symptoms, treatments, first_aid, and sources in the returned JSON.
 
 # **=================================================================**
 ** ****ADDITIONAL RULES**
@@ -461,17 +509,24 @@ Ensure every condition object includes definition, causes, symptoms, treatments,
 - If symptoms only partially support a condition, explain the uncertainty.
 - Avoid repeating identical wording across conditions.
 - Every condition should have a different explanation.
+- Every condition should have condition-specific first-aid guidance.
 - Reasons should typically be 2-5 sentences long.
 - The explanation should feel like it was written by a clinician reviewing the patient’s symptoms.
 
 `;
-    const userMessage = `Patient Info:
-- Age: ${age || "unknown"}
-- Gender: ${gender || "unknown"}
-${medicalHistoryContext ? `Medical History: ${medicalHistoryContext}
-` : ""}Reported Symptoms: ${symptoms}
+    const assessmentNotice =
+      assessmentFor === "self"
+        ? "This assessment is for the authenticated patient themselves."
+        : assessmentFor === "other"
+          ? "This assessment is for another person." +
+            (patientName ? ` Name: ${patientName}.` : "") +
+            (patientContext ? " Additional patient details: " + patientContext : "")
+          : "This assessment is for a patient.";
 
-Use these symptoms to generate possible conditions. Each condition must include a clinician-style reason that references the reported symptoms and explains the assigned likelihood. Do not provide generic disease overviews or template language.`;
+    const medicalHistorySection = medicalHistoryContext ? `Medical History: ${medicalHistoryContext}\n` : "";
+    const patientProfileSection = patientContext ? `Patient Profile: ${patientContext}\n` : "";
+    const patientNameSection = patientName ? `Patient Name: ${patientName}\n` : "";
+    const userMessage = `Patient Info:\n- Age: ${age || "unknown"}\n- Gender: ${gender || "unknown"}\n${assessmentNotice}\n${patientNameSection}${medicalHistorySection}${patientProfileSection}Reported Symptoms: ${symptoms}\n\nUse these symptoms to generate possible conditions. Each condition must include a unique clinician-style reason that references the reported symptoms, explains the assigned likelihood, and shows how the symptom pattern supports that condition. The reason must not be identical to the definition and must not be reused across conditions. Each condition must also include first_aid with safe immediate self-care steps for the patient. Do not provide generic disease overviews or template language.`;
 
     console.log(`[symptom-triage] Using provider: ${provider.tag}, model: ${provider.model}`);
 

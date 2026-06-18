@@ -237,12 +237,12 @@ export default function AdminTemplates() {
                 {(data?.recentReports?.length || 0) > 0 ? (
                   <div className="space-y-2">
                     {data?.recentReports?.map((report: any) => (
-                      <div key={report.id} className="rounded-xl border border-border p-3 flex items-center justify-between">
-                        <div>
+                      <div key={report.id} className="rounded-xl border border-border p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-medium text-sm capitalize">{report.report_type || "general"}</p>
                           <p className="text-xs text-muted-foreground">{report.id.slice(0, 8)}...</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
                           {new Date(report.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                         </span>
                       </div>
@@ -258,12 +258,12 @@ export default function AdminTemplates() {
                 {(data?.recentNotes?.length || 0) > 0 ? (
                   <div className="space-y-2">
                     {data?.recentNotes?.map((note: any) => (
-                      <div key={note.id} className="rounded-xl border border-border p-3 flex items-center justify-between">
-                        <div>
+                      <div key={note.id} className="rounded-xl border border-border p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="font-medium text-sm capitalize">{note.status || "draft"}</p>
                           <p className="text-xs text-muted-foreground">{note.id.slice(0, 8)}...</p>
                         </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
                           {new Date(note.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                         </span>
                       </div>

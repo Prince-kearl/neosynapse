@@ -1,7 +1,11 @@
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
-export function ThemeToggle() {
+type ThemeToggleProps = {
+  onThemeChange?: (theme: string) => void;
+};
+
+export function ThemeToggle({ onThemeChange }: ThemeToggleProps) {
   const { theme, setTheme } = useTheme();
 
   const options = [
@@ -15,7 +19,10 @@ export function ThemeToggle() {
       {options.map((option) => (
         <button
           key={option.value}
-          onClick={() => setTheme(option.value)}
+          onClick={() => {
+            setTheme(option.value);
+            onThemeChange?.(option.value);
+          }}
           className="flex flex-col items-center gap-2 flex-1"
         >
           <div

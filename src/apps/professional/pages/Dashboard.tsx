@@ -16,10 +16,14 @@ import {
 import { MetricCard } from "@/components/common/MetricCard";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { ProfessionalHeroCarousel } from "@/apps/professional/components/ProfessionalHeroCarousel";
+import { compareSessionState, getSessionStateMeta, isActiveSessionState } from "@/shared/lib/sessionStates";
+import { cn } from "@/lib/utils";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
 export default function ProfessionalDashboard() {
   const navigate = useNavigate();
   const { profile } = useUserRole();
+  const { settings } = useProfessionalSettings();
   const [quickStatsIndex, setQuickStatsIndex] = useState(0);
 
   const displayName = profile?.full_name || profile?.display_name || "Doctor";
@@ -28,8 +32,14 @@ export default function ProfessionalDashboard() {
   const { data: notes = [] } = useProfessionalNotes();
   const { data: patients = [] } = useAssignedPatients();
 
-  const activeEncounters = encounters.filter((e: any) => ["pending", "in_progress"].includes(e.status));
-  const todayQueue = activeEncounters.slice(0, 3);
+  const activeEncounters = encounters.filter((e: any) => isActiveSessionState(e.status));
+  const todayQueue = [...activeEncounters]
+    .sort((a: any, b: any) => {
+      const stateOrder = compareSessionState(a.status, b.status);
+      if (stateOrder !== 0) return stateOrder;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    })
+    .slice(0, 3);
   const patientIds = todayQueue.map((e: any) => e.patient_id);
   const { data: nameMap = {} } = useProfileNames(patientIds);
 
@@ -51,7 +61,7 @@ export default function ProfessionalDashboard() {
   }, [quickStats.length]);
 
   // Check for high-urgency triage in active encounters
-  const hasUrgentAlert = activeEncounters.some((e: any) => e.status === "pending");
+  const hasUrgentAlert = settings.patientAlerts && activeEncounters.some((e: any) => e.status === "pending");
 
   return (
     <div className="flex-1 min-h-screen bg-background">
@@ -116,7 +126,7 @@ export default function ProfessionalDashboard() {
               {todayQueue.map((item: any) => (
                 <div key={item.id} className="flex items-start sm:items-center justify-between gap-3 p-3 bg-muted/30 rounded-xl min-w-0">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                    <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-semibold", getSessionStateMeta(item.status).avatarClassName)}>
                       {(nameMap[item.patient_id] || "P").charAt(0)}
                     </div>
                     <div className="min-w-0">
@@ -128,10 +138,8 @@ export default function ProfessionalDashboard() {
                     <p className="text-sm font-medium">
                       {new Date(item.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                     </p>
-                    <Badge variant="outline" className={
-                      item.status === "pending" ? "border-yellow-500/50 text-yellow-500" : "border-primary/50 text-primary"
-                    }>
-                      {item.status.replace("_", " ")}
+                    <Badge variant="outline" className={cn("whitespace-nowrap", getSessionStateMeta(item.status).badgeClassName)}>
+                      {getSessionStateMeta(item.status).label}
                     </Badge>
                   </div>
                 </div>
@@ -147,7 +155,7 @@ export default function ProfessionalDashboard() {
           <h2 className="font-display text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <button
-              onClick={() => navigate("/professional/telemedicine")}
+              onClick={() => navigate("/professional/appointments?tab=upcoming")}
               className="bg-card rounded-2xl p-4 shadow-food-card border border-border text-left hover:border-primary/50 transition-colors"
             >
               <Video className="w-8 h-8 text-primary mb-2" />

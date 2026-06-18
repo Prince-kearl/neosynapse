@@ -1,11 +1,7 @@
-import React, { useRef } from "react";
-// You may need to install html2pdf.js and marked:
-// npm install html2pdf.js marked
-import html2pdf from "html2pdf.js";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Share2, Download } from "lucide-react";
-import { marked } from "marked";
 
 interface MedicalReportToolsProps {
   markdown: string;
@@ -14,10 +10,21 @@ interface MedicalReportToolsProps {
 
 export const MedicalReportTools: React.FC<MedicalReportToolsProps> = ({ markdown, json }) => {
   const reportRef = useRef<HTMLDivElement>(null);
-  const htmlContent = marked.parse(markdown);
+  const [htmlContent, setHtmlContent] = useState("");
 
-  const handleDownloadPDF = () => {
+  useEffect(() => {
+    let mounted = true;
+    void import("marked").then(({ marked }) => {
+      if (mounted) setHtmlContent(marked.parse(markdown) as string);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [markdown]);
+
+  const handleDownloadPDF = async () => {
     if (!reportRef.current) return;
+    const { default: html2pdf } = await import("html2pdf.js");
     const fileName = `ai-medical-report-${new Date().toISOString().slice(0, 10)}.pdf`;
     html2pdf().from(reportRef.current).set({ filename: fileName }).save();
   };
@@ -34,26 +41,27 @@ export const MedicalReportTools: React.FC<MedicalReportToolsProps> = ({ markdown
     };
 
     try {
+      const { default: html2pdf } = await import("html2pdf.js");
       const pdfBlob = await html2pdf().from(reportRef.current).set(opt).outputPdf("blob");
       const file = new File([pdfBlob], fileName, { type: "application/pdf" });
 
       if (!navigator.share) {
         toast({ title: "Share not supported", description: "Downloading PDF instead." });
-        handleDownloadPDF();
+        await handleDownloadPDF();
         return;
       }
 
       const canShareFile = (navigator as any).canShare?.({ files: [file] }) ?? true;
       if (!canShareFile) {
         toast({ title: "Share not supported", description: "Downloading PDF instead." });
-        handleDownloadPDF();
+        await handleDownloadPDF();
         return;
       }
 
       await navigator.share({ title: "AI Medical Report", files: [file] });
     } catch {
       toast({ title: "Share unavailable", description: "Downloading PDF instead." });
-      handleDownloadPDF();
+      await handleDownloadPDF();
     }
   };
 

@@ -1,0 +1,21 @@
+name: Notify Appointments Due (scheduled)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # run every 5 minutes
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger notify-appointments-due
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          echo "Calling notify-appointments-due..."
+          curl -s -X POST "$SUPABASE_URL/functions/v1/notify-appointments-due" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}' | jq '.'

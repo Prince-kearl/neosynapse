@@ -3,39 +3,95 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useProfessionalEncounters, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { useProfessionalEncounters, useProfessionalNotes, useProfileNames } from "@/shared/hooks/useHealthcare";
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import {
+  SESSION_STATE_META,
+  compareSessionState,
+  getSessionStateMeta,
+  isActiveSessionState,
+  normalizeSessionState,
+  type SessionState,
+} from "@/shared/lib/sessionStates";
+import { cn } from "@/lib/utils";
 
-const statusConfig: Record<string, string> = {
-  pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  in_progress: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  completed: "bg-green-500/10 text-green-500 border-green-500/20",
-  cancelled: "bg-destructive/10 text-destructive border-destructive/20",
-};
+const stateTabs: Array<{ value: "all" | SessionState; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "pending", label: SESSION_STATE_META.pending.label },
+  { value: "in_progress", label: SESSION_STATE_META.in_progress.label },
+  { value: "completed", label: SESSION_STATE_META.completed.label },
+  { value: "cancelled", label: SESSION_STATE_META.cancelled.label },
+];
 
 export default function ProfessionalEncounters() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: encounters = [], isLoading } = useProfessionalEncounters();
+  const { data: notes = [] } = useProfessionalNotes();
   const encounterFilterId = searchParams.get("encounterId")?.trim() || null;
 
   const filteredEncounters = encounterFilterId
     ? encounters.filter((e: any) => e.id === encounterFilterId)
     : encounters;
 
-  const patientIds = filteredEncounters.map((e: any) => e.patient_id);
+  const sortedEncounters = [...filteredEncounters].sort((a: any, b: any) => {
+    const stateOrder = compareSessionState(a.status, b.status);
+    if (stateOrder !== 0) return stateOrder;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const patientIds = sortedEncounters.map((e: any) => e.patient_id);
   const { data: nameMap = {} } = useProfileNames(patientIds);
 
-  const activeEncounters = filteredEncounters.filter((e: any) => ["pending", "in_progress"].includes(e.status));
-  const completedEncounters = filteredEncounters.filter((e: any) => ["completed", "cancelled"].includes(e.status));
-  const defaultTab = encounterFilterId && completedEncounters.length > 0 && activeEncounters.length === 0 ? "completed" : "active";
+  const stateCounts = sortedEncounters.reduce<Record<string, number>>(
+    (acc, enc: any) => {
+      const state = normalizeSessionState(enc.status);
+      acc.all += 1;
+      acc[state] = (acc[state] || 0) + 1;
+      return acc;
+    },
+    { all: 0, pending: 0, in_progress: 0, completed: 0, cancelled: 0, unknown: 0 },
+  );
 
-  const EncounterCard = ({ enc, isActive }: { enc: any; isActive: boolean }) => (
+  const defaultTab =
+    encounterFilterId && sortedEncounters.length === 1
+      ? normalizeSessionState(sortedEncounters[0].status)
+      : "all";
+
+  const noteCountByEncounter = notes.reduce<Record<string, number>>((acc: Record<string, number>, note: any) => {
+    acc[note.encounter_id] = (acc[note.encounter_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const renderStateContent = (state: "all" | SessionState) => {
+    const list = state === "all"
+      ? sortedEncounters
+      : sortedEncounters.filter((enc: any) => normalizeSessionState(enc.status) === state);
+
+    if (isLoading) {
+      return (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
+    if (list.length === 0) {
+      const title = state === "all" ? "No encounters" : `No ${stateTabs.find((tab) => tab.value === state)?.label.toLowerCase()} sessions`;
+      return <EmptyStateCard icon={ClipboardList} title={title} compact />;
+    }
+
+    return list.map((enc: any) => (
+      <EncounterCard key={enc.id} enc={enc} />
+    ));
+  };
+
+  const EncounterCard = ({ enc }: { enc: any }) => (
     <div className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          <div className={`w-12 h-12 rounded-full ${isActive ? "bg-primary/10" : "bg-muted"} flex items-center justify-center ${isActive ? "text-primary" : "text-muted-foreground"} font-semibold`}>
+          <div className={cn("w-12 h-12 rounded-full flex items-center justify-center font-semibold", getSessionStateMeta(enc.status).avatarClassName)}>
             {(nameMap[enc.patient_id] || "P").charAt(0)}
           </div>
           <div className="min-w-0">
@@ -48,11 +104,30 @@ export default function ProfessionalEncounters() {
             </p>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <Badge className={`whitespace-nowrap ${statusConfig[enc.status] || statusConfig.pending}`}>
-            {enc.status.replace("_", " ")}
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+          <Badge variant="outline" className={cn("whitespace-nowrap", getSessionStateMeta(enc.status).badgeClassName)}>
+            {getSessionStateMeta(enc.status).label}
           </Badge>
-          {isActive && enc.encounter_type === "telemedicine" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => navigate(`/professional/notes?encounterId=${enc.id}`)}
+          >
+            <FileText className="w-4 h-4 mr-1" />
+            Notes{noteCountByEncounter[enc.id] ? ` (${noteCountByEncounter[enc.id]})` : ""}
+          </Button>
+          {enc.encounter_type === "telemedicine" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => navigate(`/professional/transcripts?encounterId=${enc.id}`)}
+            >
+              Transcript
+            </Button>
+          )}
+          {isActiveSessionState(enc.status) && enc.encounter_type === "telemedicine" && (
             <Button size="sm" className="shrink-0" onClick={() => navigate(`/professional/telemedicine?encounterId=${enc.id}`)}>
               <Video className="w-4 h-4 mr-1" /> Join
             </Button>
@@ -82,44 +157,20 @@ export default function ProfessionalEncounters() {
         )}
 
         <Tabs defaultValue={defaultTab}>
-          <TabsList className="bg-muted">
-            <TabsTrigger value="active" className="gap-2">
-              <Clock className="w-4 h-4" />
-              Active ({activeEncounters.length})
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Completed ({completedEncounters.length})
-            </TabsTrigger>
+          <TabsList className="h-auto flex-wrap justify-start bg-muted">
+            {stateTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
+                {tab.value === "all" ? <ClipboardList className="w-4 h-4" /> : SESSION_STATE_META[tab.value].isTerminal ? <FileText className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                {tab.label} ({stateCounts[tab.value] || 0})
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="active" className="mt-6 space-y-4">
-            {isLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : activeEncounters.length > 0 ? (
-              activeEncounters.map((enc: any) => (
-                <EncounterCard key={enc.id} enc={enc} isActive />
-              ))
-            ) : (
-              <EmptyStateCard icon={ClipboardList} title="No active encounters" compact />
-            )}
-          </TabsContent>
-
-          <TabsContent value="completed" className="mt-6 space-y-4">
-            {isLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : completedEncounters.length > 0 ? (
-              completedEncounters.map((enc: any) => (
-                <EncounterCard key={enc.id} enc={enc} isActive={false} />
-              ))
-            ) : (
-              <EmptyStateCard icon={ClipboardList} title="No completed encounters" compact />
-            )}
-          </TabsContent>
+          {stateTabs.map((tab) => (
+            <TabsContent key={tab.value} value={tab.value} className="mt-6 space-y-4">
+              {renderStateContent(tab.value)}
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
     </div>

@@ -28,9 +28,9 @@ export function useUserRole() {
       return data as Profile | null;
     },
     enabled: !!user,
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   // Fetch all roles from user_roles table (multi-role support)
@@ -52,9 +52,9 @@ export function useUserRole() {
       return (data || []).map((r) => r.role as UserRole);
     },
     enabled: !!user,
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -81,7 +81,10 @@ export function useUserRole() {
     };
   }, [user, queryClient]);
 
-  const roles = userRoles || [];
+  const roles = Array.from(new Set([
+    ...(userRoles || []),
+    ...(profile?.role ? [profile.role as UserRole] : []),
+  ]));
   // Primary role for backward compatibility (priority: admin > professional > patient)
   const role: UserRole | null = roles.includes("admin")
     ? "admin"

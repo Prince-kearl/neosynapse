@@ -1,6 +1,6 @@
 # NeoSynapse — Project Documentation
 
-> **Last updated:** 10 June 2026  
+> **Last updated:** 18 June 2026  
 > This file is the single source of truth for the NeoSynapse platform. Update it whenever features, workflows, stack decisions, or database schemas change.
 
 ---
@@ -131,7 +131,13 @@ NeoSynapse is a multi-role healthcare platform designed for use in Ghana. It con
 3. **Push notifications (production-critical)**
   - Implemented `src/mobile/pushNotifications.ts` to request permissions, register token, and attach listeners.
   - Implemented Supabase persistence via `auth.user_metadata.mobile_push_tokens` (deduped token list with platform/version/timestamp).
-  - Remaining setup: configure APNs (iOS) and Firebase Cloud Messaging (Android) credentials for real delivery.
+  - Implemented APNs/FCM-free fallback mode: native apps surface in-app notifications while open and do not attempt remote token registration unless native remote push is explicitly enabled.
+  - Implemented `src/components/NotificationRuntime.tsx` as the realtime fallback surface for `user_notifications`, with toast alerts, deep-link actions, vibration, and short alert tones for urgent/appointment/telemedicine events.
+  - Implemented `supabase/functions/send-push-notification` fallback writes to `user_notifications` before trying APNs/FCM, so remote push provider gaps do not drop alerts.
+  - iOS APNs native wiring is configured in `ios/App/App/App.entitlements`, `ios/App/App.xcodeproj/project.pbxproj`, and `ios/App/App/AppDelegate.swift`.
+  - iOS APNs server delivery uses Apple token-based auth from Supabase secrets (`APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY`, `APNS_TOPIC`, optional `APNS_ENVIRONMENT`).
+  - Remaining Android setup: configure Firebase Cloud Messaging credentials for real Android background delivery.
+  - Re-enable native remote registration later with `VITE_ENABLE_IOS_APNS=true`, `VITE_ENABLE_ANDROID_FCM=true`, or `VITE_ENABLE_NATIVE_REMOTE_PUSH=true` once the provider accounts and server secrets are ready.
 4. **Native browser handoff for external links**
   - Use `@capacitor/browser` for trusted external URLs where in-app context should remain controlled.
 5. **Device metadata and diagnostics**
@@ -387,7 +393,7 @@ Structured, single-purpose urgent triage tool.
 4. Result screen displays:
    - **Urgency badge** — `non-urgent` | `needs-attention` | `urgent` | `emergency` (colour-coded).
    - **Summary** paragraph.
-   - **Possible conditions** list (up to 3) with likelihood tags.
+   - **Possible conditions** list (up to 3) with likelihood tags, medical definitions, unique symptom-specific reasoning, likely causes, supporting symptoms, first-aid instructions, treatment context, and sources.
    - **Recommended action**.
    - **Warning signs** to watch for.
    - **Follow-up questions** for the doctor.
@@ -419,7 +425,7 @@ Localised in: English, Twi, Ga, Ewe, Hausa.
 - **Reason for visit:** Free-text input; triggers high-risk keyword detection (chest pain, shortness of breath, etc.).
 - **Priority selection:** Routine → Priority → Urgent → Emergency. High-risk cases display warning banner recommending urgent/emergency.
 - **Booking summary:** Shows doctor name, date/time, and priority before confirmation.
-- On confirm: Creates appointment with `status = "pending"`; sends alert notification to doctor if urgent/emergency.
+- On confirm: Creates appointment with `status = "pending"` and stores a point-in-time `medical_history_snapshot` so the doctor can review the saved conditions, allergies, medications, surgeries, notes, and uploaded document list that existed when the patient booked.
 - Redirects to appointments list on success.
 
 #### 6.5 Telemedicine (`/patient/telemedicine`)
@@ -428,6 +434,7 @@ Localised in: English, Twi, Ga, Ewe, Hausa.
 - **Pre-call settings:** Toggle video/audio; explicitly choose Allow Recording or Decline Recording before launching the call (`consultation_rooms.consent_recording`).
 - **Waiting state:** Patient creates a `consultation_room` and an `encounter` record; waits for professional.
 - **Active call:** WebRTC peer-to-peer video/audio stream using `useWebRTC` hook. Controls: mute, camera toggle, end call.
+- If recording consent is granted, the professional portal captures mixed patient/professional audio, sends it to `speech-to-text`, and saves the result in `transcripts` for review.
 - **Emergency contacts sidebar:** Hardcoded Ghana emergency numbers (112, 193, 191, 192), Ghana Health Service, NHIS, and regional contacts.
 - End of call: encounter marked `completed`; audit log entry written.
 
@@ -459,15 +466,25 @@ Returns patient to dashboard on completion.
 
 - Edit `display_name`, `full_name`, `avatar_url`.
 - View role.
+- Manage patient profile settings backed by `patient_profiles.insurance_info.profile_meta`: saved locations, payment/insurance, notification preferences, privacy/security preferences, and consent settings.
+- Public `/privacy` page explains data collection, care/AI use, professional/admin access, notifications, retention, export, deletion, and support contact. Linked from auth, consent, medical-history, Settings, and Profile surfaces.
+- Profile and Settings pages share the same settings model so changes made in one surface are reflected in the other.
 
 #### 6.9 Notifications (`/patient/notifications`)
 
-Real-time notification feed from `notifications` table.
+Real-time notification feed from `user_notifications` table.
+
+Notification delivery paths:
+- In-app feed: Supabase Realtime updates `user_notifications` for web and mobile.
+- Web: `NotificationRuntime` listens for new `user_notifications` rows and displays browser notifications when the user has enabled the setting and granted browser permission.
+- Native mobile: Capacitor Push Notifications registers APNs/FCM tokens into Supabase Auth `user_metadata.mobile_push_tokens`; Edge Functions dispatch native pushes through `send-push-notification`.
 
 #### 6.10 Settings (`/patient/settings`)
 
 - Language picker (persisted to `localStorage` + `LanguageContext`).
 - Dark/light theme toggle.
+- Web/mobile notification preferences, SMS notification preference, health data sync, profile visibility, and anonymous analytics persist to `patient_profiles.insurance_info.profile_meta`.
+- Medical record export includes profile, saved settings, medical history, uploaded document metadata, reports, and consents.
 - Account sign-out.
 
 ---
@@ -509,6 +526,12 @@ Real-time notification feed from `notifications` table.
 - Click encounter → navigate to Telemedicine or Notes.
 - Scheduled appointment requests are reviewed separately under `/professional/appointments`.
 
+### 7.4.1 Appointment Requests (`/professional/appointments`)
+
+- Professionals review patient appointment requests, confirm or decline bookings, and see schedule conflicts.
+- Each request displays the `medical_history_snapshot` captured at booking time, including saved conditions, allergies, current medications, surgeries, family history, additional notes, and uploaded document names.
+- Professionals can open the full live patient record from the Patients area once an encounter relationship exists and RLS permits assigned-patient access.
+
 ### 7.5 Telemedicine (`/professional/telemedicine`)
 
 Mirrors patient Telemedicine but from the professional's side with urgency-based prioritization:
@@ -524,8 +547,9 @@ Mirrors patient Telemedicine but from the professional's side with urgency-based
 4. Joins `consultation_room` as answerer via WebRTC: reads `offer` from DB, sets remote description, creates `answer`.
 5. ICE candidates exchanged through `ice_candidates` table via Supabase Realtime.
 6. Active call with `VideoDisplay` + `CallControls`.
-7. Rollback window (10 s): if professional disconnects within 10 s, encounter is reverted to `pending`.
-8. Call end: encounter set to `completed`, audit log entry created.
+7. If `consultation_rooms.consent_recording = true`, `useConsultationRecorder` records the mixed local/remote audio, sends it to `speech-to-text`, and inserts a `transcripts` row.
+8. Rollback window (10 s): if professional disconnects within 10 s, encounter is reverted to `pending`.
+9. Call end: encounter set to `completed`, audit log entry created, and the professional can review the transcript.
 
 **Ringtone system (on this page only):**
 - Polls `encounters` every 5 s for pending encounters.
@@ -539,13 +563,22 @@ The same detection logic runs in `ProfessionalLayout` on **every** professional 
 ### 7.6 Transcripts (`/professional/transcripts`, `/professional/transcripts/:transcriptId`)
 
 - Lists encounter transcripts from `transcripts` table.
-- View full transcript JSON with speaker attribution from `speaker_map`.
+- Review readable transcript text plus full transcript JSON with speaker attribution from `speaker_map`.
+- "Generate Report + SOAP/SOP" invokes `generate-consultation-artifacts` to create:
+  - a draft telemedicine medical report in `medical_reports`;
+  - a clinical note draft with SOAP sections in `clinical_notes`;
+  - a practical SOP / care workflow draft attached to the note draft.
+- If AI generation fails or is not deployed, the frontend creates a conservative fallback draft so the professional still has reviewable documentation.
 
 ### 7.7 Notes (`/professional/notes`, `/professional/notes/:noteId/edit`)
 
 - List `clinical_notes` for encounters the professional is part of.
 - Status: `draft` | `review` | `finalized`.
-- Rich text editor for note content.
+- Structured JSON editor with readable clinical-document preview generated from SOAP/report/SOP fields.
+- Draft submission saves current editor changes before moving the note to review.
+- Finalizing a note syncs a patient-safe `medical_reports` record with title, summary, markdown, source `note_id`, and finalized clinical note JSON.
+- Notes are linked from Encounters, Patient Detail, Telemedicine completion, Transcripts, and Reports.
+- Patient Detail includes a Clinical Notes tab for assigned-patient note history.
 - `TransitionTimeline` component visualises note status progression.
 
 ### 7.8 Reports (`/professional/reports`)
@@ -734,17 +767,27 @@ All functions are located in `supabase/functions/` and run on Deno.
 
 - **Purpose:** Return a structured urgency assessment.
 - **Provider:** Google Gemini 2.5 Flash using OpenAI-compatible function calling (`tool_choice: "required"`).
-- **Tool schema:** `triage_assessment` function with fields: `urgency`, `summary`, `possible_conditions`, `recommended_action`, `questions`, `warning_signs`.
+- **Tool schema:** `triage_assessment` function with fields: `urgency`, `summary`, `possible_conditions`, `recommended_action`, `questions`, `warning_signs`. Each `possible_conditions` item requires `name`, `likelihood`, `reason`, `definition`, `causes`, `symptoms`, `treatments`, `first_aid`, and `sources`.
+- **Reasoning quality:** The function rejects duplicated, generic, or definition-mirroring condition reasons and performs a rewrite pass so each possible condition explains how the reported symptoms support that specific condition.
 - **Rate limiting:** Returns 429 if upstream rate-limited; 402 if credits exhausted.
-- **Auth:** Bearer token passed from client. The function itself does NOT validate JWT — auth is handled at the Supabase gateway level.
+- **Auth:** Requires a valid Supabase JWT at the Supabase gateway. The frontend calls `supabase.functions.invoke("symptom-triage")` without manually passing an `Authorization` header so Supabase JS can attach and refresh the current session token.
 
 ### `speech-to-text`
 
-- **Purpose:** Transcribe a patient's voice message.
+- **Purpose:** Transcribe patient voice messages and consented telemedicine consultation recordings.
 - **Provider:** ElevenLabs Scribe v2.
 - **Input:** `multipart/form-data` with an `audio` field (any common audio format).
 - **Output:** JSON transcription object from ElevenLabs.
 - **Secret required:** `ELEVENLABS_API_KEY`.
+
+### `generate-consultation-artifacts`
+
+- **Purpose:** Generate draft clinical documentation from a consultation transcript.
+- **Provider:** Google Gemini 2.5 Flash (primary) → Lovable AI Gateway (fallback).
+- **Input:** transcript text/JSON, encounter ID, patient name, professional name, optional medical-history context.
+- **Output:** JSON with `report`, `soap_note`, `sop_draft`, and `quality_flags`.
+- **Safety:** Prompt forbids invented findings and marks uncertainty for professional review.
+- **Secret required:** `GOOGLE_AI_API_KEY` preferred, or `LOVABLE_API_KEY`.
 
 ### `text-to-speech`
 
@@ -909,6 +952,7 @@ All functions are located in `supabase/functions/` and run on Deno.
 | `facility_id` | uuid FK |
 | `appointment_type` | text |
 | `reason_for_visit` | text |
+| `medical_history_snapshot` | jsonb |
 | `scheduled_at` | timestamptz |
 | `status` | text |
 
@@ -1188,10 +1232,9 @@ All Supabase tables have Row Level Security enabled. RLS policies enforce:
 See `src/shared/services/healthcare.ts` header for the full RLS status table and known TODOs (e.g., professional needing SELECT on `triage_sessions`).
 
 **Token handling in Symptom Checker:**
-**Token handling in Symptom Checker:**
 - `supabase.functions.invoke` is called without a custom `Authorization` header — the Supabase JS client supplies the session token automatically and auto-refreshes it before each request (`autoRefreshToken: true`).
-- Passing a manual token (e.g., from the cached `getSession()` result) bypassed auto-refresh and caused 401 errors with expired tokens.
-- `symptom-triage` is listed in `config.toml` with `verify_jwt = false` so the Supabase gateway does not require a user JWT at the network layer; access is enforced client-side by `PatientGuard`.
+- Passing a manual token (for example, from a cached `getSession()` result) bypasses auto-refresh and can cause 401 errors with expired tokens.
+- `symptom-triage` uses the Supabase gateway JWT check, so unauthenticated requests are rejected before reaching the function. Patient access is still guided in the UI by `PatientGuard`.
 
 ---
 
@@ -1213,8 +1256,12 @@ See `src/shared/services/healthcare.ts` header for the full RLS status table and
 | `RESEND_API_KEY` | send-invitation | Email delivery; optional — invitation is still created if missing |
 | `LOVABLE_API_KEY` | medical-chat, symptom-triage | Legacy fallback only |
 | `FCM_SERVER_KEY` | send-push-notification | Required for Android push dispatch (legacy FCM key flow) |
-| `APNS_BEARER_TOKEN` | send-push-notification | Required for iOS APNs direct send (JWT bearer token) |
+| `APNS_TEAM_ID` | send-push-notification, notify-appointments-due | Apple Developer Team ID for APNs token-based auth |
+| `APNS_KEY_ID` | send-push-notification, notify-appointments-due | Key ID for the Apple APNs `.p8` key |
+| `APNS_PRIVATE_KEY` | send-push-notification, notify-appointments-due | Full APNs `.p8` private key. Store with escaped `\n` newlines if setting through CLI |
 | `APNS_TOPIC` | send-push-notification | iOS app bundle identifier used as APNs topic |
+| `APNS_ENVIRONMENT` | send-push-notification, notify-appointments-due | Optional: `development` for Debug/sandbox tokens, `production` for Release/TestFlight/App Store. Defaults to `production` |
+| `APNS_BEARER_TOKEN` | send-push-notification, notify-appointments-due | Legacy fallback only. Prefer `.p8` secrets because APNs bearer JWTs expire quickly |
 | `SUPABASE_URL` | send-invitation, accept-invitation | Auto-injected by Supabase |
 | `SUPABASE_ANON_KEY` | send-invitation, send-push-notification | Auto-injected |
 | `SUPABASE_SERVICE_ROLE_KEY` | send-invitation, accept-invitation, send-push-notification | Auto-injected |
@@ -1249,6 +1296,44 @@ npm run build       # Production build → dist/
 npm run build:dev   # Development mode build (source maps retained)
 npm run preview     # Serve dist/ locally
 ```
+
+### iOS APNs checklist
+
+Current no-Apple-account mode:
+
+- iOS remote/background push is intentionally disabled by default.
+- The app still receives in-app notifications through Supabase realtime while the app is open.
+- Telemedicine incoming-call alerts still show toast, vibration where supported, and foreground ringtone while the professional app is open.
+- Appointment reminders still land in the in-app notification feed; browser notifications work on supported web browsers with permission.
+
+When Apple Developer access is available:
+
+1. In Apple Developer, enable **Push Notifications** for bundle ID `com.neosynapse.patientportal`.
+2. Create an APNs Auth Key (`.p8`) and note the Key ID and Team ID.
+3. Set Supabase secrets:
+
+```bash
+supabase secrets set APNS_TEAM_ID=YOUR_TEAM_ID
+supabase secrets set APNS_KEY_ID=YOUR_KEY_ID
+supabase secrets set APNS_TOPIC=com.neosynapse.patientportal
+supabase secrets set APNS_ENVIRONMENT=production
+supabase secrets set APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
+
+4. Enable native registration in the client build:
+
+```bash
+VITE_ENABLE_IOS_APNS=true
+```
+
+5. Deploy affected Edge Functions:
+
+```bash
+supabase functions deploy send-push-notification
+supabase functions deploy notify-appointments-due
+```
+
+6. Open `ios/App/App.xcodeproj`, confirm Signing & Capabilities has Push Notifications for the App target, and build/run on a physical iOS device. Simulators do not provide production APNs device tokens.
 
 ### Tests
 
@@ -1298,6 +1383,7 @@ supabase db push --yes
 - `send-invitation` email delivery requires `RESEND_API_KEY`; invitation still created without it.
 - Hospital map on patient dashboard uses OpenStreetMap Nominatim for geocoding — rate-limited; not suitable for high traffic without a geocoding API key.
 - Transcript speaker labelling (`speaker_map`) is manual — not automatic.
+- Appointment request snapshots include uploaded document metadata, but not private signed file links. Doctors can access the live uploaded files through assigned-patient medical history views where RLS permits.
 - Supabase CLI is at v2.75.0; v2.84.2 is available.
 
 ### Browser compatibility
@@ -1332,6 +1418,7 @@ supabase db push --yes
 | 2026-04-14 | Fixed Symptom Checker "Session expired" false positive: added `getValidAccessToken()` with refresh + one-shot retry on 401 | `SymptomChecker.tsx` |
 | 2026-04-14 | Fixed Symptom Checker persistent 401 errors: removed manual token passing that bypassed supabase-js auto-refresh; added `verify_jwt = false` in config.toml for `symptom-triage` | `src/apps/patient/pages/SymptomChecker.tsx`, `supabase/config.toml`, `DOCUMENTATION.md` |
 | 2026-06-09 | Added backend validation and rewrite enforcement so symptom-triage always includes condition definition, causes, symptoms, treatments, and sources before returning results | `supabase/functions/symptom-triage/index.ts`, `DOCUMENTATION.md` |
+| 2026-06-17 | Added self-assessment profile metadata and explicit patient context to symptom-triage AI requests for richer personalized triage | `src/apps/patient/pages/SymptomChecker.tsx`, `supabase/functions/symptom-triage/index.ts`, `DOCUMENTATION.md` |
 | 2026-04-14 | Redesigned Patient Symptom Checker into an ADA-inspired conversational mobile flow (step intake with pill choices, previous navigation, and staged symptom capture) while keeping the existing Neo Synapse triage backend | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Refined Symptom Checker conversational UX to match app theme tokens, improved responsive text sizing across breakpoints, and fixed dynamic grammar in self/other question prompts | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Redesigned patient report detail view for readability: replaced raw JSON-first display with plain-language sections and moved JSON to a collapsible technical block | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
@@ -1364,4 +1451,18 @@ supabase db push --yes
 | 2026-06-14 | Fixed Symptom Checker state persistence: extended localStorage to preserve full workflow state (step, intakeStep, assessmentFor, result); hydration logic validates result and handles edge cases; explicit "New Check" button now fully clears stored state | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-06-14 | Implemented sequential follow-up questions in AI Assistant: reinforced system prompt with CRITICAL section enforcing exactly one follow-up question per response (no lists, no multiple questions per message) | `supabase/functions/medical-chat/index.ts`, `DOCUMENTATION.md` |
 | 2026-06-17 | Separated OCR text from visible chat messages in AI Assistant: modified `useMedicalChat` to accept optional `hiddenContext` parameter sent to AI but not displayed; OCR/extracted text now hidden from user while AI receives full context | `src/hooks/useMedicalChat.ts`, `src/apps/patient/pages/AIAssistant.tsx` |
+| 2026-06-17 | Fixed appointment creation service: added `.select("id").single()` chain to `appointmentService.create()` to properly return inserted appointment record, and improved error logging with full error details including code, message, and diagnostic info | `src/shared/services/healthcare.ts`, `src/apps/patient/pages/AppointmentBooking.tsx` |
+| 2026-06-17 | Removed appointment priority selection UI from booking page; priority is now set to "routine" by default for all bookings | `src/apps/patient/pages/AppointmentBooking.tsx` |
+| 2026-06-17 | Added scheduled reminder job: `notify-appointments-due` Supabase Edge Function and `reminder_sent` flag on `appointments`; sends in-app notifications and mobile pushes to patient and professional when appointment time arrives | `supabase/functions/notify-appointments-due/index.ts`, `supabase/migrations/20260617190000_add_appointment_reminder_sent.sql`, `DOCUMENTATION.md` |
+| 2026-06-18 | Restored gateway JWT verification for `symptom-triage` and removed generated JavaScript artifacts that blocked production web/mobile builds | `supabase/config.toml`, `DOCUMENTATION.md`, `src/apps/patient/pages/SymptomChecker.js`, `supabase/functions/symptom-triage/index.js` |
+| 2026-06-18 | Strengthened Symptom Checker condition reasoning: duplicated/generic/definition-mirroring reasons are rewritten, every possible condition needs symptom-specific rationale, and first-aid guidance is shown per condition | `supabase/functions/symptom-triage/index.ts`, `src/apps/patient/pages/SymptomChecker.tsx`, `src/apps/patient/pages/symptomCheckerUtils.ts`, `src/test/symptomCheckerReason.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Hardened medical history saving, included uploaded document context in symptom triage, and added appointment medical-history snapshots shown to professionals during booking review | `src/apps/patient/pages/MedicalHistorySetup.tsx`, `src/apps/patient/pages/SymptomChecker.tsx`, `src/apps/patient/pages/AppointmentBooking.tsx`, `src/apps/professional/pages/Appointments.tsx`, `src/shared/lib/medicalHistory.ts`, `src/shared/services/healthcare.ts`, `src/shared/types/healthcare.ts`, `supabase/migrations/20260618103000_add_medical_history_snapshot_to_appointments.sql`, `DOCUMENTATION.md` |
+| 2026-06-18 | Centralized patient settings persistence across Profile and Settings, activated exports/settings snapshots, and added regression tests for settings defaults and merges | `src/shared/lib/patientSettings.ts`, `src/apps/patient/pages/Profile.tsx`, `src/apps/patient/pages/Settings.tsx`, `src/shared/lib/medicalHistory.ts`, `src/test/patientSettings.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Activated web notification display from realtime `user_notifications` and tightened mobile push registration from the patient Settings toggle | `src/components/NotificationRuntime.tsx`, `src/App.tsx`, `src/apps/patient/pages/Settings.tsx`, `DOCUMENTATION.md` |
+| 2026-06-18 | Configured iOS APNs native entitlements/callbacks and upgraded APNs Edge Function delivery to generate Apple token-based JWTs from `.p8` secrets | `ios/App/App/App.entitlements`, `ios/App/App/AppDelegate.swift`, `ios/App/App.xcodeproj/project.pbxproj`, `supabase/functions/send-push-notification/index.ts`, `supabase/functions/notify-appointments-due/index.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Added no-APNs/no-FCM notification fallbacks: mobile defaults to in-app alerts without remote token registration, realtime notifications now show toast/vibration/tone, and push dispatches create guaranteed in-app notifications | `src/mobile/notificationFallbacks.ts`, `src/mobile/pushNotifications.ts`, `src/components/NotificationRuntime.tsx`, `src/apps/patient/pages/Settings.tsx`, `supabase/functions/send-push-notification/index.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Added a public Privacy Policy page and linked it from auth, AI consent, medical-history acknowledgement, patient Settings, and patient Profile | `src/pages/PrivacyPolicy.tsx`, `src/App.tsx`, `src/auth/pages/SignIn.tsx`, `src/auth/pages/PatientSignUp.tsx`, `src/apps/patient/pages/MedicalHistorySetup.tsx`, `src/apps/patient/pages/Settings.tsx`, `src/apps/patient/pages/Profile.tsx`, `DOCUMENTATION.md` |
+| 2026-06-18 | Integrated consent-aware telemedicine transcription, professional transcript review, AI draft medical report generation, and SOAP/SOP clinical documentation drafting | `src/hooks/useConsultationRecorder.ts`, `src/shared/lib/consultationArtifacts.ts`, `src/apps/professional/pages/Telemedicine.tsx`, `src/apps/professional/pages/Transcripts.tsx`, `supabase/functions/generate-consultation-artifacts/index.ts`, `src/test/consultationArtifacts.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Integrated Clinical Notes across professional workflows: note previews, saved review transitions, finalized-note report sync, patient-detail note history, encounter/report source links, and regression coverage | `src/apps/professional/pages/Notes.tsx`, `src/apps/professional/pages/PatientDetail.tsx`, `src/apps/professional/pages/Encounters.tsx`, `src/apps/professional/pages/Reports.tsx`, `src/shared/hooks/useHealthcare.ts`, `src/shared/lib/clinicalNotes.ts`, `src/test/clinicalNotes.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-18 | Improved app loading performance with route-level lazy loading, on-demand PDF/markdown imports, and cached role/profile reads to reduce initial bundle size and repeated guard loading | `src/App.tsx`, `src/apps/patient/pages/Reports.tsx`, `src/apps/patient/pages/MedicalReportTools.tsx`, `src/auth/hooks/useUserRole.ts`, `DOCUMENTATION.md` |
 | 2026-04-14 | Created this documentation file | `DOCUMENTATION.md` |

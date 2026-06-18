@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { CalendarCheck, Clock, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { CalendarCheck, Clock, Loader2, CheckCircle2, XCircle, Video } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,7 +56,27 @@ const canConfirmAppointment = (appointment: Appointment, appointments: Appointme
   );
 };
 
+const asStringArray = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : []);
+
+const renderSnapshotList = (label: string, values: string[], variant: "secondary" | "destructive" = "secondary") => {
+  if (values.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {values.map((value) => (
+          <Badge key={`${label}-${value}`} variant={variant}>
+            {value}
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export default function ProfessionalAppointments() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { data: appointments = [], isLoading } = useProfessionalAppointments();
   const patientIds = useMemo(
@@ -67,6 +88,7 @@ export default function ProfessionalAppointments() {
   const pendingAppointments = appointments.filter((appointment) => appointment.status === "pending");
   const upcomingAppointments = appointments.filter((appointment) => ["confirmed", "in_progress"].includes(appointment.status));
   const pastAppointments = appointments.filter((appointment) => ["completed", "cancelled"].includes(appointment.status));
+  const defaultTab = searchParams.get("tab") === "upcoming" ? "upcoming" : searchParams.get("tab") === "past" ? "past" : "pending";
 
   const handleChangeStatus = useCallback(
     async (appointment: Appointment, nextStatus: "confirmed" | "cancelled") => {
@@ -103,6 +125,22 @@ export default function ProfessionalAppointments() {
     const slotKey = getSlotKey(appointment.scheduled_at);
     const hasConflict = !canConfirmAppointment(appointment, appointments);
     const patientName = patientNames[appointment.patient_id] || "Patient";
+    const snapshot = (appointment.medical_history_snapshot || {}) as Record<string, unknown>;
+    const conditions = asStringArray(snapshot.existing_conditions);
+    const allergies = asStringArray(snapshot.allergies);
+    const medications = asStringArray(snapshot.current_medications);
+    const surgeries = asStringArray(snapshot.past_surgeries);
+    const uploadedDocuments = Array.isArray(snapshot.uploaded_documents)
+      ? snapshot.uploaded_documents.filter((document): document is Record<string, unknown> => typeof document === "object" && document !== null)
+      : [];
+    const hasSnapshot =
+      conditions.length > 0 ||
+      allergies.length > 0 ||
+      medications.length > 0 ||
+      surgeries.length > 0 ||
+      typeof snapshot.family_medical_history === "string" ||
+      typeof snapshot.notes === "string" ||
+      uploadedDocuments.length > 0;
 
     return (
       <div key={appointment.id} className="bg-card rounded-2xl border border-border p-4 space-y-4">
@@ -161,6 +199,51 @@ export default function ProfessionalAppointments() {
           </div>
         )}
 
+        <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4 space-y-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Medical history sent with request</p>
+            <p className="text-xs text-muted-foreground">
+              Snapshot captured when the patient booked this appointment.
+            </p>
+          </div>
+          {hasSnapshot ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {renderSnapshotList("Conditions", conditions)}
+              {renderSnapshotList("Allergies", allergies, "destructive")}
+              {renderSnapshotList("Medications", medications)}
+              {renderSnapshotList("Past surgeries", surgeries)}
+              {typeof snapshot.family_medical_history === "string" && snapshot.family_medical_history.trim() && (
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Family history</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{snapshot.family_medical_history}</p>
+                </div>
+              )}
+              {typeof snapshot.notes === "string" && snapshot.notes.trim() && (
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Additional notes</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{snapshot.notes}</p>
+                </div>
+              )}
+              {uploadedDocuments.length > 0 && (
+                <div className="space-y-2 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Documents on file</p>
+                  <div className="flex flex-wrap gap-2">
+                    {uploadedDocuments.map((document, index) => (
+                      <Badge key={`${document.file_name || "document"}-${index}`} variant="outline">
+                        {typeof document.file_name === "string" ? document.file_name : "Medical document"}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No saved medical history was available when this appointment was booked.
+            </p>
+          )}
+        </div>
+
         {appointment.status === "pending" && (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             <Button
@@ -183,6 +266,19 @@ export default function ProfessionalAppointments() {
             </Button>
           </div>
         )}
+
+        {appointment.status === "confirmed" && appointment.appointment_type === "telemedicine" && (
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => navigate(`/professional/telemedicine?appointmentId=${appointment.id}&action=start`)}
+            >
+              <Video className="w-4 h-4 mr-2" />
+              Start Call
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
@@ -195,7 +291,7 @@ export default function ProfessionalAppointments() {
           <p className="text-muted-foreground">Review scheduled consultation requests and confirm patient bookings.</p>
         </div>
 
-        <Tabs defaultValue="pending">
+        <Tabs defaultValue={defaultTab}>
           <TabsList className="bg-muted">
             <TabsTrigger value="pending" className="gap-2">
               <Clock className="w-4 h-4" />

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   User, Settings, ChevronRight, LogOut, HeartPulse, 
   Stethoscope, Shield, Bell, MapPin, CreditCard, Loader2, Save
@@ -17,6 +17,14 @@ import { useUserRole } from "@/auth/hooks/useUserRole";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatientProfile } from "@/shared/hooks/useHealthcare";
 import { consentService, patientProfileService } from "@/shared/services/healthcare";
+import {
+  getInsuranceInfo,
+  getNotificationSummary,
+  getPatientProfileMeta,
+  getPrivacySummary,
+  mergePatientProfileMeta,
+  type PatientProfileMeta,
+} from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
 
 export default function PatientProfile() {
@@ -93,39 +101,18 @@ export default function PatientProfile() {
 
   const latestDataSharingConsent = getLatestConsentByType("data_sharing");
   const latestRecordingConsent = getLatestConsentByType("recording");
-  const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
-  const profileMeta = (insuranceInfo.profile_meta as Record<string, unknown> | undefined) || {};
-  const savedLocationsMeta = (profileMeta.saved_locations as Record<string, unknown> | undefined) || {};
-  const paymentInsuranceMeta = (profileMeta.payment_insurance as Record<string, unknown> | undefined) || {};
-  const notificationSettingsMeta = (profileMeta.notification_settings as Record<string, unknown> | undefined) || {};
-  const privacySecuritySettingsMeta = (profileMeta.privacy_security_settings as Record<string, unknown> | undefined) || {};
+  const insuranceInfo = getInsuranceInfo(patientProfile?.insurance_info);
+  const profileMeta = getPatientProfileMeta(insuranceInfo);
+  const savedLocationsMeta = profileMeta.saved_locations;
+  const paymentInsuranceMeta = profileMeta.payment_insurance;
+  const notificationSettingsMeta = profileMeta.notification_settings;
+  const privacySecuritySettingsMeta = profileMeta.privacy_security_settings;
 
-  const notificationSummary = (() => {
-    const labels: string[] = [];
-    if (notificationSettingsMeta.appointment_reminders === true) labels.push("Appointments");
-    if (notificationSettingsMeta.medication_alerts === true) labels.push("Medication");
-    if (notificationSettingsMeta.health_tips === true) labels.push("Health tips");
-    if (notificationSettingsMeta.email_notifications === true) labels.push("Email");
-    return labels.length ? `Enabled: ${labels.join(", ")}` : "No notification preferences saved";
-  })();
+  const notificationSummary = getNotificationSummary(notificationSettingsMeta);
+  const privacySummary = getPrivacySummary(privacySecuritySettingsMeta);
 
-  const privacySummary = (() => {
-    const visibility =
-      privacySecuritySettingsMeta.profile_visibility === "private"
-        ? "Private"
-        : privacySecuritySettingsMeta.profile_visibility === "care_team"
-          ? "Care team only"
-          : "Not set";
-
-    const controls: string[] = [];
-    if (privacySecuritySettingsMeta.two_factor_enabled === true) controls.push("2FA");
-    if (privacySecuritySettingsMeta.biometric_lock === true) controls.push("Biometric");
-    if (privacySecuritySettingsMeta.activity_alerts === true) controls.push("Alerts");
-
-    return controls.length
-      ? `Visibility: ${visibility} • ${controls.join(", ")}`
-      : `Visibility: ${visibility}`;
-  })();
+  const buildInsuranceInfoPatch = (patch: Partial<PatientProfileMeta>) =>
+    mergePatientProfileMeta(patientProfile?.insurance_info, patch);
 
   const initializeForm = () => {
     if (patientProfile) {
@@ -142,7 +129,6 @@ export default function PatientProfile() {
   };
 
   const initializeMedicalHistoryForm = () => {
-    const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
     const conditions = Array.isArray(insuranceInfo.conditions) ? insuranceInfo.conditions.join(", ") : "";
     const allergies = Array.isArray(insuranceInfo.allergies) ? insuranceInfo.allergies.join(", ") : "";
     const medications = Array.isArray(insuranceInfo.medications) ? insuranceInfo.medications.join(", ") : "";
@@ -161,49 +147,40 @@ export default function PatientProfile() {
 
   const initializeSavedLocationsForm = () => {
     setSavedLocationsData({
-      homeAddress: (savedLocationsMeta.home_address as string) || "",
-      preferredHospital: (savedLocationsMeta.preferred_hospital as string) || "",
-      otherLocations: (savedLocationsMeta.other_locations as string) || "",
+      homeAddress: savedLocationsMeta?.home_address || "",
+      preferredHospital: savedLocationsMeta?.preferred_hospital || "",
+      otherLocations: savedLocationsMeta?.other_locations || "",
     });
     setSavedLocationsDialogOpen(true);
   };
 
   const initializePaymentInsuranceForm = () => {
     setPaymentInsuranceData({
-      insuranceProvider: (paymentInsuranceMeta.insurance_provider as string) || "",
-      policyNumber: (paymentInsuranceMeta.policy_number as string) || "",
-      memberId: (paymentInsuranceMeta.member_id as string) || "",
-      insurancePlan: (paymentInsuranceMeta.insurance_plan as string) || "",
-      paymentMethod: (paymentInsuranceMeta.payment_method as string) || "",
+      insuranceProvider: paymentInsuranceMeta?.insurance_provider || "",
+      policyNumber: paymentInsuranceMeta?.policy_number || "",
+      memberId: paymentInsuranceMeta?.member_id || "",
+      insurancePlan: paymentInsuranceMeta?.insurance_plan || "",
+      paymentMethod: paymentInsuranceMeta?.payment_method || "",
     });
     setPaymentInsuranceDialogOpen(true);
   };
 
   const initializeNotificationForm = () => {
-    const getBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
-
     setNotificationData({
-      appointmentReminders: getBool(notificationSettingsMeta.appointment_reminders, true),
-      medicationAlerts: getBool(notificationSettingsMeta.medication_alerts, true),
-      healthTips: getBool(notificationSettingsMeta.health_tips, false),
-      emailNotifications: getBool(notificationSettingsMeta.email_notifications, true),
+      appointmentReminders: notificationSettingsMeta.appointment_reminders,
+      medicationAlerts: notificationSettingsMeta.medication_alerts,
+      healthTips: notificationSettingsMeta.health_tips,
+      emailNotifications: notificationSettingsMeta.email_notifications,
     });
     setNotificationDialogOpen(true);
   };
 
   const initializePrivacySecurityForm = () => {
-    const getBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
-    const visibility =
-      privacySecuritySettingsMeta.profile_visibility === "private" ||
-      privacySecuritySettingsMeta.profile_visibility === "care_team"
-        ? (privacySecuritySettingsMeta.profile_visibility as "private" | "care_team")
-        : "care_team";
-
     setPrivacySecurityData({
-      profileVisibility: visibility,
-      twoFactorEnabled: getBool(privacySecuritySettingsMeta.two_factor_enabled, false),
-      biometricLock: getBool(privacySecuritySettingsMeta.biometric_lock, false),
-      activityAlerts: getBool(privacySecuritySettingsMeta.activity_alerts, true),
+      profileVisibility: privacySecuritySettingsMeta.profile_visibility,
+      twoFactorEnabled: privacySecuritySettingsMeta.two_factor_enabled,
+      biometricLock: privacySecuritySettingsMeta.biometric_lock,
+      activityAlerts: privacySecuritySettingsMeta.activity_alerts,
     });
     setPrivacySecurityDialogOpen(true);
   };
@@ -261,6 +238,7 @@ export default function PatientProfile() {
           .filter(Boolean);
 
       const insurance_info = {
+        ...insuranceInfo,
         conditions: toList(data.conditions),
         allergies: toList(data.allergies),
         medications: toList(data.medications),
@@ -286,7 +264,12 @@ export default function PatientProfile() {
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
       const { error } = await patientProfileService.upsert(user.id, {
-        insurance_info: null,
+        insurance_info: {
+          ...insuranceInfo,
+          conditions: [],
+          allergies: [],
+          medications: [],
+        },
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
@@ -354,20 +337,13 @@ export default function PatientProfile() {
   const saveSavedLocationsMutation = useMutation({
     mutationFn: async (data: typeof savedLocationsData) => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          saved_locations: {
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        saved_locations: {
             home_address: data.homeAddress || null,
             preferred_hospital: data.preferredHospital || null,
             other_locations: data.otherLocations || null,
-          },
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -388,16 +364,7 @@ export default function PatientProfile() {
   const clearSavedLocationsMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          saved_locations: null,
-        },
-      };
+      const nextInsuranceInfo = buildInsuranceInfoPatch({ saved_locations: null });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -418,22 +385,15 @@ export default function PatientProfile() {
   const savePaymentInsuranceMutation = useMutation({
     mutationFn: async (data: typeof paymentInsuranceData) => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          payment_insurance: {
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        payment_insurance: {
             insurance_provider: data.insuranceProvider || null,
             policy_number: data.policyNumber || null,
             member_id: data.memberId || null,
             insurance_plan: data.insurancePlan || null,
             payment_method: data.paymentMethod || null,
-          },
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -454,16 +414,7 @@ export default function PatientProfile() {
   const clearPaymentInsuranceMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          payment_insurance: null,
-        },
-      };
+      const nextInsuranceInfo = buildInsuranceInfoPatch({ payment_insurance: null });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -484,21 +435,15 @@ export default function PatientProfile() {
   const saveNotificationMutation = useMutation({
     mutationFn: async (data: typeof notificationData) => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          notification_settings: {
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        notification_settings: {
+            ...notificationSettingsMeta,
             appointment_reminders: data.appointmentReminders,
             medication_alerts: data.medicationAlerts,
             health_tips: data.healthTips,
             email_notifications: data.emailNotifications,
-          },
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -519,16 +464,16 @@ export default function PatientProfile() {
   const clearNotificationMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          notification_settings: null,
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        notification_settings: {
+          appointment_reminders: true,
+          medication_alerts: true,
+          health_tips: false,
+          email_notifications: true,
+          browser_notifications: null,
+          sms_notifications: false,
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -549,21 +494,14 @@ export default function PatientProfile() {
   const savePrivacySecurityMutation = useMutation({
     mutationFn: async (data: typeof privacySecurityData) => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          privacy_security_settings: {
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        privacy_security_settings: {
             profile_visibility: data.profileVisibility,
             two_factor_enabled: data.twoFactorEnabled,
             biometric_lock: data.biometricLock,
             activity_alerts: data.activityAlerts,
-          },
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -584,16 +522,14 @@ export default function PatientProfile() {
   const clearPrivacySecurityMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = ((patientProfile?.insurance_info as Record<string, unknown> | null) ?? {});
-      const baseProfileMeta = ((baseInsuranceInfo.profile_meta as Record<string, unknown> | undefined) ?? {});
-
-      const nextInsuranceInfo = {
-        ...baseInsuranceInfo,
-        profile_meta: {
-          ...baseProfileMeta,
-          privacy_security_settings: null,
+      const nextInsuranceInfo = buildInsuranceInfoPatch({
+        privacy_security_settings: {
+          profile_visibility: "care_team",
+          two_factor_enabled: false,
+          biometric_lock: false,
+          activity_alerts: true,
         },
-      };
+      });
 
       const { error } = await patientProfileService.upsert(user.id, {
         insurance_info: nextInsuranceInfo,
@@ -875,7 +811,7 @@ export default function PatientProfile() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground">Saved Locations</p>
                   <p className="text-sm text-muted-foreground">
-                    {(savedLocationsMeta.home_address as string) || "Home & hospital addresses"}
+                    {savedLocationsMeta?.home_address || "Home & hospital addresses"}
                   </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
@@ -947,7 +883,7 @@ export default function PatientProfile() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground">Payment & Insurance</p>
                   <p className="text-sm text-muted-foreground">
-                    {(paymentInsuranceMeta.insurance_provider as string) || "Insurance cards & payment methods"}
+                    {paymentInsuranceMeta?.insurance_provider || "Insurance cards & payment methods"}
                   </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
@@ -1213,6 +1149,20 @@ export default function PatientProfile() {
             <p className="font-medium text-foreground flex-1">Settings</p>
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>
+          <Separator />
+          <Link
+            to="/privacy"
+            className="w-full flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground">Privacy Policy</p>
+              <p className="text-sm text-muted-foreground">How Neo Synapse handles health data</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </Link>
         </div>
 
         <div className="bg-muted/50 rounded-2xl p-5">
@@ -1234,7 +1184,10 @@ export default function PatientProfile() {
         </Button>
 
         <p className="text-center text-xs text-muted-foreground pb-4">
-          Neo Synapse v1.0.0 • Patient Portal
+          Neo Synapse v1.0.0 • Patient Portal •{" "}
+          <Link to="/privacy" className="text-primary hover:underline">
+            Privacy Policy
+          </Link>
         </p>
       </div>
     </div>

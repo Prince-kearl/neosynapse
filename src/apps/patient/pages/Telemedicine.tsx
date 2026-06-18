@@ -1,5 +1,5 @@
 // Patient Telemedicine - uses existing WebRTC infrastructure
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Video, Phone, Clock, Shield, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -108,6 +108,7 @@ export default function PatientTelemedicine() {
   const [reasonForVisit, setReasonForVisit] = useState<string>("");
   const [selectedPriority, setSelectedPriority] = useState<AppointmentPriority>("routine");
   const [isScheduling, setIsScheduling] = useState(false);
+  const consumedJoinLinkRef = useRef<string | null>(null);
 
   const formatDateSlotKey = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -238,6 +239,7 @@ export default function PatientTelemedicine() {
     localStream,
     remoteStream,
     startCall,
+    joinCall,
     endCall,
     toggleVideo,
     toggleAudio,
@@ -249,6 +251,55 @@ export default function PatientTelemedicine() {
       if (s === "failed" || s === "disconnected") setState("ended");
     },
   });
+
+  useEffect(() => {
+    const targetRoomId = searchParams.get("roomId")?.trim() || null;
+    const targetEncounterId = searchParams.get("encounterId")?.trim() || null;
+    const action = searchParams.get("action")?.trim() || null;
+    if (!user?.id || !targetRoomId || !targetEncounterId || action !== "join") return;
+    if (consumedJoinLinkRef.current === `${targetEncounterId}|${targetRoomId}`) return;
+
+    consumedJoinLinkRef.current = `${targetEncounterId}|${targetRoomId}`;
+
+    const joinDoctorStartedCall = async () => {
+      setState("waiting");
+      setRoomId(targetRoomId);
+      setEncounterId(targetEncounterId);
+
+      const { data: encounter, error: encounterError } = await supabase
+        .from("encounters")
+        .select("id, patient_id, professional_id, status")
+        .eq("id", targetEncounterId)
+        .eq("patient_id", user.id)
+        .single();
+
+      if (encounterError || !encounter) {
+        console.error("Unable to open consultation invite:", encounterError);
+        toast({ title: "Call not available", description: "This consultation invite could not be opened.", variant: "destructive" });
+        setState("lobby");
+        return;
+      }
+
+      const { data: room, error: roomError } = await supabase
+        .from("consultation_rooms")
+        .select("id, encounter_id, doctor_id, status, offer")
+        .eq("id", targetRoomId)
+        .eq("encounter_id", targetEncounterId)
+        .single();
+
+      if (roomError || !room?.offer) {
+        console.error("Unable to join consultation room:", roomError);
+        toast({ title: "Call not ready", description: "The doctor has not started the video room yet.", variant: "destructive" });
+        setState("lobby");
+        return;
+      }
+
+      setSelectedDoctor(encounter.professional_id || room.doctor_id);
+      await joinCall(videoEnabled, audioEnabled, targetRoomId);
+    };
+
+    void joinDoctorStartedCall();
+  }, [audioEnabled, joinCall, searchParams, user?.id, videoEnabled]);
 
   const handleStartConsultation = useCallback(async () => {
     if (!user || !selectedDoctor || isStartingConsultation) return;
@@ -835,7 +886,7 @@ export default function PatientTelemedicine() {
         )}
 
         {/* Info Cards */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3 sm:gap-4">
           <div className="bg-card rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-food-card text-center">
             <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary mx-auto mb-1.5 sm:mb-2" />
             <p className="text-xs sm:text-sm font-medium leading-tight">Live Video</p>

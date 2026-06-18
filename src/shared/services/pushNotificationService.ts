@@ -48,6 +48,18 @@ export interface SendTelemedicinePushRequest {
   dryRun?: boolean;
 }
 
+export interface SendPatientTelemedicineCallRequest {
+  patientId: string;
+  encounterId: string;
+  roomId: string;
+  doctorName: string;
+  appointmentId?: string;
+  title?: string;
+  body?: string;
+  urgency?: "normal" | "high";
+  dryRun?: boolean;
+}
+
 const sendTestPush = async (payload: SendPushRequest) => {
   const body = {
     target_user_id: payload.targetUserId,
@@ -94,7 +106,31 @@ const sendTelemedicineCallNotification = async (payload: SendTelemedicinePushReq
   });
 };
 
+const sendPatientTelemedicineCallNotification = async (payload: SendPatientTelemedicineCallRequest) => {
+  return sendTestPush({
+    targetUserId: payload.patientId,
+    title: payload.title || "Doctor is calling",
+    body: payload.body || `${payload.doctorName} started your telemedicine consultation.`,
+    urgency: payload.urgency ?? "high",
+    dryRun: payload.dryRun,
+    category: "telemedicine_call",
+    actions: [
+      { id: "join", title: "Join" },
+    ],
+    data: {
+      type: "telemedicine_call",
+      encounterId: payload.encounterId,
+      roomId: payload.roomId,
+      appointmentId: payload.appointmentId || "",
+      doctorName: payload.doctorName,
+      action: "join",
+      action_url: `/patient/telemedicine?encounterId=${encodeURIComponent(payload.encounterId)}&roomId=${encodeURIComponent(payload.roomId)}&action=join`,
+    },
+  });
+};
+
 export const pushNotificationService = {
   sendTestPush,
   sendTelemedicineCallNotification,
+  sendPatientTelemedicineCallNotification,
 };

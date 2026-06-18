@@ -6,52 +6,30 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
-import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
+import { SUPPORTED_LANGUAGES, useLanguage, type LanguageCode } from "@/contexts/LanguageContext";
 import { useUserRole } from "@/auth/hooks/useUserRole";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { professionalProfileService } from "@/shared/services/healthcare";
 import { usePushNotifications } from "@/legacy/hooks/usePushNotifications";
 import { toast } from "@/hooks/use-toast";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
 export default function ProfessionalSettings() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { profile } = useUserRole();
   const { isSupported, permission, requestPermission } = usePushNotifications();
+  const { profile: proProfile, settings, saveSettingsMutation } = useProfessionalSettings();
 
-  const { data: proProfile } = useQuery({
-    queryKey: ["pro-profile", user?.id],
-    queryFn: async () => {
-      const { data } = await professionalProfileService.get(user!.id);
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const settings = ((proProfile?.settings_json as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-  const patientAlertsEnabled = settings.patient_alerts !== false;
-  const activityLoggingVisible = settings.activity_logging_visible !== false;
-
-  const saveSettingsMutation = useMutation({
-    mutationFn: async (nextSettings: Record<string, unknown>) => {
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await professionalProfileService.updateSettings(user.id, nextSettings);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pro-profile", user?.id] });
-    },
-    onError: (error) => {
-      toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
-    },
-  });
+  const patientAlertsEnabled = settings.patientAlerts;
+  const activityLoggingVisible = settings.activityLoggingVisible;
 
   const persistSettings = (nextSettings: Record<string, unknown>, successTitle: string) => {
     saveSettingsMutation.mutate(nextSettings, {
       onSuccess: () => {
         toast({ title: successTitle });
+      },
+      onError: (error) => {
+        toast({ title: "Failed to save settings", description: error.message, variant: "destructive" });
       },
     });
   };
@@ -76,7 +54,7 @@ export default function ProfessionalSettings() {
 
     persistSettings(
       {
-        ...settings,
+        ...settings.raw,
         patient_alerts: checked,
       },
       checked ? "Patient alerts enabled" : "Patient alerts disabled"
@@ -86,10 +64,31 @@ export default function ProfessionalSettings() {
   const handleActivityLoggingInfoToggle = (checked: boolean) => {
     persistSettings(
       {
-        ...settings,
+        ...settings.raw,
         activity_logging_visible: checked,
       },
       checked ? "Compliance details visible" : "Compliance details hidden"
+    );
+  };
+
+  const handleThemeChange = (theme: string) => {
+    persistSettings(
+      {
+        ...settings.raw,
+        theme,
+      },
+      `Theme set to ${theme}`
+    );
+  };
+
+  const handleLanguageChange = (value: LanguageCode) => {
+    setLanguage(value);
+    persistSettings(
+      {
+        ...settings.raw,
+        language: value,
+      },
+      "Language updated"
     );
   };
 
@@ -151,13 +150,13 @@ export default function ProfessionalSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Appearance</h2>
           <div className="bg-card rounded-2xl p-4 border border-border space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Moon className="w-5 h-5 text-muted-foreground" />
                 <span className="font-medium">Theme</span>
               </div>
             </div>
-            <ThemeToggle />
+            <ThemeToggle onThemeChange={handleThemeChange} />
           </div>
         </section>
 
@@ -208,12 +207,9 @@ export default function ProfessionalSettings() {
               </div>
               <Select
                 value={language}
-                onValueChange={(value) => {
-                  setLanguage(value as typeof language);
-                  toast({ title: "Language updated" });
-                }}
+                onValueChange={(value) => handleLanguageChange(value as LanguageCode)}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

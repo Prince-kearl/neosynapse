@@ -317,6 +317,14 @@ export default function PatientSignUp() {
             >
               {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create Account"}
             </Button>
+
+            <p className="text-center text-xs leading-5 text-muted-foreground">
+              By creating an account, you agree that Neo Synapse will process your health information as described in the{" "}
+              <Link to="/privacy" className="font-medium text-primary hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
 
           <div className="text-center">
@@ -330,7 +338,7 @@ export default function PatientSignUp() {
 
           <div className="bg-muted/50 rounded-xl p-4 text-center">
             <p className="text-xs text-muted-foreground">
-              🔒 Your health data is protected with end-to-end encryption and follows HIPAA compliance standards.
+              Your health data is protected with secure access controls and privacy-aware care workflows.
             </p>
           </div>
         </div>

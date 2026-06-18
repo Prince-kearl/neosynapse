@@ -6,6 +6,7 @@ export type PossibleCondition = {
   causes?: string;
   symptoms?: string;
   treatments?: string;
+  first_aid?: string;
   sources?: string[];
 };
 
@@ -38,4 +39,31 @@ export function validatePossibleConditionReason(reason: string, reportedSymptoms
 
   const lowerReason = reason.toLowerCase();
   return reportedSymptoms.some((symptom) => lowerReason.includes(symptom.toLowerCase()));
+}
+
+export function normalizeClinicalText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function hasDuplicateConditionReasons(conditions: Array<Pick<PossibleCondition, "reason">>): boolean {
+  const seen = new Set<string>();
+  return conditions.some((condition) => {
+    const normalized = normalizeClinicalText(condition.reason || "");
+    if (!normalized) return false;
+    if (seen.has(normalized)) return true;
+    seen.add(normalized);
+    return false;
+  });
+}
+
+export function reasonMirrorsDefinition(reason: string | undefined, definition: string | undefined): boolean {
+  if (!reason || !definition) return false;
+  const normalizedReason = normalizeClinicalText(reason);
+  const normalizedDefinition = normalizeClinicalText(definition);
+  if (!normalizedReason || !normalizedDefinition) return false;
+  return normalizedReason === normalizedDefinition;
 }

@@ -1,14 +1,16 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { ArrowLeft, Loader2, FileText, Clock, AlertCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, Loader2, FileText, Clock, AlertCircle, PenTool, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { patientProfileService, medicalHistoryService } from "@/shared/services/healthcare";
-import { useMedicalHistoryForAssignedPatient, useMedicalHistoryFilesForAssignedPatient, useProfileNames } from "@/shared/hooks/useHealthcare";
+import { useClinicalNotesForAssignedPatient, useMedicalHistoryForAssignedPatient, useMedicalHistoryFilesForAssignedPatient, useProfileNames, useReportsForAssignedPatient } from "@/shared/hooks/useHealthcare";
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
+import { buildClinicalNoteMarkdown, getClinicalNoteTitle } from "@/shared/lib/clinicalNotes";
+import { getLinkedNoteId, getLinkedTranscriptId, getReportSourceLabel, getReportStatus, getReportSummary, getReportTitle, toReportTitleCase } from "@/shared/lib/reports";
 import type { MedicalHistory } from "@/shared/types/healthcare";
 
 export default function PatientDetail() {
@@ -18,7 +20,7 @@ export default function PatientDetail() {
   const [profileLoading, setProfileLoading] = useState(true);
 
   // Fetch patient profile
-  React.useEffect(() => {
+  useEffect(() => {
     if (!patientId) return;
     
     (async () => {
@@ -37,12 +39,14 @@ export default function PatientDetail() {
   // Fetch medical history and files
   const { data: medicalHistory, isLoading: historyLoading } = useMedicalHistoryForAssignedPatient(patientId);
   const { data: files = [], isLoading: filesLoading } = useMedicalHistoryFilesForAssignedPatient(patientId);
+  const { data: clinicalNotes = [], isLoading: notesLoading } = useClinicalNotesForAssignedPatient(patientId);
+  const { data: reports = [], isLoading: reportsLoading } = useReportsForAssignedPatient(patientId);
 
   // Fetch patient name
   const { data: nameMap = {} } = useProfileNames(patientId ? [patientId] : []);
   const patientName = nameMap[patientId!] || patientProfile?.display_name || "Patient";
 
-  const isLoading = profileLoading || historyLoading || filesLoading;
+  const isLoading = profileLoading || historyLoading || filesLoading || notesLoading || reportsLoading;
 
   if (isLoading) {
     return (
@@ -87,9 +91,11 @@ export default function PatientDetail() {
         </div>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="medical-history">Medical History</TabsTrigger>
+            <TabsTrigger value="clinical-notes">Clinical Notes</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
 
@@ -272,6 +278,155 @@ export default function PatientDetail() {
                   <p className="text-sm text-muted-foreground">
                     No medical history profile found. Patient may not have completed onboarding.
                   </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="clinical-notes" className="space-y-4">
+            {clinicalNotes.length > 0 ? (
+              clinicalNotes.map((note: any) => {
+                const noteJson = note.final_json ?? note.draft_json ?? {};
+                return (
+                  <Card key={note.id}>
+                    <CardHeader>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <PenTool className="h-5 w-5 text-primary" />
+                            {getClinicalNoteTitle(noteJson)}
+                          </CardTitle>
+                          <CardDescription>
+                            {note.encounters?.encounter_type || "Consultation"} •{" "}
+                            {new Date(note.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </CardDescription>
+                        </div>
+                        <Badge variant="outline" className="self-start capitalize">
+                          {note.status}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/20 p-3 text-xs leading-5 text-muted-foreground">
+                        {buildClinicalNoteMarkdown(noteJson, {
+                          patientName,
+                          encounterType: note.encounters?.encounter_type || "Consultation",
+                        })}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/professional/notes/${note.id}/edit?encounterId=${note.encounter_id}`)}
+                        >
+                          Open Note
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/professional/encounters?encounterId=${note.encounter_id}`)}
+                        >
+                          Open Encounter
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => navigate(`/professional/transcripts?encounterId=${note.encounter_id}`)}
+                        >
+                          Open Transcript
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">No clinical notes have been created for this patient yet.</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-4">
+            {reports.length > 0 ? (
+              reports.map((report: any) => {
+                const noteId = getLinkedNoteId(report);
+                const transcriptId = getLinkedTranscriptId(report);
+                return (
+                  <Card key={report.id}>
+                    <CardHeader>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg">
+                            <FileCheck className="h-5 w-5 text-primary" />
+                            {getReportTitle(report)}
+                          </CardTitle>
+                          <CardDescription>
+                            {toReportTitleCase(report.report_type || "medical report")} • {getReportSourceLabel(report)} •{" "}
+                            {new Date(report.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </CardDescription>
+                        </div>
+                        <Badge variant="outline" className="self-start capitalize">
+                          {getReportStatus(report)}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="rounded-lg border border-border bg-muted/20 p-3 text-sm leading-6 text-muted-foreground">
+                        {getReportSummary(report)}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/professional/reports/${report.id}`)}
+                        >
+                          Open Report
+                        </Button>
+                        {noteId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/professional/notes/${noteId}/edit?encounterId=${report.encounter_id}`)}
+                          >
+                            Open Source Note
+                          </Button>
+                        )}
+                        {transcriptId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/professional/transcripts/${transcriptId}`)}
+                          >
+                            Open Transcript
+                          </Button>
+                        )}
+                        {report.encounter_id && (
+                          <Button
+                            size="sm"
+                            onClick={() => navigate(`/professional/encounters?encounterId=${report.encounter_id}`)}
+                          >
+                            Open Encounter
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">No medical reports have been generated for this patient yet.</p>
                 </CardContent>
               </Card>
             )}

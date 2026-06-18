@@ -128,11 +128,18 @@ export default function MedicalHistorySetup() {
         },
         updated_at: now,
       });
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.warn("Medical history saved, but patient profile mirror failed:", profileError);
+      }
 
+      const uploadedFiles: string[] = [];
+      const failedFiles: Array<{ name: string; message: string }> = [];
       for (const file of queuedFiles) {
         const upload = await medicalHistoryService.uploadFile(user.id, file);
-        if (upload.error) throw upload.error;
+        if (upload.error) {
+          failedFiles.push({ name: file.name, message: upload.error.message });
+          continue;
+        }
 
         const { error: fileError } = await medicalHistoryService.createFile({
           medical_history_id: savedHistory.id,
@@ -144,20 +151,34 @@ export default function MedicalHistorySetup() {
           file_size: file.size,
           document_type: "medical_record",
         });
-        if (fileError) throw fileError;
+        if (fileError) {
+          failedFiles.push({ name: file.name, message: fileError.message });
+          await medicalHistoryService.deleteStorageFiles([upload.filePath]);
+          continue;
+        }
+
+        uploadedFiles.push(file.name);
       }
+
+      return { savedHistory, uploadedFiles, failedFiles };
     },
-    onSuccess: () => {
-      setQueuedFiles([]);
-      // Optimistically mark onboarding_completed = true in the cache BEFORE navigating
+    onSuccess: ({ savedHistory, failedFiles }) => {
+      setQueuedFiles((prev) => prev.filter((file) => failedFiles.some((failed) => failed.name === file.name)));
+      // Optimistically update the cache BEFORE navigating
       // so PatientGuard sees the updated value immediately and doesn't redirect back.
-      queryClient.setQueryData(["medical-history", user?.id], (old: unknown) =>
-        old ? { ...(old as object), onboarding_completed: true } : old
-      );
+      queryClient.setQueryData(["medical-history", user?.id], savedHistory);
       queryClient.invalidateQueries({ queryKey: ["medical-history", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["medical-history-files", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["patient-profile", user?.id] });
-      toast({ title: "Medical history saved", description: "Your health record is secure and confidential." });
+
+      if (failedFiles.length > 0) {
+        toast({
+          title: "Medical history saved",
+          description: `${failedFiles.length} document${failedFiles.length === 1 ? "" : "s"} could not be uploaded. The saved health record is still available to Neo Synapse and your care team.`,
+        });
+      } else {
+        toast({ title: "Medical history saved", description: "Your health record is secure and confidential." });
+      }
 
       if (isOnboarding) {
         navigate(nextPath, { replace: true });
@@ -337,7 +358,13 @@ export default function MedicalHistorySetup() {
                       <Shield className="h-4 w-4 text-primary" />
                       <span className="font-medium">Privacy notice</span>
                     </div>
-                    <p>Your data is secure and confidential. Your data is सुरक्षित/secure and confidential.</p>
+                    <p>
+                      Your data is stored securely and used for care, AI guidance, symptom triage, and appointment context as described in the{" "}
+                      <a href="/privacy" className="font-medium text-primary underline-offset-4 hover:underline">
+                        Privacy Policy
+                      </a>
+                      .
+                    </p>
                     <div className="mt-4 flex items-start gap-3">
                       <Checkbox
                         id="privacy-confirmed"
@@ -345,7 +372,7 @@ export default function MedicalHistorySetup() {
                         onCheckedChange={(checked) => setPrivacyConfirmed(checked === true)}
                       />
                       <Label htmlFor="privacy-confirmed" className="text-sm font-normal leading-6">
-                        I understand this information will be stored securely and used to personalize AI and symptom triage guidance.
+                        I understand this information will be stored securely and used to personalize care, AI guidance, symptom triage, and appointment review.
                       </Label>
                     </div>
                   </div>

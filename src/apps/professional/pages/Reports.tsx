@@ -1,4 +1,4 @@
-import { FileCheck, Download, Eye, Loader2 } from "lucide-react";
+import { ClipboardList, Download, Eye, FileCheck, FileText, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -11,6 +11,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { medicalReportService, auditLogService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  asReportRecord as asRecord,
+  formatReportDateTime as formatDateTime,
+  getLinkedNoteId,
+  getLinkedTranscriptId,
+  getReportJson,
+  getReportRecommendedAction,
+  getReportStatus,
+  getReportSummary,
+  reportArray as asStringArray,
+  reportText as asText,
+  toReportTitleCase as toTitleCase,
+} from "@/shared/lib/reports";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
 const urgencyConfig: Record<string, { label: string; className: string }> = {
   "non-urgent": { label: "Non-urgent", className: "border-green-500/30 bg-green-500/10 text-green-700" },
@@ -19,37 +34,10 @@ const urgencyConfig: Record<string, { label: string; className: string }> = {
   emergency: { label: "Emergency", className: "border-red-500/30 bg-red-500/10 text-red-700" },
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-
-const asText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
-
-const asStringArray = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
-    : [];
-
-const toTitleCase = (value: string): string =>
-  value
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-
-const formatDateTime = (value: unknown): string => {
-  if (typeof value !== "string") return "Not available";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not available";
-  return date.toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 export default function ProfessionalReports() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { settings } = useProfessionalSettings();
   const queryClient = useQueryClient();
   const { reportId } = useParams<{ reportId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -95,11 +83,6 @@ export default function ProfessionalReports() {
       log.metadata?.encounter_id === selectedReport.encounter_id
     )
     : [];
-
-  const getReportStatus = (report: any) => {
-    const status = report?.report_json?.status;
-    return typeof status === "string" && status.trim().length > 0 ? status : "finalized";
-  };
 
   const getReportStatusClass = (status: string) => {
     if (status === "approved" || status === "finalized") return "border-emerald-500/50 text-emerald-500";
@@ -347,11 +330,11 @@ export default function ProfessionalReports() {
                   }
 
                   const reportData = previewData || {};
-                  const patient = asRecord(reportData.patient) || {};
+                  const patient = asRecord(reportData.patient);
                   const urgencyKey = asText(reportData.urgency).toLowerCase();
                   const urgency = urgencyConfig[urgencyKey] || null;
-                  const summary = asText(reportData.summary) || "No summary is available for this report yet.";
-                  const recommendedAction = asText(reportData.recommended_action) || "No recommended next step was provided.";
+                  const summary = getReportSummary({ ...selectedReport, report_json: reportData });
+                  const recommendedAction = getReportRecommendedAction({ ...selectedReport, report_json: reportData });
                   const reportType = asText(selectedReport.report_type) || "medical_report";
                   const symptoms = asStringArray(reportData.symptoms);
                   const warningSigns = asStringArray(reportData.warning_signs);
@@ -361,7 +344,7 @@ export default function ProfessionalReports() {
                   const possibleConditions = Array.isArray(reportData.possible_conditions)
                     ? reportData.possible_conditions
                       .map((item) => asRecord(item))
-                      .filter(Boolean)
+                      .filter((item) => Object.keys(item).length > 0)
                       .map((item) => ({
                         name: asText(item?.name) || "Unknown condition",
                         likelihood: asText(item?.likelihood) || "unknown",
@@ -482,6 +465,38 @@ export default function ProfessionalReports() {
                   );
                 })()}
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  {getLinkedNoteId(selectedReport) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      onClick={() => navigate(`/professional/notes/${getLinkedNoteId(selectedReport)}/edit?encounterId=${selectedReport.encounter_id}`)}
+                    >
+                      <FileText className="w-4 h-4 mr-1" />
+                      Open Source Note
+                    </Button>
+                  )}
+                  {selectedReport.encounter_id && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      onClick={() => navigate(`/professional/encounters?encounterId=${selectedReport.encounter_id}`)}
+                    >
+                      <ClipboardList className="w-4 h-4 mr-1" />
+                      Open Encounter
+                    </Button>
+                  )}
+                  {getLinkedTranscriptId(selectedReport) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full justify-start sm:w-auto sm:justify-center"
+                      onClick={() => navigate(`/professional/transcripts/${getLinkedTranscriptId(selectedReport)}`)}
+                    >
+                      Open Transcript
+                    </Button>
+                  )}
                   <Button size="sm" className="w-full sm:w-auto justify-start sm:justify-center" onClick={() => downloadReportJson(selectedReport)}>
                     <Download className="w-4 h-4 mr-1" /> Export JSON
                   </Button>
@@ -512,11 +527,13 @@ export default function ProfessionalReports() {
                     {isFinalizing ? "Finalizing..." : "Finalize Report"}
                   </Button>
                 </div>
-                <TransitionTimeline
-                  title="Report Transition History"
-                  events={selectedReportAuditTimeline}
-                  emptyLabel="No report transitions recorded yet."
-                />
+                {settings.activityLoggingVisible && (
+                  <TransitionTimeline
+                    title="Report Transition History"
+                    events={selectedReportAuditTimeline}
+                    emptyLabel="No report transitions recorded yet."
+                  />
+                )}
               </>
             )}
           </div>

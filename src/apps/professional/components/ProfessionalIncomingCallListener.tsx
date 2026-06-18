@@ -5,6 +5,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileNames } from "@/shared/hooks/useHealthcare";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 import { supabase } from "@/integrations/supabase/client";
 
 export function ProfessionalIncomingCallListener() {
@@ -12,6 +13,7 @@ export function ProfessionalIncomingCallListener() {
   const navigate = useNavigate();
   const location = useLocation();
   const isTelemedicinePage = location.pathname.startsWith("/professional/telemedicine");
+  const { settings } = useProfessionalSettings();
 
   const previousPendingEncounterIdsRef = useRef<Set<string>>(new Set());
   const ringingEncounterIdRef = useRef<string | null>(null);
@@ -133,12 +135,12 @@ export function ProfessionalIncomingCallListener() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user && !isTelemedicinePage,
+    enabled: !!user && !isTelemedicinePage && settings.patientAlerts,
     refetchInterval: 5000,
   });
 
   useEffect(() => {
-    if (!user?.id || isTelemedicinePage) return;
+    if (!user?.id || isTelemedicinePage || !settings.patientAlerts) return;
 
     const channel = supabase
       .channel(`pro-incoming-call-listener-${user.id}`)
@@ -159,7 +161,7 @@ export function ProfessionalIncomingCallListener() {
     return () => {
       channel.unsubscribe();
     };
-  }, [user?.id, isTelemedicinePage, refetch]);
+  }, [user?.id, isTelemedicinePage, refetch, settings.patientAlerts]);
 
   const patientIds = useMemo(
     () => [...new Set(waitingEncounters.filter((e: any) => e.status === "pending").map((e: any) => e.patient_id))],
@@ -238,6 +240,12 @@ export function ProfessionalIncomingCallListener() {
   }, [ensureAudioContext]);
 
   useEffect(() => {
+    if (!settings.patientAlerts) {
+      stopRinging();
+      previousPendingEncounterIdsRef.current = new Set();
+      return;
+    }
+
     if (isTelemedicinePage) {
       stopRinging();
       previousPendingEncounterIdsRef.current = new Set();
@@ -259,7 +267,7 @@ export function ProfessionalIncomingCallListener() {
     if (ringingEncounterIdRef.current && !currentIds.has(ringingEncounterIdRef.current)) {
       stopRinging();
     }
-  }, [waitingEncounters, isTelemedicinePage, getPatientName, startIncomingAlert, stopRinging]);
+  }, [waitingEncounters, isTelemedicinePage, getPatientName, startIncomingAlert, stopRinging, settings.patientAlerts]);
 
   useEffect(() => {
     return () => {

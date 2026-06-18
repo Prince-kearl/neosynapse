@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.93.3";
+import { SignJWT, importPKCS8 } from "https://deno.land/x/jose@v4.15.5/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +44,8 @@ interface DeliveryResult {
   provider_response?: unknown;
 }
 
+let cachedApnsJwt: { token: string; expiresAt: number } | null = null;
+
 function normalizePlatform(value: string | undefined): TargetPlatform {
   const v = (value || "").toLowerCase();
   if (v === "android") return "android";
@@ -83,6 +86,16 @@ function sanitizeActions(actions: NotificationAction[] | undefined): Notificatio
       title: String(action.title),
       icon: typeof action.icon === "string" ? action.icon : undefined,
     }));
+}
+
+function toInAppCategory(category: string | undefined): "general" | "appointment" | "clinical" | "system" | "security" {
+  if (!category) return "general";
+  const normalized = category.toLowerCase();
+  if (normalized.includes("appointment") || normalized.includes("telemedicine")) return "appointment";
+  if (normalized.includes("clinical") || normalized.includes("health") || normalized.includes("medical")) return "clinical";
+  if (normalized.includes("security")) return "security";
+  if (normalized.includes("system")) return "system";
+  return "general";
 }
 
 async function sendWithFcm(args: {
@@ -153,18 +166,23 @@ async function sendWithApns(args: {
   data: Record<string, string>;
   category?: string;
 }): Promise<{ ok: boolean; response: unknown; message?: string }> {
-  const bearerToken = Deno.env.get("APNS_BEARER_TOKEN");
+  const bearerToken = await resolveApnsBearerToken();
   const topic = Deno.env.get("APNS_TOPIC");
 
   if (!bearerToken || !topic) {
     return {
       ok: false,
       response: null,
-      message: "APNS_BEARER_TOKEN or APNS_TOPIC is not configured",
+      message: "APNs credentials are not configured. Set APNS_TEAM_ID, APNS_KEY_ID, APNS_PRIVATE_KEY, and APNS_TOPIC.",
     };
   }
 
-  const resp = await fetch(`https://api.push.apple.com/3/device/${args.token}`, {
+  const apnsEnvironment = (Deno.env.get("APNS_ENVIRONMENT") || "production").toLowerCase();
+  const apnsHost = apnsEnvironment === "development" || apnsEnvironment === "sandbox"
+    ? "https://api.sandbox.push.apple.com"
+    : "https://api.push.apple.com";
+
+  const resp = await fetch(`${apnsHost}/3/device/${args.token}`, {
     method: "POST",
     headers: {
       authorization: `bearer ${bearerToken}`,
@@ -199,6 +217,33 @@ async function sendWithApns(args: {
     ok: true,
     response: responseBody || "ok",
   };
+}
+
+async function resolveApnsBearerToken(): Promise<string | null> {
+  const staticToken = Deno.env.get("APNS_BEARER_TOKEN");
+  if (staticToken) return staticToken;
+
+  const teamId = Deno.env.get("APNS_TEAM_ID");
+  const keyId = Deno.env.get("APNS_KEY_ID");
+  const privateKey = Deno.env.get("APNS_PRIVATE_KEY")?.replace(/\\n/g, "\n");
+
+  if (!teamId || !keyId || !privateKey) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedApnsJwt && cachedApnsJwt.expiresAt > now + 60) {
+    return cachedApnsJwt.token;
+  }
+
+  const key = await importPKCS8(privateKey, "ES256");
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: "ES256", kid: keyId })
+    .setIssuer(teamId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 50 * 60)
+    .sign(key);
+
+  cachedApnsJwt = { token, expiresAt: now + 50 * 60 };
+  return token;
 }
 
 Deno.serve(async (req) => {
@@ -285,9 +330,29 @@ Deno.serve(async (req) => {
     const dataPayload = sanitizeData(body.data);
     const actionsPayload = sanitizeActions(body.actions);
     const category = typeof body.category === "string" && body.category.trim() ? body.category.trim() : undefined;
+    const actionUrl = typeof body.data?.action_url === "string" ? body.data.action_url : null;
     const deliveryResults: DeliveryResult[] = [];
 
     for (const targetUserId of targetUserIds) {
+      if (!dryRun) {
+        const { error: inAppError } = await supabaseAdmin.rpc("create_user_notification", {
+          p_user_id: targetUserId,
+          p_title: body.title,
+          p_body: body.body,
+          p_category: toInAppCategory(category),
+          p_action_url: actionUrl,
+          p_metadata: JSON.stringify({
+            ...(body.data || {}),
+            category: category || "general",
+            urgency,
+            fallback_delivery: true,
+          }),
+        });
+        if (inAppError) {
+          console.error("Failed to create fallback in-app notification:", inAppError);
+        }
+      }
+
       const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(targetUserId);
       if (userError || !userData?.user) {
         deliveryResults.push({

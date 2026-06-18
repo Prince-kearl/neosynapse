@@ -2,6 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import { Device } from "@capacitor/device";
 import { PushNotifications, type PermissionStatus, type Token } from "@capacitor/push-notifications";
 import { supabase } from "@/integrations/supabase/client";
+import { isNativeRemotePushConfigured } from "@/mobile/notificationFallbacks";
 
 type PushPermission = "default" | "granted" | "denied";
 
@@ -23,14 +24,18 @@ function toPermission(status: PermissionStatus): PushPermission {
 }
 
 export function isNativePushSupported(): boolean {
-  return Capacitor.isNativePlatform();
+  return Capacitor.isNativePlatform() && isNativeRemotePushConfigured();
 }
 
 export function isPushSupported(): boolean {
-  return isNativePushSupported() || typeof Notification !== "undefined";
+  return Capacitor.isNativePlatform() || typeof Notification !== "undefined";
 }
 
 export async function getPushPermission(): Promise<PushPermission> {
+  if (Capacitor.isNativePlatform() && !isNativeRemotePushConfigured()) {
+    return "granted";
+  }
+
   if (isNativePushSupported()) {
     const status = await PushNotifications.checkPermissions();
     return toPermission(status);
@@ -41,6 +46,10 @@ export async function getPushPermission(): Promise<PushPermission> {
 }
 
 export async function requestPushPermission(): Promise<PushPermission> {
+  if (Capacitor.isNativePlatform() && !isNativeRemotePushConfigured()) {
+    return "granted";
+  }
+
   if (isNativePushSupported()) {
     const status = await PushNotifications.requestPermissions();
     return toPermission(status);
@@ -160,6 +169,7 @@ export async function ensureNativePushRegistration(userId: string | null | undef
 }
 
 export async function requestAndRegisterNativePush(userId: string | null | undefined): Promise<boolean> {
+  if (Capacitor.isNativePlatform() && !isNativeRemotePushConfigured()) return true;
   if (!isNativePushSupported()) return false;
 
   const permission = await requestPushPermission();

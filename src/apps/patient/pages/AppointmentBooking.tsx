@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { appointmentService } from "@/shared/services/healthcare";
-import { useMyProfile, usePatientProfile } from "@/shared/hooks/useHealthcare";
-import type { AppointmentPriority } from "@/shared/types/healthcare";
+import { useMedicalHistory, useMedicalHistoryFiles, useMyProfile, usePatientProfile } from "@/shared/hooks/useHealthcare";
+import { buildMedicalHistorySnapshot } from "@/shared/lib/medicalHistory";
+import { getPatientProfileMeta } from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
 import { DoctorSelect } from "@/apps/patient/components/DoctorSelect";
 import { TimeSlotPicker } from "@/apps/patient/components/TimeSlotPicker";
@@ -15,30 +16,12 @@ import { AppointmentBookingForm } from "@/apps/patient/components/AppointmentBoo
 
 const SCHEDULE_LOOKAHEAD_DAYS = 30;
 
-const PRIORITY_OPTIONS = [
-  { value: "routine" as const, label: "Routine", description: "Regular consultation with no immediate urgency." },
-  { value: "priority" as const, label: "Priority", description: "Needs attention soon but not immediate." },
-  { value: "urgent" as const, label: "Urgent", description: "Requesting prompt review from your doctor." },
-  { value: "emergency" as const, label: "Emergency", description: "Immediate attention required. Doctor alerted." },
-];
-
-const HIGH_RISK_KEYWORDS = [
-  "chest pain",
-  "shortness of breath",
-  "severe pain",
-  "bleeding",
-  "unconscious",
-  "trauma",
-  "stroke",
-  "heart attack",
-  "difficulty breathing",
-  "allergic reaction",
-  "sudden weakness",
-  "confusion",
-];
-
 const formatDateSlotKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "We could not schedule your appointment right now. Please try again.");
+const getErrorField = (error: unknown, field: "code" | "details") =>
+  typeof error === "object" && error !== null && field in error ? String((error as Record<string, unknown>)[field] || "") : undefined;
 
 export default function AppointmentBookingPage() {
   const { user } = useAuth();
@@ -55,7 +38,6 @@ export default function AppointmentBookingPage() {
   const [scheduledTime, setScheduledTime] = useState("09:00");
   const [consultationType, setConsultationType] = useState<"in_person" | "telemedicine">("telemedicine");
   const [reasonForVisit, setReasonForVisit] = useState("");
-  const [selectedPriority, setSelectedPriority] = useState<AppointmentPriority>("routine");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -64,6 +46,12 @@ export default function AppointmentBookingPage() {
 
   const { data: profile } = useMyProfile();
   const { data: patientProfile } = usePatientProfile();
+  const { data: medicalHistory } = useMedicalHistory();
+  const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
+  const patientSettings = useMemo(
+    () => getPatientProfileMeta(patientProfile?.insurance_info),
+    [patientProfile?.insurance_info],
+  );
 
   useEffect(() => {
     if (!fullName) {
@@ -212,12 +200,6 @@ export default function AppointmentBookingPage() {
 
   const selectedSlotUnavailable = selectedScheduleSlotKey ? unavailableSlotKeys.has(selectedScheduleSlotKey) : false;
 
-  const isHighRiskReason = useMemo(() => {
-    const normalized = reasonForVisit.trim().toLowerCase();
-    if (!normalized) return false;
-    return HIGH_RISK_KEYWORDS.some((keyword) => normalized.includes(keyword));
-  }, [reasonForVisit]);
-
   const validateEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -294,21 +276,38 @@ export default function AppointmentBookingPage() {
     const [hours, minutes] = scheduledTime.split(":").map(Number);
     scheduledAt.setHours(hours, minutes, 0, 0);
 
-    const { data, error } = await appointmentService.create({
+    const appointmentPayload = {
       patient_id: user.id,
       professional_id: selectedDoctor!,
       appointment_type: consultationType,
       reason_for_visit: reasonForVisit.trim(),
+      medical_history_snapshot: buildMedicalHistorySnapshot(medicalHistory, medicalHistoryFiles, patientProfile, patientSettings) as Record<string, unknown>,
       scheduled_at: scheduledAt.toISOString(),
-      priority: selectedPriority,
       status: "pending",
-    }).select("id").single();
+    };
+
+    console.log("Attempting to create appointment with payload:", appointmentPayload);
+    console.log("Validation check - All fields present:", {
+      hasPatientId: !!appointmentPayload.patient_id,
+      hasProfessionalId: !!appointmentPayload.professional_id,
+      hasAppointmentType: !!appointmentPayload.appointment_type,
+      hasScheduledAt: !!appointmentPayload.scheduled_at,
+      hasStatus: !!appointmentPayload.status,
+    });
+
+    const { data, error } = await appointmentService.create(appointmentPayload);
 
     if (error || !data) {
-      console.error("Unable to schedule appointment:", error);
+      console.error("Appointment creation failed:", {
+        error,
+        errorCode: getErrorField(error, "code"),
+        errorMessage: getErrorMessage(error),
+        errorDetails: getErrorField(error, "details"),
+        data,
+      });
       toast({
         title: "Booking failed",
-        description: "We could not schedule your appointment right now. Please try again.",
+        description: getErrorMessage(error),
         variant: "destructive",
       });
       setIsBooking(false);
@@ -317,34 +316,13 @@ export default function AppointmentBookingPage() {
 
     queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
 
-    if (["urgent", "emergency"].includes(selectedPriority) || isHighRiskReason) {
-      try {
-        const pushService = await import("@/shared/services/pushNotificationService").then((m) => m.pushNotificationService);
-        await pushService.sendTestPush({
-          targetUserId: selectedDoctor!,
-          title: selectedPriority === "emergency" ? "Emergency appointment requested" : "Urgent appointment requested",
-          body: `${user.email || "A patient"} requested a ${selectedPriority} ${consultationType === "telemedicine" ? "telemedicine" : "in-person"} appointment.`,
-          urgency: "high",
-          category: "appointment_alert",
-          data: {
-            appointmentId: data.id,
-            patientId: user.id,
-            priority: selectedPriority,
-            reason: reasonForVisit.trim(),
-          },
-        });
-      } catch (notificationError) {
-        console.error("Failed to send priority appointment alert:", notificationError);
-      }
-    }
-
     toast({
       title: "Appointment booked",
       description: "Your appointment request was submitted successfully.",
       variant: "success",
     });
     navigate("/patient/appointments");
-  }, [user, isBooking, getValidationErrors, selectedDoctor, scheduledDate, scheduledTime, consultationType, reasonForVisit, selectedPriority, isHighRiskReason, navigate, queryClient]);
+  }, [user, isBooking, getValidationErrors, selectedDoctor, scheduledDate, scheduledTime, consultationType, reasonForVisit, medicalHistory, medicalHistoryFiles, patientProfile, patientSettings, navigate, queryClient]);
 
   const availableSlotSummary = scheduledDate
     ? `${scheduledDate.toLocaleDateString("en-GB", {
@@ -414,38 +392,6 @@ export default function AppointmentBookingPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {selectedDoctor && selectedDoctorData && (
-            <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
-              <h2 className="font-display text-lg font-semibold">Appointment priority</h2>
-              <div className="grid gap-3">
-                {PRIORITY_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setSelectedPriority(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition ${selectedPriority === option.value ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:border-primary/20"}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-sm">{option.label}</span>
-                      <span className="text-xs text-muted-foreground capitalize">{option.value}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{option.description}</p>
-                  </button>
-                ))}
-              </div>
-
-              {isHighRiskReason && (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 flex gap-3">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <div>
-                    <p className="font-medium">High-risk symptoms detected</p>
-                    <p className="text-sm text-amber-800/80">Consider selecting Priority or Emergency for faster review.</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

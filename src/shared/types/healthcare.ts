@@ -129,6 +129,7 @@ export interface Appointment {
   facility_id: string | null;
   appointment_type: string;
   reason_for_visit: string | null;
+  medical_history_snapshot?: Record<string, unknown> | null;
   scheduled_at: string | null;
   priority?: AppointmentPriority;
   status: AppointmentStatus;

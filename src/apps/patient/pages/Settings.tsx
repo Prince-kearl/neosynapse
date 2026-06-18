@@ -1,5 +1,5 @@
 // Patient Settings - wrapped from existing
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   ArrowLeft, Bell, Globe, Moon, Smartphone, Shield, Eye, Trash2, 
@@ -24,9 +24,16 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { SUPPORTED_LANGUAGES, useLanguage } from "@/contexts/LanguageContext";
 import { usePushNotifications } from "@/legacy/hooks/usePushNotifications";
-import { useMyConsents, useMyReports, usePatientProfile } from "@/shared/hooks/useHealthcare";
+import { ensureNativePushRegistration, isNativePushSupported } from "@/mobile/pushNotifications";
+import {
+  getNotificationCapabilityDescription,
+  getNotificationCapabilityLabel,
+  isNativeRemotePushConfigured,
+} from "@/mobile/notificationFallbacks";
+import { useMedicalHistory, useMedicalHistoryFiles, useMyConsents, useMyReports, usePatientProfile } from "@/shared/hooks/useHealthcare";
 import { useAIConsentCheck } from "@/shared/hooks/useAIConsentCheck";
 import { patientProfileService, consentService } from "@/shared/services/healthcare";
+import { getPatientProfileMeta, mergePatientProfileMeta, type PatientProfileMeta } from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
 
 export default function PatientSettings() {
@@ -35,6 +42,8 @@ export default function PatientSettings() {
   const { user } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { data: patientProfile } = usePatientProfile();
+  const { data: medicalHistory } = useMedicalHistory();
+  const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
   const { data: reports = [] } = useMyReports();
   const { data: consents = [] } = useMyConsents();
   const { data: aiConsent } = useAIConsentCheck();
@@ -75,22 +84,17 @@ export default function PatientSettings() {
     navigate("/patient/ai-assistant");
   };
 
-  const insuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
-  const profileMeta = (insuranceInfo.profile_meta as Record<string, unknown> | undefined) || {};
-  const notificationSettings = (profileMeta.notification_settings as Record<string, unknown> | undefined) || {};
-  const privacySecuritySettings = (profileMeta.privacy_security_settings as Record<string, unknown> | undefined) || {};
-  const appSettings = (profileMeta.settings as Record<string, unknown> | undefined) || {};
+  const profileMeta = getPatientProfileMeta(patientProfile?.insurance_info);
+  const notificationSettings = profileMeta.notification_settings;
+  const privacySecuritySettings = profileMeta.privacy_security_settings;
+  const appSettings = profileMeta.settings;
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (nextProfileMeta: Record<string, unknown>) => {
+    mutationFn: async (patch: Partial<typeof profileMeta>) => {
       if (!user) throw new Error("Not authenticated");
-      const baseInsuranceInfo = (patientProfile?.insurance_info as Record<string, unknown> | null) || {};
 
       const { error } = await patientProfileService.upsert(user.id, {
-        insurance_info: {
-          ...baseInsuranceInfo,
-          profile_meta: nextProfileMeta,
-        },
+        insurance_info: mergePatientProfileMeta(patientProfile?.insurance_info, patch),
         updated_at: new Date().toISOString(),
       });
       if (error) throw error;
@@ -104,12 +108,9 @@ export default function PatientSettings() {
     },
   });
 
-  const persistProfileMeta = (patch: Record<string, unknown>, successTitle: string) => {
+  const persistProfileMeta = (patch: Partial<PatientProfileMeta>, successTitle: string) => {
     updateSettingsMutation.mutate(
-      {
-        ...profileMeta,
-        ...patch,
-      },
+      patch,
       {
         onSuccess: () => {
           toast({ title: successTitle });
@@ -119,16 +120,21 @@ export default function PatientSettings() {
   };
 
   const browserNotificationsEnabled =
-    notificationSettings.browser_notifications === undefined
+    notificationSettings.browser_notifications === null
       ? isEnabled
-      : notificationSettings.browser_notifications === true;
-  const smsNotificationsEnabled = notificationSettings.sms_notifications === true;
-  const healthDataSyncEnabled = appSettings.health_data_sync === true;
+      : notificationSettings.browser_notifications;
+  const notificationChannelLabel = getNotificationCapabilityLabel();
+  const notificationChannelDescription = getNotificationCapabilityDescription(isSupported, permission);
+  const smsNotificationsEnabled = notificationSettings.sms_notifications;
+  const healthDataSyncEnabled = appSettings.health_data_sync;
   const profileVisibilityShared = privacySecuritySettings.profile_visibility !== "private";
-  const anonymousAnalyticsEnabled = appSettings.anonymous_analytics !== false;
+  const anonymousAnalyticsEnabled = appSettings.anonymous_analytics;
 
   const handlePushToggle = async (checked: boolean) => {
     if (!isSupported) return;
+    const fallbackOnly = !isNativeRemotePushConfigured() && typeof Notification === "undefined";
+    const enabledTitle = fallbackOnly ? "In-app notifications enabled" : "Notifications enabled";
+    const disabledTitle = fallbackOnly ? "In-app notifications disabled" : "Browser notifications disabled";
 
     if (checked && permission !== "granted") {
       const granted = await requestPermission();
@@ -140,11 +146,13 @@ export default function PatientSettings() {
               browser_notifications: true,
             },
           },
-          "Browser notifications enabled"
+          enabledTitle
         );
         toast({
-          title: "Notifications enabled",
-          description: "You'll receive health alerts and appointment reminders.",
+          title: enabledTitle,
+          description: fallbackOnly
+            ? "You will see alerts while Neo Synapse is open."
+            : "You'll receive health alerts and appointment reminders.",
         });
       } else if (permission === "denied") {
         toast({
@@ -163,8 +171,12 @@ export default function PatientSettings() {
           browser_notifications: checked,
         },
       },
-      checked ? "Browser notifications enabled" : "Browser notifications disabled"
+      checked ? enabledTitle : disabledTitle
     );
+
+    if (checked && isNativePushSupported()) {
+      await ensureNativePushRegistration(user?.id);
+    }
   };
 
   const handleSmsToggle = (checked: boolean) => {
@@ -226,6 +238,9 @@ export default function PatientSettings() {
         patient_profile: patientProfile || null,
       },
       medical_reports: reports,
+      medical_history: medicalHistory || null,
+      medical_history_files: medicalHistoryFiles,
+      patient_settings: profileMeta,
       consents,
     };
 
@@ -273,7 +288,7 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Appearance</h2>
           <div className="bg-card rounded-2xl shadow-food-card p-4 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Moon className="w-5 h-5 text-muted-foreground" />
                 <span className="font-medium">Theme</span>
@@ -291,13 +306,9 @@ export default function PatientSettings() {
               <div className="flex items-center gap-3">
                 <BellRing className="w-5 h-5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">Browser Notifications</p>
+                  <p className="font-medium">{notificationChannelLabel}</p>
                   <p className="text-sm text-muted-foreground">
-                    {!isSupported 
-                      ? "Not supported in this browser" 
-                      : permission === "denied"
-                      ? "Blocked - enable in browser settings"
-                      : "Get health alerts and appointment reminders"}
+                    {notificationChannelDescription}
                   </p>
                 </div>
               </div>
@@ -374,6 +385,17 @@ export default function PatientSettings() {
               </div>
               <Switch checked={anonymousAnalyticsEnabled} onCheckedChange={handleAnalyticsToggle} disabled={updateSettingsMutation.isPending} />
             </div>
+            <Separator />
+            <Link to="/privacy" className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Privacy Policy</p>
+                  <p className="text-sm text-muted-foreground">How Neo Synapse handles health data</p>
+                </div>
+              </div>
+              <span className="text-sm text-primary">View</span>
+            </Link>
           </div>
         </section>
 
@@ -436,7 +458,7 @@ export default function PatientSettings() {
                   toast({ title: "Language updated" });
                 }}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -455,7 +477,7 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-destructive mb-3">Danger Zone</h2>
           <div className="bg-card rounded-2xl shadow-food-card p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Trash2 className="w-5 h-5 text-destructive" />
                 <div>
@@ -465,7 +487,7 @@ export default function PatientSettings() {
               </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">Delete</Button>
+                  <Button variant="destructive" size="sm" className="w-full sm:w-auto">Delete</Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>

@@ -1,4 +1,4 @@
-import { FileText, Loader2, Eye } from "lucide-react";
+import { ClipboardList, FileText, Loader2, Eye, Sparkles } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,13 +8,20 @@ import { useProfessionalTranscripts, useProfileNames } from "@/shared/hooks/useH
 import { EncounterFilterBanner } from "@/apps/professional/components/EncounterFilterBanner";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useAuth } from "@/contexts/AuthContext";
-import { clinicalNoteService, auditLogService } from "@/shared/services/healthcare";
+import { clinicalNoteService, auditLogService, medicalReportService } from "@/shared/services/healthcare";
 import { toast } from "@/hooks/use-toast";
 import { TransitionTimeline } from "@/apps/professional/components/TransitionTimeline";
+import {
+  buildFallbackConsultationArtifacts,
+  extractTranscriptText,
+} from "@/shared/lib/consultationArtifacts";
+import { supabase } from "@/integrations/supabase/client";
+import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 
 export default function ProfessionalTranscripts() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { settings } = useProfessionalSettings();
   const queryClient = useQueryClient();
   const { transcriptId } = useParams<{ transcriptId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,8 +55,62 @@ export default function ProfessionalTranscripts() {
 
   const hasContent = (json: any) => json && Object.keys(json).length > 0;
 
-  const generateNoteDraftFromTranscript = async () => {
+  const generateDocumentationFromTranscript = async () => {
     if (!selectedTranscript || !user?.id) return;
+    const enc = selectedTranscript.encounters;
+    const patientName = enc?.patient_id ? (nameMap[enc.patient_id] || "Patient") : "Patient";
+    const transcriptText = extractTranscriptText(selectedTranscript.transcript_json);
+
+    if (!transcriptText) {
+      toast({
+        title: "Transcript has no readable text",
+        description: "The transcript must contain text before AI documentation can be drafted.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingDraft(true);
+
+    let artifacts = buildFallbackConsultationArtifacts({
+      transcriptText,
+      patientName,
+      doctorName: user.email || "Healthcare professional",
+      encounterId: selectedTranscript.encounter_id,
+    });
+
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-consultation-artifacts", {
+        body: {
+          transcriptText,
+          transcriptJson: selectedTranscript.transcript_json ?? {},
+          encounterId: selectedTranscript.encounter_id,
+          patientName,
+          doctorName: user.email || "Healthcare professional",
+        },
+      });
+
+      if (error) throw error;
+      if (data && typeof data === "object") {
+        artifacts = {
+          ...artifacts,
+          ...(data as typeof artifacts),
+          report: {
+            ...artifacts.report,
+            ...((data as any).report || {}),
+            status: "draft",
+            patient: patientName,
+            doctor: (data as any).report?.doctor || user.email || "Healthcare professional",
+          },
+        };
+      }
+    } catch (error) {
+      console.error("AI consultation artifact generation failed; using fallback draft:", error);
+      toast({
+        title: "AI generation fallback used",
+        description: "A conservative draft was created. You can regenerate after deploying/configuring the AI function.",
+      });
+    }
 
     const draftPayload = {
       source: "transcript_review",
@@ -58,16 +119,12 @@ export default function ProfessionalTranscripts() {
       generated_at: new Date().toISOString(),
       transcript_json: selectedTranscript.transcript_json ?? {},
       speaker_map: selectedTranscript.speaker_map ?? {},
-      sections: {
-        chief_complaint: "",
-        history_of_present_illness: "",
-        assessment: "",
-        plan: "",
-        follow_up: "",
-      },
+      sections: artifacts.soap_note,
+      soap_note: artifacts.soap_note,
+      sop_draft: artifacts.sop_draft,
+      medical_report: artifacts.report,
     };
 
-    setIsGeneratingDraft(true);
     const { data: encounterNotes, error: existingError } = await clinicalNoteService.getForEncounter(selectedTranscript.encounter_id);
     if (existingError) {
       setIsGeneratingDraft(false);
@@ -76,14 +133,16 @@ export default function ProfessionalTranscripts() {
     }
 
     const existingNote = (encounterNotes || [])[0];
+    let noteId: string | null = null;
 
     if (existingNote && existingNote.status !== "finalized") {
       const { error: updateError } = await clinicalNoteService.updateDraft(existingNote.id, draftPayload);
-      setIsGeneratingDraft(false);
       if (updateError) {
+        setIsGeneratingDraft(false);
         toast({ title: "Failed to update note draft", description: updateError.message, variant: "destructive" });
         return;
       }
+      noteId = existingNote.id;
 
       await auditLogService.log({
         actor_id: user.id,
@@ -95,47 +154,89 @@ export default function ProfessionalTranscripts() {
           encounter_id: selectedTranscript.encounter_id,
         },
       });
-
-      queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
-      toast({ title: "Draft note updated from transcript" });
-      navigate(`/professional/notes/${existingNote.id}/edit?encounterId=${selectedTranscript.encounter_id}`);
-      return;
-    }
-
-    const { data: createdNotes, error: createError } = await clinicalNoteService.create({
-      encounter_id: selectedTranscript.encounter_id,
-      draft_json: draftPayload,
-    });
-    setIsGeneratingDraft(false);
-
-    if (createError) {
-      toast({ title: "Failed to create note draft", description: createError.message, variant: "destructive" });
-      return;
-    }
-
-    const createdNote = Array.isArray(createdNotes) ? createdNotes[0] : createdNotes;
-    const createdId = (createdNote as any)?.id;
-
-    await auditLogService.log({
-      actor_id: user.id,
-      action: "transcript_to_note_draft_created",
-      entity_type: "clinical_note",
-      entity_id: createdId,
-      metadata: {
-        transcript_id: selectedTranscript.id,
+    } else {
+      const { data: createdNotes, error: createError } = await clinicalNoteService.create({
         encounter_id: selectedTranscript.encounter_id,
-      },
-    });
+        draft_json: draftPayload,
+      });
 
-    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
-    toast({ title: "Draft note created from transcript" });
+      if (createError) {
+        setIsGeneratingDraft(false);
+        toast({ title: "Failed to create note draft", description: createError.message, variant: "destructive" });
+        return;
+      }
 
-    if (createdId) {
-      navigate(`/professional/notes/${createdId}/edit?encounterId=${selectedTranscript.encounter_id}`);
-      return;
+      const createdNote = Array.isArray(createdNotes) ? createdNotes[0] : createdNotes;
+      noteId = (createdNote as any)?.id || null;
+
+      await auditLogService.log({
+        actor_id: user.id,
+        action: "transcript_to_note_draft_created",
+        entity_type: "clinical_note",
+        entity_id: noteId || undefined,
+        metadata: {
+          transcript_id: selectedTranscript.id,
+          encounter_id: selectedTranscript.encounter_id,
+        },
+      });
     }
 
-    navigate(`/professional/notes?encounterId=${selectedTranscript.encounter_id}`);
+    const reportJson = {
+      ...artifacts.report,
+      source: "telemedicine_transcript",
+      transcript_id: selectedTranscript.id,
+      encounter_id: selectedTranscript.encounter_id,
+      soap_note: artifacts.soap_note,
+      sop_draft: artifacts.sop_draft,
+      quality_flags: (artifacts as any).quality_flags || [],
+    };
+
+    if (enc?.patient_id) {
+      const { data: existingReports, error: reportFetchError } = await medicalReportService.getForEncounter(selectedTranscript.encounter_id);
+      if (reportFetchError) {
+        console.error("Could not check existing medical reports:", reportFetchError);
+      }
+
+      const existingReport = (existingReports || []).find((report: any) => report.report_type === "telemedicine_consultation");
+      if (existingReport) {
+        const { error: updateReportError } = await medicalReportService.update(existingReport.id, { report_json: reportJson });
+        if (updateReportError) {
+          setIsGeneratingDraft(false);
+          toast({ title: "Failed to update medical report", description: updateReportError.message, variant: "destructive" });
+          return;
+        }
+      } else {
+        const { error: createReportError } = await medicalReportService.create({
+          patient_id: enc.patient_id,
+          encounter_id: selectedTranscript.encounter_id,
+          report_type: "telemedicine_consultation",
+          report_json: reportJson,
+        });
+        if (createReportError) {
+          setIsGeneratingDraft(false);
+          toast({ title: "Failed to create medical report", description: createReportError.message, variant: "destructive" });
+          return;
+        }
+      }
+
+      await auditLogService.log({
+        actor_id: user.id,
+        action: "transcript_to_medical_report_draft",
+        entity_type: "medical_report",
+        metadata: {
+          transcript_id: selectedTranscript.id,
+          encounter_id: selectedTranscript.encounter_id,
+          note_id: noteId,
+        },
+      });
+    }
+
+    setIsGeneratingDraft(false);
+    queryClient.invalidateQueries({ queryKey: ["pro-clinical-notes", user.id] });
+    queryClient.invalidateQueries({ queryKey: ["pro-reports", user.id] });
+    toast({ title: "AI documentation drafts created", description: "Report, SOAP note, and SOP draft are ready for professional review." });
+
+    navigate(noteId ? `/professional/notes/${noteId}/edit?encounterId=${selectedTranscript.encounter_id}` : `/professional/notes?encounterId=${selectedTranscript.encounter_id}`);
   };
 
   return (
@@ -178,10 +279,19 @@ export default function ProfessionalTranscripts() {
                 <div className="text-sm text-muted-foreground">
                   Encounter: {selectedTranscript.encounter_id}
                 </div>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Consultation Transcript</h3>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-foreground">
+                    {extractTranscriptText(selectedTranscript.transcript_json) || "No readable transcript text is available yet."}
+                  </div>
+                </div>
                 <pre className="rounded-xl border border-border bg-muted/30 p-3 text-xs overflow-x-auto">
                   {JSON.stringify(selectedTranscript.transcript_json ?? {}, null, 2)}
                 </pre>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Button
                     size="sm"
                     onClick={() => navigate(`/professional/notes?encounterId=${selectedTranscript.encounter_id}`)}
@@ -191,17 +301,20 @@ export default function ProfessionalTranscripts() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={generateNoteDraftFromTranscript}
+                    onClick={generateDocumentationFromTranscript}
                     disabled={isGeneratingDraft}
                   >
-                    {isGeneratingDraft ? "Generating..." : "Generate Draft Note"}
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {isGeneratingDraft ? "Generating..." : "Generate Report + SOAP/SOP"}
                   </Button>
                 </div>
-                <TransitionTimeline
-                  title="Transcript Transition History"
-                  events={selectedTranscriptAuditTimeline}
-                  emptyLabel="No transcript-related transitions recorded yet."
-                />
+                {settings.activityLoggingVisible && (
+                  <TransitionTimeline
+                    title="Transcript Transition History"
+                    events={selectedTranscriptAuditTimeline}
+                    emptyLabel="No transcript-related transitions recorded yet."
+                  />
+                )}
               </>
             )}
           </div>
@@ -219,13 +332,13 @@ export default function ProfessionalTranscripts() {
               const ready = hasContent(transcript.transcript_json);
               return (
                 <div key={transcript.id} className="bg-card rounded-2xl p-4 border border-border">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="w-12 h-12 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
                         <FileText className="w-6 h-6 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium">{patientName}</p>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{patientName}</p>
                         <p className="text-sm text-muted-foreground">
                           {new Date(transcript.created_at).toLocaleDateString("en-GB", {
                             day: "numeric", month: "short", year: "numeric",
@@ -233,7 +346,7 @@ export default function ProfessionalTranscripts() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
                       <Badge variant="outline" className={
                         ready ? "border-emerald-500/50 text-emerald-500" : "border-yellow-500/50 text-yellow-500"
                       }>
@@ -242,6 +355,7 @@ export default function ProfessionalTranscripts() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="w-full sm:w-auto"
                         disabled={!ready}
                         onClick={() => navigate(`/professional/transcripts/${transcript.id}`)}
                       >
