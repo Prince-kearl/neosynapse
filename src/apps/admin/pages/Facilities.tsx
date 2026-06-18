@@ -88,8 +88,8 @@ export default function AdminFacilities() {
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="font-display text-2xl lg:text-3xl font-bold mb-2">Facilities</h1>
             <p className="text-muted-foreground">Manage hospitals, clinics, and health centers</p>
           </div>
@@ -100,6 +100,7 @@ export default function AdminFacilities() {
               }
               setShowForm(!showForm);
             }}
+            className="w-full sm:w-auto"
           >
             <Plus className="w-4 h-4 mr-2" /> Add Facility
           </Button>
@@ -165,26 +166,26 @@ export default function AdminFacilities() {
           <div className="space-y-3">
             {facilities.map((f: any) => (
               <div key={f.id} className="bg-card rounded-2xl p-4 border border-border">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex shrink-0 items-center justify-center">
                     <Building2 className="w-6 h-6 text-primary" />
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{f.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium break-words">{f.name}</p>
                       {f.facility_type && (
                         <Badge variant="outline" className="text-xs capitalize">{f.facility_type}</Badge>
                       )}
                     </div>
-                    <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                      {f.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{f.location}</span>}
-                      {f.contact_phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{f.contact_phone}</span>}
+                    <div className="flex flex-col gap-1 text-sm text-muted-foreground mt-1 sm:flex-row sm:flex-wrap sm:gap-x-4">
+                      {f.location && <span className="flex min-w-0 items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="break-words">{f.location}</span></span>}
+                      {f.contact_phone && <span className="flex min-w-0 items-center gap-1"><Phone className="w-3 h-3 shrink-0" /><span className="break-words">{f.contact_phone}</span></span>}
                       <span className="flex items-center gap-1">
                         <Users className="w-3 h-3" />{(proCounts as any)[f.id] || 0} professionals
                       </span>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">Edit</Button>
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto">Edit</Button>
                 </div>
               </div>
             ))}

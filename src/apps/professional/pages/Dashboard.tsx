@@ -153,7 +153,7 @@ export default function ProfessionalDashboard() {
         {/* Quick Actions */}
         <section>
           <h2 className="font-display text-lg font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               onClick={() => navigate("/professional/appointments?tab=upcoming")}
               className="bg-card rounded-2xl p-4 shadow-food-card border border-border text-left hover:border-primary/50 transition-colors"

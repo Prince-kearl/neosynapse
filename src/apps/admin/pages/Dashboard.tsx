@@ -248,7 +248,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((stat) => (
             <MetricCard
               key={stat.label}
@@ -263,7 +263,7 @@ export default function AdminDashboard() {
         {/* Quick Actions */}
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Quick Actions</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-3">
             {quickActions.map((action) => (
               <button
                 key={action.id}
@@ -293,14 +293,14 @@ export default function AdminDashboard() {
           {recentLogs.length > 0 ? (
             <div className="space-y-2">
               {recentLogs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
-                  <div>
-                    <p className="text-sm font-medium">{log.action}</p>
-                    <p className="text-xs text-muted-foreground">
+                <div key={log.id} className="flex flex-col gap-2 p-3 bg-muted/30 rounded-xl sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium break-words">{log.action}</p>
+                    <p className="text-xs text-muted-foreground break-words">
                       {log.entity_type}{log.entity_id ? ` • ${log.entity_id.slice(0, 8)}...` : ""}
                     </p>
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground sm:text-right sm:shrink-0">
                     {new Date(log.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>

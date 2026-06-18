@@ -741,44 +741,46 @@ export default function PatientProfile() {
               
               <Separator />
               
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="w-10 h-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
                     <Shield className="w-5 h-5 text-primary" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-foreground">Consent Settings</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground break-words">
                       Data sharing: {latestDataSharingConsent?.granted ? "On" : "Off"} • Recording: {latestRecordingConsent?.granted ? "On" : "Off"}
                     </p>
                   </div>
                 </div>
                 <Dialog open={consentDialogOpen} onOpenChange={setConsentDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={initializeConsentForm}>Manage</Button>
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={initializeConsentForm}>Manage</Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-md">
                     <DialogHeader>
                       <DialogTitle>Consent Settings</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                      <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                        <div>
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                        <div className="min-w-0">
                           <p className="font-medium">Data Sharing</p>
                           <p className="text-xs text-muted-foreground">Share profile with healthcare providers.</p>
                         </div>
                         <Switch
+                          className="shrink-0"
                           checked={consentData.dataSharing}
                           onCheckedChange={(checked) => setConsentData((prev) => ({ ...prev, dataSharing: checked }))}
                         />
                       </div>
 
-                      <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                        <div>
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                        <div className="min-w-0">
                           <p className="font-medium">Recording Consent</p>
                           <p className="text-xs text-muted-foreground">Allow consultation recording and transcription.</p>
                         </div>
                         <Switch
+                          className="shrink-0"
                           checked={consentData.recording}
                           onCheckedChange={(checked) => setConsentData((prev) => ({ ...prev, recording: checked }))}
                         />
@@ -982,42 +984,46 @@ export default function PatientProfile() {
                 <DialogTitle>Notifications</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Appointment Reminders</p>
                     <p className="text-xs text-muted-foreground">Receive reminders before scheduled consultations.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={notificationData.appointmentReminders}
                     onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, appointmentReminders: checked }))}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Medication Alerts</p>
                     <p className="text-xs text-muted-foreground">Get reminders for medications and dosage windows.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={notificationData.medicationAlerts}
                     onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, medicationAlerts: checked }))}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Health Tips</p>
                     <p className="text-xs text-muted-foreground">Receive personalized wellness recommendations.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={notificationData.healthTips}
                     onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, healthTips: checked }))}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Email Notifications</p>
                     <p className="text-xs text-muted-foreground">Send notification summaries to your email.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={notificationData.emailNotifications}
                     onCheckedChange={(checked) => setNotificationData((prev) => ({ ...prev, emailNotifications: checked }))}
                   />
@@ -1083,32 +1089,35 @@ export default function PatientProfile() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Two-Factor Authentication</p>
                     <p className="text-xs text-muted-foreground">Require an extra step when signing in.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={privacySecurityData.twoFactorEnabled}
                     onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, twoFactorEnabled: checked }))}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Biometric Lock</p>
                     <p className="text-xs text-muted-foreground">Allow biometric verification where supported.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={privacySecurityData.biometricLock}
                     onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, biometricLock: checked }))}
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-border p-3">
-                  <div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <div className="min-w-0">
                     <p className="font-medium">Security Activity Alerts</p>
                     <p className="text-xs text-muted-foreground">Get notified of important account activity.</p>
                   </div>
                   <Switch
+                    className="shrink-0"
                     checked={privacySecurityData.activityAlerts}
                     onCheckedChange={(checked) => setPrivacySecurityData((prev) => ({ ...prev, activityAlerts: checked }))}
                   />

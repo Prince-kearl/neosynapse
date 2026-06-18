@@ -402,15 +402,15 @@ export default function MedicalHistorySetup() {
                       <p className="text-sm font-medium text-foreground">Files ready to upload</p>
                       <div className="space-y-2">
                         {queuedFiles.map((file) => (
-                          <div key={`${file.name}-${file.size}`} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <Upload className="h-4 w-4 text-primary" />
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{file.name}</p>
+                          <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <Upload className="h-4 w-4 shrink-0 text-primary" />
+                              <div className="min-w-0">
+                                <p className="break-all text-sm font-medium text-foreground">{file.name}</p>
                                 <p className="text-xs text-muted-foreground">{Math.max(1, Math.round(file.size / 1024))} KB</p>
                               </div>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={() => removeQueuedFile(file)}>
+                            <Button variant="ghost" size="icon" className="shrink-0" onClick={() => removeQueuedFile(file)}>
                               <X className="h-4 w-4" />
                             </Button>
                           </div>
@@ -430,18 +430,19 @@ export default function MedicalHistorySetup() {
                     ) : (
                       <div className="space-y-2">
                         {historyFiles.map((file) => (
-                          <div key={file.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-4 w-4 text-primary" />
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{file.file_name}</p>
+                          <div key={file.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <FileText className="h-4 w-4 shrink-0 text-primary" />
+                              <div className="min-w-0">
+                                <p className="break-all text-sm font-medium text-foreground">{file.file_name}</p>
                                 <p className="text-xs text-muted-foreground">{file.document_type.replace(/_/g, " ")}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 sm:shrink-0">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="flex-1 sm:flex-none"
                                 onClick={() => void openExistingFile(file)}
                                 disabled={openingFileId === file.id}
                               >
@@ -451,6 +452,7 @@ export default function MedicalHistorySetup() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                className="flex-1 sm:flex-none"
                                 onClick={() => deleteFileMutation.mutate(file)}
                                 disabled={deleteFileMutation.isPending}
                               >

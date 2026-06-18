@@ -164,17 +164,17 @@ export default function ProfessionalSettings() {
         <section id="notifications">
           <h2 className="font-display text-lg font-semibold mb-3">Notifications</h2>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Bell className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Patient Alerts</p>
                   <p className="text-sm text-muted-foreground">
                     {patientAlertsEnabled ? "High-urgency triage notifications enabled" : "Patient alerts are off"}
                   </p>
                 </div>
               </div>
-              <Switch checked={patientAlertsEnabled} onCheckedChange={handlePatientAlertsToggle} disabled={saveSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={patientAlertsEnabled} onCheckedChange={handlePatientAlertsToggle} disabled={saveSettingsMutation.isPending} />
             </div>
           </div>
         </section>
@@ -183,15 +183,15 @@ export default function ProfessionalSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Privacy & Compliance</h2>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Shield className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Activity Logging</p>
                   <p className="text-sm text-muted-foreground">Clinical actions logged for audit compliance</p>
                 </div>
               </div>
-              <Switch checked={activityLoggingVisible} onCheckedChange={handleActivityLoggingInfoToggle} disabled={saveSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={activityLoggingVisible} onCheckedChange={handleActivityLoggingInfoToggle} disabled={saveSettingsMutation.isPending} />
             </div>
           </div>
         </section>
@@ -200,9 +200,9 @@ export default function ProfessionalSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Language</h2>
           <div className="bg-card rounded-2xl p-4 border border-border">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <Globe className="w-5 h-5 text-muted-foreground" />
+                <Globe className="w-5 h-5 shrink-0 text-muted-foreground" />
                 <span className="font-medium">App Language</span>
               </div>
               <Select

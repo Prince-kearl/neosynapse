@@ -331,10 +331,10 @@ export default function AdminSettings() {
         <section id="notifications">
           <h2 className="font-display text-lg font-semibold mb-3">Notifications</h2>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Bell className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">System Alerts</p>
                   <p className="text-sm text-muted-foreground">
                     {uiSettings.systemAlerts ? "Critical events and security alerts" : "System alerts are currently off"}
@@ -342,6 +342,7 @@ export default function AdminSettings() {
                 </div>
               </div>
               <Switch
+                className="shrink-0"
                 checked={uiSettings.systemAlerts}
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
@@ -353,14 +354,15 @@ export default function AdminSettings() {
               />
             </div>
             <div className="border-t border-border flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <Bell className="w-5 h-5 text-muted-foreground" />
-                <div>
+              <div className="flex min-w-0 items-center gap-3">
+                <Bell className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">New Registrations</p>
                   <p className="text-sm text-muted-foreground">Notify when new users sign up</p>
                 </div>
               </div>
               <Switch
+                className="shrink-0"
                 checked={uiSettings.newRegistrations}
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
@@ -378,15 +380,16 @@ export default function AdminSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold mb-3">Security & Compliance</h2>
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Shield className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Audit Logging</p>
                   <p className="text-sm text-muted-foreground">All admin actions are logged for compliance</p>
                 </div>
               </div>
               <Switch
+                className="shrink-0"
                 checked={uiSettings.auditLoggingVisible}
                 disabled={saveSettingsMutation.isPending}
                 onCheckedChange={(checked) =>
@@ -397,10 +400,10 @@ export default function AdminSettings() {
                 }
               />
             </div>
-            <div className="border-t border-border flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Database className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="border-t border-border flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <Database className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Data Retention</p>
                   <p className="text-sm text-muted-foreground">Audit logs retained for {uiSettings.dataRetentionDays} days</p>
                 </div>

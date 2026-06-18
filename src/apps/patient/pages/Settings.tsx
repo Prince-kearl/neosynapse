@@ -302,10 +302,10 @@ export default function PatientSettings() {
         <section id="notifications">
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Notifications</h2>
           <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <BellRing className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <BellRing className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">{notificationChannelLabel}</p>
                   <p className="text-sm text-muted-foreground">
                     {notificationChannelDescription}
@@ -313,21 +313,22 @@ export default function PatientSettings() {
                 </div>
               </div>
               <Switch 
+                className="shrink-0"
                 checked={browserNotificationsEnabled}
                 onCheckedChange={handlePushToggle}
                 disabled={!isSupported || permission === "denied" || updateSettingsMutation.isPending}
               />
             </div>
             <Separator />
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Smartphone className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Smartphone className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">SMS Notifications</p>
                   <p className="text-sm text-muted-foreground">Critical health alerts only</p>
                 </div>
               </div>
-              <Switch checked={smsNotificationsEnabled} onCheckedChange={handleSmsToggle} disabled={updateSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={smsNotificationsEnabled} onCheckedChange={handleSmsToggle} disabled={updateSettingsMutation.isPending} />
             </div>
           </div>
         </section>
@@ -336,26 +337,26 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Health Data</h2>
           <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <HeartPulse className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <HeartPulse className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Health Data Sync</p>
                   <p className="text-sm text-muted-foreground">Sync vitals from wearable devices</p>
                 </div>
               </div>
-              <Switch checked={healthDataSyncEnabled} onCheckedChange={handleHealthDataSyncToggle} disabled={updateSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={healthDataSyncEnabled} onCheckedChange={handleHealthDataSyncToggle} disabled={updateSettingsMutation.isPending} />
             </div>
             <Separator />
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <FileText className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Export Medical Records</p>
                   <p className="text-sm text-muted-foreground">Download your health data</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={handleExportRecords}>Export</Button>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleExportRecords}>Export</Button>
             </div>
           </div>
         </section>
@@ -364,37 +365,37 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Privacy</h2>
           <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Eye className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Eye className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Profile Visibility</p>
                   <p className="text-sm text-muted-foreground">Share profile with healthcare providers</p>
                 </div>
               </div>
-              <Switch checked={profileVisibilityShared} onCheckedChange={handleVisibilityToggle} disabled={updateSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={profileVisibilityShared} onCheckedChange={handleVisibilityToggle} disabled={updateSettingsMutation.isPending} />
             </div>
             <Separator />
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Shield className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Anonymous Analytics</p>
                   <p className="text-sm text-muted-foreground">Help improve Neo Synapse</p>
                 </div>
               </div>
-              <Switch checked={anonymousAnalyticsEnabled} onCheckedChange={handleAnalyticsToggle} disabled={updateSettingsMutation.isPending} />
+              <Switch className="shrink-0" checked={anonymousAnalyticsEnabled} onCheckedChange={handleAnalyticsToggle} disabled={updateSettingsMutation.isPending} />
             </div>
             <Separator />
-            <Link to="/privacy" className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <Link to="/privacy" className="flex items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
+              <div className="flex min-w-0 items-center gap-3">
+                <FileText className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">Privacy Policy</p>
                   <p className="text-sm text-muted-foreground">How Neo Synapse handles health data</p>
                 </div>
               </div>
-              <span className="text-sm text-primary">View</span>
+              <span className="shrink-0 text-sm text-primary">View</span>
             </Link>
           </div>
         </section>
@@ -403,10 +404,10 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">AI Medical Consent</h2>
           <div className="bg-card rounded-2xl shadow-food-card overflow-hidden">
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-muted-foreground" />
-                <div>
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <Shield className="w-5 h-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="font-medium">AI Medical Assistant</p>
                   <p className="text-sm text-muted-foreground">
                     {aiConsent
@@ -415,18 +416,19 @@ export default function PatientSettings() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
                 {aiConsent ? (
                   <Button
                     variant="destructive"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={handleRevokeAiConsent}
                     disabled={revokeAiConsentMutation.isPending}
                   >
                     {revokeAiConsentMutation.isPending ? "Revoking..." : "Revoke consent"}
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={handleOpenAiAssistant}>
+                  <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleOpenAiAssistant}>
                     Grant consent
                   </Button>
                 )}
@@ -446,9 +448,9 @@ export default function PatientSettings() {
         <section>
           <h2 className="font-display text-lg font-semibold text-foreground mb-3">Language</h2>
           <div className="bg-card rounded-2xl shadow-food-card p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <Globe className="w-5 h-5 text-muted-foreground" />
+                <Globe className="w-5 h-5 shrink-0 text-muted-foreground" />
                 <span className="font-medium">App Language</span>
               </div>
               <Select

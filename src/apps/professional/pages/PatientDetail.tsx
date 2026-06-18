@@ -79,13 +79,13 @@ export default function PatientDetail() {
       <div className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
-            <div>
-              <h1 className="font-display text-2xl lg:text-3xl font-bold">{patientName}</h1>
-              <p className="text-sm text-muted-foreground">{patientId}</p>
+            <div className="min-w-0">
+              <h1 className="break-words font-display text-2xl font-bold lg:text-3xl">{patientName}</h1>
+              <p className="break-all text-sm text-muted-foreground">{patientId}</p>
             </div>
           </div>
         </div>

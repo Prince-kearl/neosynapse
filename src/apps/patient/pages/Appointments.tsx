@@ -125,8 +125,8 @@ export default function PatientAppointments() {
   return (
     <div className="flex-1 min-h-screen bg-background">
       <div className="p-4 lg:p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="font-display text-2xl lg:text-3xl font-bold text-foreground mb-2">
               My Appointments
             </h1>
@@ -134,7 +134,7 @@ export default function PatientAppointments() {
               Track and manage your medical appointments
             </p>
           </div>
-          <Button onClick={() => navigate("/patient/appointments/book")} className="gap-2">
+          <Button onClick={() => navigate("/patient/appointments/book")} className="w-full gap-2 sm:w-auto">
             <Plus className="w-4 h-4" />
             Book New
           </Button>
