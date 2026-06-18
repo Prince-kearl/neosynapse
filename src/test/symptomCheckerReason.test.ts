@@ -3,6 +3,8 @@ import {
   hasDuplicateConditionReasons,
   isGenericConditionReason,
   reasonMirrorsDefinition,
+  sortPossibleConditionsByLikelihood,
+  truncateClinicalText,
   validatePossibleConditionReason,
 } from "@/apps/patient/pages/symptomCheckerUtils";
 
@@ -104,5 +106,27 @@ describe("Symptom Checker possible condition reasoning", () => {
         "Gastritis is inflammation of the stomach lining.",
       ),
     ).toBe(false);
+  });
+
+  it("sorts possible conditions by likelihood for a concise result list", () => {
+    const sorted = sortPossibleConditionsByLikelihood([
+      { name: "Less likely condition", likelihood: "low" as const },
+      { name: "Likely condition", likelihood: "high" as const },
+      { name: "Possible condition", likelihood: "medium" as const },
+    ]);
+
+    expect(sorted.map((condition) => condition.name)).toEqual([
+      "Likely condition",
+      "Possible condition",
+      "Less likely condition",
+    ]);
+  });
+
+  it("truncates long clinical copy for mobile-friendly result cards", () => {
+    const text = "Patient reports fever, sore throat, cough, body aches, and fatigue for three days, which can fit a respiratory infection pattern.";
+    const truncated = truncateClinicalText(text, 70);
+
+    expect(truncated.length).toBeLessThanOrEqual(73);
+    expect(truncated.endsWith("...")).toBe(true);
   });
 });

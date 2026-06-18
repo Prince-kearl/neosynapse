@@ -67,3 +67,21 @@ export function reasonMirrorsDefinition(reason: string | undefined, definition: 
   if (!normalizedReason || !normalizedDefinition) return false;
   return normalizedReason === normalizedDefinition;
 }
+
+const likelihoodRank: Record<PossibleCondition["likelihood"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+export function sortPossibleConditionsByLikelihood<T extends Pick<PossibleCondition, "likelihood">>(conditions: T[]): T[] {
+  return [...conditions].sort((a, b) => likelihoodRank[a.likelihood] - likelihoodRank[b.likelihood]);
+}
+
+export function truncateClinicalText(value: string | undefined, maxLength = 150): string {
+  const text = (value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+
+  const clipped = text.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+  return `${clipped || text.slice(0, maxLength).trim()}...`;
+}
