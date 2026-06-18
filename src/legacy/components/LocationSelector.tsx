@@ -9,8 +9,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const locations = [
-  "Achimota", "East Legon", "Osu", "Labone", "Cantonments",
-  "Airport City", "Madina", "Tema", "Spintex", "Dansoman",
+  "Achimota", "Lapaz", "New Achimota", "East Legon", "Osu", "Labone", "Cantonments",
+  "Airport City", "Madina", "Tema", "Spintex", "Dansoman", "Kaneshie", "Adabraka",
 ];
 
 interface LocationSelectorProps {

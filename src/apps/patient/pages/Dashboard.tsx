@@ -50,11 +50,12 @@ export default function PatientDashboard() {
   const { data: medicalHistoryFiles = [] } = useMedicalHistoryFiles();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState("Achimota");
+  const [selectedLocation, setSelectedLocation] = useState("Current Location");
   const [deliveryRadius, setDeliveryRadius] = useState(10);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
 
   const handleSearch = useCallback((query: string) => {
     if (query.trim()) {
@@ -62,42 +63,23 @@ export default function PatientDashboard() {
     }
   }, [navigate]);
 
-  // Helper: Reverse geocode lat/lon to area name using OpenStreetMap Nominatim
-  const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
-    try {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);
-      const data = await resp.json();
-      return (
-        data.address?.suburb ||
-        data.address?.neighbourhood ||
-        data.address?.city_district ||
-        data.address?.town ||
-        data.address?.village ||
-        data.address?.city ||
-        data.display_name?.split(",")[0] ||
-        "Current Location"
-      );
-    } catch (e) {
-      return "Current Location";
-    }
-  };
-
   // Automatic location detection on mount
   useEffect(() => {
     setIsLocating(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
+        (pos) => {
+          const { accuracy, latitude, longitude } = pos.coords;
           setGpsCoords({ lat: latitude, lng: longitude });
-          const area = await reverseGeocode(latitude, longitude);
-          setSelectedLocation(area);
+          setLocationAccuracy(accuracy);
+          setSelectedLocation("Current Location");
           setLocationError(null);
           setIsLocating(false);
         },
         (err) => {
           setLocationError("Location access denied. Please enable GPS or select a location manually.");
           setGpsCoords(null);
+          setLocationAccuracy(null);
           setIsLocating(false);
         },
         { enableHighAccuracy: true, timeout: 10000 }
@@ -105,6 +87,7 @@ export default function PatientDashboard() {
     } else {
       setLocationError("Geolocation not supported by your browser.");
       setGpsCoords(null);
+      setLocationAccuracy(null);
       setIsLocating(false);
     }
     // eslint-disable-next-line
@@ -115,17 +98,18 @@ export default function PatientDashboard() {
     setIsLocating(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
+        (pos) => {
+          const { accuracy, latitude, longitude } = pos.coords;
           setGpsCoords({ lat: latitude, lng: longitude });
-          const area = await reverseGeocode(latitude, longitude);
-          setSelectedLocation(area);
+          setLocationAccuracy(accuracy);
+          setSelectedLocation("Current Location");
           setLocationError(null);
           setIsLocating(false);
         },
         (err) => {
           setLocationError("Location access denied. Please enable GPS or select a location manually.");
           setGpsCoords(null);
+          setLocationAccuracy(null);
           setIsLocating(false);
         },
         { enableHighAccuracy: true, timeout: 10000 }
@@ -133,6 +117,7 @@ export default function PatientDashboard() {
     } else {
       setLocationError("Geolocation not supported by your browser.");
       setGpsCoords(null);
+      setLocationAccuracy(null);
       setIsLocating(false);
     }
   }, []);
@@ -178,6 +163,7 @@ export default function PatientDashboard() {
           onUseCurrentLocation={handleUseCurrentLocation}
           locationError={locationError}
           isLocating={isLocating}
+          locationAccuracy={locationAccuracy}
         />
       </div>
 
