@@ -27,6 +27,7 @@ interface TriageResult {
   possible_conditions: Array<{
     name: string;
     likelihood: "high" | "medium" | "low";
+    confidence?: number;
     reason: string;
     definition?: string;
     causes?: string;
@@ -36,6 +37,10 @@ interface TriageResult {
     sources?: string[];
   }>;
   recommended_action: string;
+  urgency_reason?: string;
+  risk_factors?: string[];
+  medication_considerations?: string[];
+  medical_history_impact?: string[];
   questions: string[];
   warning_signs: string[];
 }
@@ -113,6 +118,11 @@ const symptomCheckerCopy = {
     moreInfo: "Summary and recommendations",
     treatmentContext: "Care options",
     sources: "Sources",
+    urgencyReason: "Why this level",
+    riskFactors: "Risk factors identified",
+    historyImpact: "How your history changed this",
+    medicationReview: "Medication considerations",
+    confidence: "confidence",
   },
   tw: {
     loadingTitle: "Yerehwehwɛ nsɛnkyerɛnne no",
@@ -255,6 +265,17 @@ function parseSymptoms(selectedSymptoms: string[], customSymptoms: string[], sym
   return [...dedup.values()];
 }
 
+function normalizeConfidence(value: unknown): number | undefined {
+  const numericValue = typeof value === "number"
+    ? value
+    : typeof value === "string"
+      ? Number.parseFloat(value)
+      : Number.NaN;
+
+  if (!Number.isFinite(numericValue)) return undefined;
+  return Math.min(100, Math.max(0, Math.round(numericValue)));
+}
+
 function buildPatientProfileContext(profile?: PatientProfile | null): string | null {
   if (!profile) return null;
 
@@ -299,6 +320,10 @@ function buildSymptomReport(params: {
     summary: result.summary,
     possible_conditions: result.possible_conditions,
     recommended_action: result.recommended_action,
+    urgency_reason: result.urgency_reason || "",
+    risk_factors: result.risk_factors || [],
+    medication_considerations: result.medication_considerations || [],
+    medical_history_impact: result.medical_history_impact || [],
     follow_up_questions: result.questions,
     warning_signs: result.warning_signs,
     disclaimer: "This report is triage guidance only and is not a medical diagnosis.",
@@ -318,7 +343,11 @@ function buildSymptomReport(params: {
         ? `\n  Sources: ${c.sources.join(", ")}`
         : "";
 
-      return `- ${c.name} (${c.likelihood})\n  Definition: ${c.definition ?? "N/A"}\n  Reason: ${c.reason}\n  Causes: ${c.causes ?? "N/A"}\n  Symptoms: ${c.symptoms ?? "N/A"}\n  First aid: ${c.first_aid ?? "N/A"}\n  Treatments: ${c.treatments ?? "N/A"}${sourcesLine}`;
+      const confidenceLine = typeof c.confidence === "number" && Number.isFinite(c.confidence)
+        ? `\n  Confidence: ${Math.round(c.confidence)}%`
+        : "";
+
+      return `- ${c.name} (${c.likelihood})${confidenceLine}\n  Definition: ${c.definition ?? "N/A"}\n  Reason: ${c.reason}\n  Causes: ${c.causes ?? "N/A"}\n  Symptoms: ${c.symptoms ?? "N/A"}\n  First aid: ${c.first_aid ?? "N/A"}\n  Treatments: ${c.treatments ?? "N/A"}${sourcesLine}`;
     }).join("\n")
     : "- None listed";
 
@@ -339,6 +368,13 @@ ${allSymptoms.length > 0 ? allSymptoms.map((s) => `- ${s}`).join("\n") : "- None
 ## Triage Result
 - Urgency: ${result.urgency}
 - Summary: ${result.summary}
+${result.urgency_reason ? `- Why this level: ${result.urgency_reason}` : ""}
+
+${result.risk_factors?.length ? `## Risk Factors Identified\n${result.risk_factors.map((item) => `- ${item}`).join("\n")}\n` : ""}
+
+${result.medical_history_impact?.length ? `## How Medical History Influenced This Assessment\n${result.medical_history_impact.map((item) => `- ${item}`).join("\n")}\n` : ""}
+
+${result.medication_considerations?.length ? `## Medication Considerations\n${result.medication_considerations.map((item) => `- ${item}`).join("\n")}\n` : ""}
 
 ## Possible Conditions
 ${possibleConditions}
@@ -562,8 +598,17 @@ export default function PatientSymptomChecker() {
       const normalized: TriageResult = {
         urgency: data.urgency,
         summary: data.summary || "Assessment complete.",
-        possible_conditions: Array.isArray(data.possible_conditions) ? data.possible_conditions : [],
+        possible_conditions: Array.isArray(data.possible_conditions)
+          ? data.possible_conditions.map((condition: any) => ({
+              ...condition,
+              confidence: normalizeConfidence(condition?.confidence),
+            }))
+          : [],
         recommended_action: data.recommended_action || "Please consult a healthcare professional for next steps.",
+        urgency_reason: typeof data.urgency_reason === "string" ? data.urgency_reason : "",
+        risk_factors: Array.isArray(data.risk_factors) ? data.risk_factors.filter((item: unknown): item is string => typeof item === "string") : [],
+        medication_considerations: Array.isArray(data.medication_considerations) ? data.medication_considerations.filter((item: unknown): item is string => typeof item === "string") : [],
+        medical_history_impact: Array.isArray(data.medical_history_impact) ? data.medical_history_impact.filter((item: unknown): item is string => typeof item === "string") : [],
         questions: Array.isArray(data.questions) ? data.questions : [],
         warning_signs: Array.isArray(data.warning_signs) ? data.warning_signs : [],
       };
@@ -681,6 +726,11 @@ export default function PatientSymptomChecker() {
     const config = urgencyConfig[result.urgency];
     const UrgencyIcon = config.icon;
     const rankedConditions = sortPossibleConditionsByLikelihood(result.possible_conditions);
+    const hasAssessmentDrivers =
+      Boolean(result.urgency_reason?.trim()) ||
+      Boolean(result.risk_factors?.length) ||
+      Boolean(result.medical_history_impact?.length) ||
+      Boolean(result.medication_considerations?.length);
     const autoReport = buildSymptomReport({
       result,
       age,
@@ -707,6 +757,11 @@ export default function PatientSymptomChecker() {
               <span className="font-display text-lg font-bold">{config.label}</span>
             </div>
             <p className="text-sm opacity-90">{truncateClinicalText(result.summary || config.description, 190)}</p>
+            {result.urgency_reason && (
+              <p className="mt-3 rounded-xl bg-background/70 p-3 text-sm text-foreground">
+                <span className="font-semibold">{conciseCopy.urgencyReason}:</span> {truncateClinicalText(result.urgency_reason, 220)}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground mt-3">
               This guidance is triage only. It is not a diagnosis and should be confirmed by a healthcare professional.
             </p>
@@ -715,6 +770,58 @@ export default function PatientSymptomChecker() {
           {result.urgency === "emergency" && (
             <div className="bg-destructive/20 border border-destructive/30 rounded-2xl p-4">
               <p className="font-bold text-destructive">⚠️ If this is an emergency, call emergency services immediately.</p>
+            </div>
+          )}
+
+          {hasAssessmentDrivers && (
+            <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+              <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+                <Brain className="w-5 h-5 text-primary" />
+                Assessment drivers
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {result.risk_factors && result.risk_factors.length > 0 && (
+                  <div className="rounded-xl border border-border/70 bg-background p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{conciseCopy.riskFactors}</p>
+                    <ul className="space-y-1.5">
+                      {result.risk_factors.slice(0, 5).map((item, index) => (
+                        <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                          <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span>{truncateClinicalText(item, 120)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {result.medical_history_impact && result.medical_history_impact.length > 0 && (
+                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">{conciseCopy.historyImpact}</p>
+                    <ul className="space-y-1.5">
+                      {result.medical_history_impact.slice(0, 4).map((item, index) => (
+                        <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                          <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span>{truncateClinicalText(item, 140)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {result.medication_considerations && result.medication_considerations.length > 0 && (
+                  <div className="rounded-xl border border-border/70 bg-background p-3 sm:col-span-2">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{conciseCopy.medicationReview}</p>
+                    <ul className="grid gap-1.5 sm:grid-cols-2">
+                      {result.medication_considerations.slice(0, 4).map((item, index) => (
+                        <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span>{truncateClinicalText(item, 135)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -755,6 +862,11 @@ export default function PatientSymptomChecker() {
                       }>
                         {likelihoodLabels[c.likelihood]}
                       </Badge>
+                      {typeof c.confidence === "number" && Number.isFinite(c.confidence) && (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {Math.round(c.confidence)}% {conciseCopy.confidence}
+                        </span>
+                      )}
                       <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
                     </div>
                   </summary>

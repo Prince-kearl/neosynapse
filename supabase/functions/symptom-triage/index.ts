@@ -133,6 +133,7 @@ function isCompleteCondition(condition: any): boolean {
     typeof condition === "object" && condition !== null &&
     typeof condition.name === "string" && condition.name.trim().length > 0 &&
     typeof condition.likelihood === "string" && ["high", "medium", "low"].includes(condition.likelihood) &&
+    typeof condition.confidence === "number" && Number.isFinite(condition.confidence) && condition.confidence >= 0 && condition.confidence <= 100 &&
     typeof condition.reason === "string" && condition.reason.trim().length >= 30 &&
     typeof condition.definition === "string" && condition.definition.trim().length > 0 &&
     typeof condition.causes === "string" && condition.causes.trim().length > 0 &&
@@ -144,7 +145,7 @@ function isCompleteCondition(condition: any): boolean {
   );
 }
 
-function isCompleteTriageResult(result: unknown): result is { urgency: string; summary: string; possible_conditions: any[]; recommended_action: string; questions: unknown[]; warning_signs: unknown[] } {
+function isCompleteTriageResult(result: unknown): result is { urgency: string; summary: string; possible_conditions: any[]; recommended_action: string; questions: unknown[]; warning_signs: unknown[]; urgency_reason: string; risk_factors: unknown[]; medication_considerations: unknown[]; medical_history_impact: unknown[] } {
   return (
     typeof result === "object" && result !== null &&
     typeof (result as any).urgency === "string" &&
@@ -153,7 +154,11 @@ function isCompleteTriageResult(result: unknown): result is { urgency: string; s
     (result as any).possible_conditions.every(isCompleteCondition) &&
     typeof (result as any).recommended_action === "string" &&
     Array.isArray((result as any).questions) &&
-    Array.isArray((result as any).warning_signs)
+    Array.isArray((result as any).warning_signs) &&
+    typeof (result as any).urgency_reason === "string" &&
+    Array.isArray((result as any).risk_factors) &&
+    Array.isArray((result as any).medication_considerations) &&
+    Array.isArray((result as any).medical_history_impact)
   );
 }
 
@@ -173,6 +178,8 @@ REWRITE PASS:
 - If a field is missing in a condition, add it with a concise and clinically accurate value.
 - If reasons are duplicated, generic, or identical to definitions, rewrite them into unique symptom-specific explanations.
 - Add practical first_aid instructions for each condition: safe self-care steps the patient can take now, plus when to seek urgent help.
+- Add urgency_reason, risk_factors, medication_considerations, and medical_history_impact.
+- Add condition confidence values from 0 to 100 when the symptom/history match supports an estimate.
 - Return the result using the triage_assessment function call only.`;
 
   const response = await fetch(provider.url, {
@@ -260,6 +267,8 @@ REWRITE PASS:
 - Do not repeat the same wording across multiple conditions.
 - Do not copy the condition definition into the reason.
 - Each first_aid field must give practical immediate self-care steps specific to that condition and must not replace professional care.
+- Add urgency_reason, risk_factors, medication_considerations, and medical_history_impact if missing.
+- Add condition confidence values from 0 to 100 when the symptom/history match supports an estimate.
 - Reasons must read like a clinician explaining the symptoms to a patient.
 - If the previous result contains all condition names and likelihoods, preserve them exactly.
 - Return the same JSON structure using the triage_assessment function call only.`;
@@ -341,6 +350,7 @@ const triageTool = {
             properties: {
               name: { type: "string" },
               likelihood: { type: "string", enum: ["high", "medium", "low"] },
+              confidence: { type: "number", minimum: 0, maximum: 100 },
               reason: { type: "string", minLength: 20 },
               definition: { type: "string" },
               causes: { type: "string" },
@@ -349,14 +359,18 @@ const triageTool = {
               first_aid: { type: "string" },
               sources: { type: "array", items: { type: "string" } },
             },
-            required: ["name", "likelihood", "reason", "definition", "causes", "symptoms", "treatments", "first_aid", "sources"],
+            required: ["name", "likelihood", "confidence", "reason", "definition", "causes", "symptoms", "treatments", "first_aid", "sources"],
           },
         },
         recommended_action: { type: "string" },
+        urgency_reason: { type: "string" },
+        risk_factors: { type: "array", items: { type: "string" } },
+        medication_considerations: { type: "array", items: { type: "string" } },
+        medical_history_impact: { type: "array", items: { type: "string" } },
         questions: { type: "array", items: { type: "string" } },
         warning_signs: { type: "array", items: { type: "string" } },
       },
-      required: ["urgency", "summary", "possible_conditions", "recommended_action", "questions", "warning_signs"],
+      required: ["urgency", "summary", "possible_conditions", "recommended_action", "urgency_reason", "risk_factors", "medication_considerations", "medical_history_impact", "questions", "warning_signs"],
     },
   },
 };
@@ -393,13 +407,14 @@ For EVERY condition you suggest, you MUST provide:
 
 1. Condition name
 2. Likelihood (high, medium, low)
-3. Detailed clinical reasoning
-4. A concise medical definition
-5. Common causes or risk factors
-6. Key symptoms that support the condition
-7. Typical treatments or management approaches
-8. First aid or immediate self-care instructions the patient can follow safely now
-9. Trusted medical sources or organizations
+3. Confidence score from 0 to 100
+4. Detailed clinical reasoning
+5. A concise medical definition
+6. Common causes or risk factors
+7. Key symptoms that support the condition
+8. Typical treatments or management approaches
+9. First aid or immediate self-care instructions the patient can follow safely now
+10. Trusted medical sources or organizations
 
 The reasoning is the most important part.
 
@@ -479,6 +494,8 @@ Return:
 
 "likelihood": "high",
 
+"confidence": 92,
+
 "reason": "Detailed symptom-based clinical reasoning.",
 
 "definition": "A concise medical definition of the condition.",
@@ -497,9 +514,18 @@ Return:
 
 ]
 
+"urgency_reason": "Why this urgency level was selected, including symptoms and medical history that raise or lower risk.",
+
+"risk_factors": ["Specific risk factor identified from age, symptoms, medical history, or profile"],
+
+"medication_considerations": ["Medication-related safety or adherence consideration relevant to this case"],
+
+"medical_history_impact": ["How a medical history item changed likelihood, urgency, or recommendations"]
+
 }
 
 Ensure every condition object includes definition, causes, symptoms, treatments, first_aid, and sources in the returned JSON.
+Ensure the top-level response includes urgency_reason, risk_factors, medication_considerations, and medical_history_impact. Use empty arrays only when no relevant item exists.
 
 # **=================================================================**
 ** ****ADDITIONAL RULES**
@@ -516,6 +542,11 @@ Ensure every condition object includes definition, causes, symptoms, treatments,
 - Explicitly account for relevant existing conditions, allergies, current medications, past surgeries, family history, notes, and uploaded-document context when they affect likelihood, safety, medication cautions, or next steps.
 - Do not recommend a medication, food, or exposure that conflicts with the patient’s listed allergies or known medical history.
 - If a history item is relevant, mention it briefly in the condition reason or first_aid. If it is not relevant, do not force it into the answer.
+- For emergency or urgent results, urgency_reason must clearly explain why that level was selected.
+- risk_factors should list specific factors found in the submitted symptoms, age, profile, or medical history.
+- medication_considerations should include missed-dose, side-effect, interaction, allergy, kidney/liver, or monitoring considerations only when relevant.
+- medical_history_impact should make personalization obvious by stating how the patient's history changed likelihood, urgency, or next steps.
+- Confidence values should be clinically cautious estimates from 0 to 100; do not present them as diagnostic certainty.
 
 `;
     const assessmentNotice =
@@ -530,7 +561,7 @@ Ensure every condition object includes definition, causes, symptoms, treatments,
     const medicalHistorySection = medicalHistoryContext ? `Medical History: ${medicalHistoryContext}\n` : "";
     const patientProfileSection = patientContext ? `Patient Profile: ${patientContext}\n` : "";
     const patientNameSection = patientName ? `Patient Name: ${patientName}\n` : "";
-    const userMessage = `Patient Info:\n- Age: ${age || "unknown"}\n- Gender: ${gender || "unknown"}\n${assessmentNotice}\n${patientNameSection}${medicalHistorySection}${patientProfileSection}Reported Symptoms: ${symptoms}\n\nUse these symptoms to generate possible conditions. When Medical History is present, treat it as patient-specific context: chronic conditions can change risk, allergies can change safe first aid, current medications can affect cautions, past surgeries can change likely explanations, and family history can influence risk. Each condition must include a unique clinician-style reason that references the reported symptoms, explains the assigned likelihood, and shows how the symptom pattern supports that condition. The reason must not be identical to the definition and must not be reused across conditions. Each condition must also include first_aid with safe immediate self-care steps for the patient and must avoid advice that conflicts with listed allergies, medications, or history. Do not provide generic disease overviews or template language.`;
+    const userMessage = `Patient Info:\n- Age: ${age || "unknown"}\n- Gender: ${gender || "unknown"}\n${assessmentNotice}\n${patientNameSection}${medicalHistorySection}${patientProfileSection}Reported Symptoms: ${symptoms}\n\nUse these symptoms to generate possible conditions. When Medical History is present, treat it as patient-specific context: chronic conditions can change risk, allergies can change safe first aid, current medications can affect cautions, past surgeries can change likely explanations, and family history can influence risk. Each condition must include a unique clinician-style reason that references the reported symptoms, explains the assigned likelihood and confidence, and shows how the symptom pattern supports that condition. The reason must not be identical to the definition and must not be reused across conditions. Each condition must also include first_aid with safe immediate self-care steps for the patient and must avoid advice that conflicts with listed allergies, medications, or history. Include urgency_reason, risk_factors, medication_considerations, and medical_history_impact so the patient can see why the result was personalized. Do not provide generic disease overviews or template language.`;
 
     console.log(`[symptom-triage] Using provider: ${provider.tag}, model: ${provider.model}`);
 
