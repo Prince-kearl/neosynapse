@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +25,16 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMedicalHistory, useMedicalHistoryFiles, usePatientProfile } from "@/shared/hooks/useHealthcare";
 import { medicalHistoryService, patientProfileService } from "@/shared/services/healthcare";
-import { parseListInput, stringifyListInput } from "@/shared/lib/medicalHistory";
+import {
+  hasMedicalHistoryDraftContent,
+  parseListInput,
+  readMedicalHistoryDraft,
+  removeMedicalHistoryDraft,
+  shouldRestoreMedicalHistoryDraft,
+  stringifyListInput,
+  writeMedicalHistoryDraft,
+  type MedicalHistoryDraftForm,
+} from "@/shared/lib/medicalHistory";
 import type { MedicalHistoryFile } from "@/shared/types/healthcare";
 
 const steps = [
@@ -34,16 +43,7 @@ const steps = [
   { title: "Documents", description: "Upload reports and finalize your profile" },
 ];
 
-type HistoryFormState = {
-  conditions: string;
-  allergies: string;
-  medications: string;
-  surgeries: string;
-  familyHistory: string;
-  notes: string;
-};
-
-const initialForm: HistoryFormState = {
+const initialForm: MedicalHistoryDraftForm = {
   conditions: "",
   allergies: "",
   medications: "",
@@ -58,6 +58,8 @@ export default function MedicalHistorySetup() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const draftHydratedRef = useRef(false);
+  const skipNextDraftWriteRef = useRef(false);
   const isOnboarding = location.pathname.includes("/onboarding/");
   const nextPath = searchParams.get("next") || "/patient/dashboard";
 
@@ -66,23 +68,73 @@ export default function MedicalHistorySetup() {
   const { data: patientProfile } = usePatientProfile();
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [form, setForm] = useState<HistoryFormState>(initialForm);
+  const [form, setForm] = useState<MedicalHistoryDraftForm>(initialForm);
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
+  const [draftState, setDraftState] = useState<"idle" | "restored" | "saved">("idle");
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!medicalHistory) return;
-    setForm({
-      conditions: stringifyListInput(medicalHistory.existing_conditions),
-      allergies: stringifyListInput(medicalHistory.allergies),
-      medications: stringifyListInput(medicalHistory.current_medications),
-      surgeries: stringifyListInput(medicalHistory.past_surgeries),
-      familyHistory: medicalHistory.family_medical_history || "",
-      notes: medicalHistory.notes || "",
-    });
-    setPrivacyConfirmed(!!medicalHistory.privacy_acknowledged_at);
-  }, [medicalHistory]);
+    if (!user || historyLoading || draftHydratedRef.current) return;
+
+    const savedHistoryForm: MedicalHistoryDraftForm = medicalHistory
+      ? {
+          conditions: stringifyListInput(medicalHistory.existing_conditions),
+          allergies: stringifyListInput(medicalHistory.allergies),
+          medications: stringifyListInput(medicalHistory.current_medications),
+          surgeries: stringifyListInput(medicalHistory.past_surgeries),
+          familyHistory: medicalHistory.family_medical_history || "",
+          notes: medicalHistory.notes || "",
+        }
+      : initialForm;
+
+    const draft = readMedicalHistoryDraft(user.id);
+    if (shouldRestoreMedicalHistoryDraft(draft, medicalHistory?.updated_at)) {
+      setForm(draft.form);
+      setStepIndex(Math.min(steps.length - 1, Math.max(0, draft.stepIndex)));
+      setPrivacyConfirmed(draft.privacyConfirmed);
+      setLastDraftSavedAt(draft.savedAt);
+      setDraftState("restored");
+    } else {
+      setForm(savedHistoryForm);
+      setPrivacyConfirmed(!!medicalHistory?.privacy_acknowledged_at);
+      if (draft) removeMedicalHistoryDraft(user.id);
+    }
+
+    draftHydratedRef.current = true;
+  }, [historyLoading, medicalHistory, user]);
+
+  useEffect(() => {
+    if (!user || !draftHydratedRef.current) return;
+    if (skipNextDraftWriteRef.current) {
+      skipNextDraftWriteRef.current = false;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (!hasMedicalHistoryDraftContent(form, stepIndex, privacyConfirmed)) {
+        removeMedicalHistoryDraft(user.id);
+        setDraftState("idle");
+        setLastDraftSavedAt(null);
+        return;
+      }
+
+      const savedDraft = writeMedicalHistoryDraft(user.id, {
+        form,
+        stepIndex,
+        privacyConfirmed,
+        sourceUpdatedAt: medicalHistory?.updated_at || null,
+      });
+
+      if (savedDraft) {
+        setDraftState("saved");
+        setLastDraftSavedAt(savedDraft.savedAt);
+      }
+    }, 450);
+
+    return () => window.clearTimeout(timeout);
+  }, [form, medicalHistory?.updated_at, privacyConfirmed, stepIndex, user]);
 
   const progressValue = ((stepIndex + 1) / steps.length) * 100;
   const currentStep = steps[stepIndex];
@@ -163,6 +215,12 @@ export default function MedicalHistorySetup() {
       return { savedHistory, uploadedFiles, failedFiles };
     },
     onSuccess: ({ savedHistory, failedFiles }) => {
+      if (user) {
+        skipNextDraftWriteRef.current = true;
+        removeMedicalHistoryDraft(user.id);
+        setDraftState("idle");
+        setLastDraftSavedAt(null);
+      }
       setQueuedFiles((prev) => prev.filter((file) => failedFiles.some((failed) => failed.name === file.name)));
       // Optimistically update the cache BEFORE navigating
       // so PatientGuard sees the updated value immediately and doesn't redirect back.
@@ -278,7 +336,13 @@ export default function MedicalHistorySetup() {
                 <CardDescription>{currentStep.description}</CardDescription>
               </div>
               <div className="text-xs text-muted-foreground">
-                {medicalHistory?.onboarding_completed ? "Previously completed" : "Required for first-time setup"}
+                {draftState === "restored"
+                  ? "Unsaved progress restored"
+                  : draftState === "saved" && lastDraftSavedAt
+                    ? "Progress autosaved"
+                    : medicalHistory?.onboarding_completed
+                      ? "Previously completed"
+                      : "Required for first-time setup"}
               </div>
             </div>
             <Progress value={progressValue} className="h-2" />
@@ -386,6 +450,9 @@ export default function MedicalHistorySetup() {
                       <Label htmlFor="medical-history-files">Upload medical documents</Label>
                       <p className="text-sm text-muted-foreground">
                         Add PDFs, images, DOCX files, lab results, prescriptions, or discharge summaries.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Typed history is autosaved during editing. File selections must be reselected if this page refreshes before you save.
                       </p>
                     </div>
                     <Input

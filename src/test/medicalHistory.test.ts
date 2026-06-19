@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildMedicalHistoryContext, buildMedicalHistorySnapshot } from "@/shared/lib/medicalHistory";
+import {
+  buildMedicalHistoryContext,
+  buildMedicalHistorySnapshot,
+  hasMedicalHistoryDraftContent,
+  readMedicalHistoryDraft,
+  removeMedicalHistoryDraft,
+  shouldRestoreMedicalHistoryDraft,
+  writeMedicalHistoryDraft,
+  type MedicalHistoryDraftForm,
+} from "@/shared/lib/medicalHistory";
 import type { MedicalHistory, MedicalHistoryFile, PatientProfile } from "@/shared/types/healthcare";
 
 const history: MedicalHistory = {
@@ -48,6 +57,33 @@ const profile: PatientProfile = {
   updated_at: "2026-06-18T00:00:00.000Z",
 };
 
+function createMemoryStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    get length() {
+      return data.size;
+    },
+    clear: () => data.clear(),
+    getItem: (key: string) => data.get(key) ?? null,
+    key: (index: number) => Array.from(data.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    },
+  };
+}
+
+const draftForm: MedicalHistoryDraftForm = {
+  conditions: "Asthma",
+  allergies: "Penicillin",
+  medications: "Salbutamol",
+  surgeries: "",
+  familyHistory: "",
+  notes: "Uses inhaler during harmattan.",
+};
+
 describe("medical history helpers", () => {
   it("includes saved history and uploaded document names in AI context", () => {
     const context = buildMedicalHistoryContext(history, files);
@@ -67,4 +103,51 @@ describe("medical history helpers", () => {
     expect(snapshot.patient_profile?.phone).toBe("+233000000000");
     expect(snapshot.summary).toContain("Patient medical history context");
   });
+
+  it("persists and removes local medical history drafts by user", () => {
+    const storage = createMemoryStorage();
+
+    const savedDraft = writeMedicalHistoryDraft(
+      "patient-1",
+      {
+        form: draftForm,
+        stepIndex: 1,
+        privacyConfirmed: true,
+        sourceUpdatedAt: "2026-06-18T00:00:00.000Z",
+      },
+      storage
+    );
+
+    expect(savedDraft?.form.conditions).toBe("Asthma");
+    expect(readMedicalHistoryDraft("patient-1", storage)?.privacyConfirmed).toBe(true);
+    expect(readMedicalHistoryDraft("patient-2", storage)).toBeNull();
+
+    removeMedicalHistoryDraft("patient-1", storage);
+
+    expect(readMedicalHistoryDraft("patient-1", storage)).toBeNull();
+  });
+
+  it("restores draft progress only when it is meaningful and newer than saved history", () => {
+    const currentDraft = {
+      userId: "patient-1",
+      form: draftForm,
+      stepIndex: 1,
+      privacyConfirmed: true,
+      savedAt: "2026-06-19T12:00:00.000Z",
+      sourceUpdatedAt: "2026-06-18T00:00:00.000Z",
+    };
+
+    expect(shouldRestoreMedicalHistoryDraft(currentDraft, "2026-06-19T11:00:00.000Z")).toBe(true);
+    expect(shouldRestoreMedicalHistoryDraft(currentDraft, "2026-06-19T13:00:00.000Z")).toBe(false);
+    expect(hasMedicalHistoryDraftContent(initialBlankDraftForm, 0, false)).toBe(false);
+  });
 });
+
+const initialBlankDraftForm: MedicalHistoryDraftForm = {
+  conditions: "",
+  allergies: "",
+  medications: "",
+  surgeries: "",
+  familyHistory: "",
+  notes: "",
+};

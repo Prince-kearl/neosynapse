@@ -1,6 +1,26 @@
 import type { MedicalHistory, MedicalHistoryFile, PatientProfile } from "@/shared/types/healthcare";
 import type { PatientProfileMeta } from "@/shared/lib/patientSettings";
 
+const MEDICAL_HISTORY_DRAFT_PREFIX = "neo-synapse:medical-history-draft";
+
+export type MedicalHistoryDraftForm = {
+  conditions: string;
+  allergies: string;
+  medications: string;
+  surgeries: string;
+  familyHistory: string;
+  notes: string;
+};
+
+export type MedicalHistoryDraft = {
+  userId: string;
+  form: MedicalHistoryDraftForm;
+  stepIndex: number;
+  privacyConfirmed: boolean;
+  savedAt: string;
+  sourceUpdatedAt?: string | null;
+};
+
 export type MedicalHistorySnapshot = {
   captured_at: string;
   summary: string | null;
@@ -26,6 +46,103 @@ export type MedicalHistorySnapshot = {
   };
   profile_settings?: Pick<PatientProfileMeta, "saved_locations" | "payment_insurance" | "privacy_security_settings">;
 };
+
+function getMedicalHistoryDraftKey(userId: string): string {
+  return `${MEDICAL_HISTORY_DRAFT_PREFIX}:${userId}`;
+}
+
+function getStorage(storage?: Storage): Storage | null {
+  if (storage) return storage;
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+}
+
+function isMedicalHistoryDraft(value: unknown): value is MedicalHistoryDraft {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<MedicalHistoryDraft>;
+  return (
+    typeof draft.userId === "string" &&
+    typeof draft.form === "object" &&
+    !!draft.form &&
+    typeof draft.stepIndex === "number" &&
+    typeof draft.privacyConfirmed === "boolean" &&
+    typeof draft.savedAt === "string"
+  );
+}
+
+export function hasMedicalHistoryDraftContent(
+  form: MedicalHistoryDraftForm,
+  stepIndex = 0,
+  privacyConfirmed = false
+): boolean {
+  return (
+    Object.values(form).some((value) => value.trim().length > 0) ||
+    stepIndex > 0 ||
+    privacyConfirmed
+  );
+}
+
+export function readMedicalHistoryDraft(userId: string, storage?: Storage): MedicalHistoryDraft | null {
+  const targetStorage = getStorage(storage);
+  if (!targetStorage) return null;
+
+  try {
+    const rawDraft = targetStorage.getItem(getMedicalHistoryDraftKey(userId));
+    if (!rawDraft) return null;
+    const parsedDraft: unknown = JSON.parse(rawDraft);
+    return isMedicalHistoryDraft(parsedDraft) && parsedDraft.userId === userId ? parsedDraft : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeMedicalHistoryDraft(
+  userId: string,
+  draft: Omit<MedicalHistoryDraft, "userId" | "savedAt">,
+  storage?: Storage
+): MedicalHistoryDraft | null {
+  const targetStorage = getStorage(storage);
+  if (!targetStorage) return null;
+
+  const savedDraft: MedicalHistoryDraft = {
+    ...draft,
+    userId,
+    savedAt: new Date().toISOString(),
+  };
+
+  try {
+    targetStorage.setItem(getMedicalHistoryDraftKey(userId), JSON.stringify(savedDraft));
+    return savedDraft;
+  } catch {
+    return null;
+  }
+}
+
+export function removeMedicalHistoryDraft(userId: string, storage?: Storage): void {
+  const targetStorage = getStorage(storage);
+  if (!targetStorage) return;
+
+  try {
+    targetStorage.removeItem(getMedicalHistoryDraftKey(userId));
+  } catch {
+    // Ignore storage failures. Draft persistence is a convenience, not the source of truth.
+  }
+}
+
+export function shouldRestoreMedicalHistoryDraft(
+  draft: MedicalHistoryDraft | null,
+  historyUpdatedAt?: string | null
+): draft is MedicalHistoryDraft {
+  if (!draft || !hasMedicalHistoryDraftContent(draft.form, draft.stepIndex, draft.privacyConfirmed)) {
+    return false;
+  }
+  if (!historyUpdatedAt) return true;
+
+  const draftTime = Date.parse(draft.savedAt);
+  const historyTime = Date.parse(historyUpdatedAt);
+  if (Number.isNaN(draftTime) || Number.isNaN(historyTime)) return true;
+  return draftTime >= historyTime;
+}
 
 export function parseListInput(value: string): string[] {
   return value
