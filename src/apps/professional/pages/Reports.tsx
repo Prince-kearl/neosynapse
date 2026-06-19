@@ -21,6 +21,7 @@ import {
   getReportRecommendedAction,
   getReportStatus,
   getReportSummary,
+  getReportTitle,
   reportArray as asStringArray,
   reportText as asText,
   toReportTitleCase as toTitleCase,
@@ -261,7 +262,7 @@ export default function ProfessionalReports() {
 
             {selectedReport && (
               <>
-                <div className="text-sm text-muted-foreground">Type: {selectedReport.report_type}</div>
+                <div className="text-sm text-muted-foreground">Report: {getReportTitle(selectedReport)}</div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                     <SelectTrigger className="w-full sm:w-72">
@@ -333,13 +334,19 @@ export default function ProfessionalReports() {
                   }
 
                   const reportData = previewData || {};
-                  const patient = asRecord(reportData.patient);
+                  const clinicalReport = asRecord(reportData.clinical_report);
+                  const clinicalPatient = asRecord(clinicalReport.patient);
+                  const clinicalComplaints = asRecord(clinicalReport.presenting_complaints);
+                  const legacyPatient = asRecord(reportData.patient);
+                  const patient = Object.keys(legacyPatient).length > 0 ? legacyPatient : clinicalPatient;
                   const urgencyKey = asText(reportData.urgency).toLowerCase();
                   const urgency = urgencyConfig[urgencyKey] || null;
                   const summary = getReportSummary({ ...selectedReport, report_json: reportData });
                   const recommendedAction = getReportRecommendedAction({ ...selectedReport, report_json: reportData });
                   const reportType = asText(selectedReport.report_type) || "medical_report";
-                  const symptoms = asStringArray(reportData.symptoms);
+                  const symptoms = asStringArray(reportData.symptoms).length > 0
+                    ? asStringArray(reportData.symptoms)
+                    : asStringArray(clinicalComplaints.symptoms);
                   const warningSigns = asStringArray(reportData.warning_signs);
                   const followUpQuestions = asStringArray(reportData.follow_up_questions).length > 0
                     ? asStringArray(reportData.follow_up_questions)
@@ -400,10 +407,10 @@ export default function ProfessionalReports() {
                               <dt>Sex</dt>
                               <dd className="font-medium text-foreground">{toTitleCase(asText(patient.gender) || "not provided")}</dd>
                             </div>
-                            {asText(reportData.duration) && (
+                            {(asText(reportData.duration) || asText(clinicalComplaints.duration)) && (
                               <div className="flex justify-between gap-3">
                                 <dt>Duration</dt>
-                                <dd className="font-medium text-foreground">{asText(reportData.duration)}</dd>
+                                <dd className="font-medium text-foreground">{asText(reportData.duration) || asText(clinicalComplaints.duration)}</dd>
                               </div>
                             )}
                           </dl>
@@ -558,9 +565,9 @@ export default function ProfessionalReports() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <p className="font-semibold break-words">{report.patientName}</p>
+                          <p className="font-semibold break-words">{getReportTitle(report)}</p>
                           <p className="text-sm text-muted-foreground break-words">
-                            {report.report_type} • {new Date(report.created_at).toLocaleDateString("en-GB", {
+                            {report.patientName} • {new Date(report.created_at).toLocaleDateString("en-GB", {
                               day: "numeric", month: "short",
                             })}
                           </p>

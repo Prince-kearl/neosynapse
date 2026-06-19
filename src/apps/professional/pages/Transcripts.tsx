@@ -186,6 +186,8 @@ export default function ProfessionalTranscripts() {
 
     const reportJson = {
       ...artifacts.report,
+      clinical_markdown: artifacts.report?.clinical_markdown || artifacts.report?.markdown || "",
+      markdown: artifacts.report?.clinical_markdown || artifacts.report?.markdown || "",
       source: "telemedicine_transcript",
       transcript_id: selectedTranscript.id,
       encounter_id: selectedTranscript.encounter_id,

@@ -227,13 +227,19 @@ export default function PatientReports() {
               <>
                 {(() => {
                   const reportData = asRecord(selectedReport.report_json) || {};
-                  const patient = asRecord(reportData.patient);
+                  const clinicalReport = asRecord(reportData.clinical_report);
+                  const clinicalPatient = asRecord(clinicalReport.patient);
+                  const clinicalComplaints = asRecord(clinicalReport.presenting_complaints);
+                  const legacyPatient = asRecord(reportData.patient);
+                  const patient = Object.keys(legacyPatient).length > 0 ? legacyPatient : clinicalPatient;
                   const urgencyKey = asText(reportData.urgency).toLowerCase();
                   const urgency = urgencyConfig[urgencyKey] || null;
                   const summary = getReportSummary(selectedReport);
                   const recommendedAction = getReportRecommendedAction(selectedReport);
                   const reportType = asText(selectedReport.report_type) || "medical_report";
-                  const symptoms = asStringArray(reportData.symptoms);
+                  const symptoms = asStringArray(reportData.symptoms).length > 0
+                    ? asStringArray(reportData.symptoms)
+                    : asStringArray(clinicalComplaints.symptoms);
                   const warningSigns = asStringArray(reportData.warning_signs);
                   const followUpQuestions = asStringArray(reportData.follow_up_questions).length > 0
                     ? asStringArray(reportData.follow_up_questions)
@@ -350,10 +356,10 @@ export default function PatientReports() {
                               <dt>Sex</dt>
                               <dd className="font-medium text-foreground">{toTitleCase(asText(patient.gender) || "not provided")}</dd>
                             </div>
-                            {asText(reportData.duration) && (
+                            {(asText(reportData.duration) || asText(clinicalComplaints.duration)) && (
                               <div className="flex justify-between gap-3">
                                 <dt>Duration</dt>
-                                <dd className="font-medium text-foreground">{asText(reportData.duration)}</dd>
+                                <dd className="font-medium text-foreground">{asText(reportData.duration) || asText(clinicalComplaints.duration)}</dd>
                               </div>
                             )}
                           </dl>
@@ -441,7 +447,7 @@ export default function PatientReports() {
           <div className="space-y-4">
             {reports.map((report: any) => {
               const reportData = report.report_json as Record<string, unknown> | null;
-              const title = (reportData?.title as string) || `${report.report_type} Report`;
+              const title = getReportTitle(report);
               const doctor = (reportData?.doctor as string) || "Healthcare Provider";
               const status = (reportData?.status as string) || "approved";
 

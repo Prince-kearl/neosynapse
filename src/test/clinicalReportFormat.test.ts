@@ -70,7 +70,7 @@ describe("clinical assessment report formatting", () => {
     });
 
     expect(report.json.title).toBe("Clinical Assessment and Triage Report");
-    expect(report.clinicalMarkdown).toContain("Achimota Hospital");
+    expect(report.clinicalMarkdown).toContain("NeoSynapse");
     expect(report.clinicalMarkdown).toContain("Ghana Health Information Management System (GHIMS)");
     expect(report.clinicalMarkdown).toContain("## Vital Signs");
     expect(report.clinicalMarkdown).toContain("## Differential Diagnosis");

@@ -51,10 +51,10 @@ export interface BuiltClinicalReport {
 }
 
 const FACILITY = {
-  name: "Achimota Hospital",
+  name: "NeoSynapse",
   system: "Ghana Health Information Management System (GHIMS)",
-  address: "Achimota, Accra, Ghana",
-  contact: "Tel: +233 (0) 302 000 000 | Email: records@achimotahospital.gov.gh",
+  address: "Accra, Ghana",
+  contact: "Tel: +233 (0) 302 000 000 | Email: records@neosynapse.health",
   department: "Outpatient / Emergency Triage",
 };
 

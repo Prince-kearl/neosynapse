@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
+import { getReportSourceLabel, getReportTitle } from "@/shared/lib/reports";
 import { MetricCard } from "@/components/common/MetricCard";
 import { toast } from "@/hooks/use-toast";
 
@@ -242,8 +243,8 @@ export default function AdminTemplates() {
                     {data?.recentReports?.map((report: any) => (
                       <div key={report.id} className="rounded-xl border border-border p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                          <p className="font-medium text-sm capitalize">{report.report_type || "general"}</p>
-                          <p className="text-xs text-muted-foreground">{report.id.slice(0, 8)}...</p>
+                          <p className="font-medium text-sm capitalize">{getReportTitle(report)}</p>
+                          <p className="text-xs text-muted-foreground">{getReportSourceLabel(report)} • {report.id.slice(0, 8)}...</p>
                         </div>
                         <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
                           {new Date(report.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}

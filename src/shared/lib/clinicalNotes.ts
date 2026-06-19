@@ -97,6 +97,12 @@ export const buildReportJsonFromClinicalNote = (params: {
     generated_at: new Date().toISOString(),
     summary: clinicalText(params.finalJson.summary) || clinicalText(asClinicalRecord(params.finalJson.medical_report).summary) || title,
     markdown,
+    clinical_markdown: markdown,
+    patient_friendly_report: {
+      title: "Patient-Friendly Clinical Note Summary",
+      summary: clinicalText(params.finalJson.summary) || title,
+      markdown,
+    },
     clinical_note: params.finalJson,
   };
 };

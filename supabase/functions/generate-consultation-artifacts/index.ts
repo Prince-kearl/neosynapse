@@ -74,8 +74,13 @@ Rules:
 - Mark uncertainty clearly.
 - Include safety-net advice and follow-up where the transcript supports it.
 - Output valid JSON only. No markdown fences unless the model cannot avoid them.
+- Report markdown must look like a professional NeoSynapse clinical report suitable for patient records, not a flashy AI report.
+- Do not use emoji, futuristic styling, chatbot language, or marketing copy.
+- Use clear clinical sections, professional tables where useful, clinician review wording, signature/stamp placeholders, and GHIMS-compatible documentation language.
 - The JSON must have keys: report, soap_note, sop_draft, quality_flags.
-- report must include: title, status, doctor, patient, generated_at, summary, chief_complaint, symptoms, assessment, plan, follow_up, safety_net, markdown.
+- report must include: title, status, doctor, patient, generated_at, summary, chief_complaint, symptoms, assessment, plan, follow_up, safety_net, markdown, clinical_markdown, patient_friendly_report.
+- report.title should be "Clinical Assessment and Triage Report" when the transcript is being converted into a general consultation report.
+- report.clinical_markdown should start with "# NeoSynapse" and include "Ghana Health Information Management System (GHIMS)".
 - soap_note must include: subjective, objective, assessment, plan.
 - sop_draft means a practical consultation standard operating procedure / care workflow draft, not a confirmed institutional policy. It must include: title, purpose, steps, documentation_checklist, escalation_criteria, disclaimer.`;
 

@@ -39,5 +39,10 @@ describe("clinical note helpers", () => {
     expect(report.status).toBe("finalized");
     expect(report.note_id).toBe("note-1");
     expect(report.markdown).toContain("Follow-up Note");
+    expect(report.clinical_markdown).toContain("Follow-up Note");
+    expect(report.patient_friendly_report).toMatchObject({
+      title: "Patient-Friendly Clinical Note Summary",
+      summary: "Patient improved.",
+    });
   });
 });

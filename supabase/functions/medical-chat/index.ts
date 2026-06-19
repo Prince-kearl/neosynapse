@@ -126,8 +126,8 @@ Give concise next steps.
 ## Warning Signs
 List signs that require urgent medical help.
 
-# Achimota Hospital
-Achimota, Accra, Ghana  
+# NeoSynapse
+Accra, Ghana  
 Ghana Health Information Management System (GHIMS)
 
 Hospital Logo: ____________________        GHIMS Logo: ____________________

@@ -70,7 +70,7 @@ describe("report helpers", () => {
     const markdown = getReportMarkdown(legacyReport);
 
     expect(getReportTitle(legacyReport)).toBe("Clinical Assessment and Triage Report");
-    expect(markdown).toContain("Achimota Hospital");
+    expect(markdown).toContain("NeoSynapse");
     expect(markdown).toContain("Ghana Health Information Management System (GHIMS)");
     expect(markdown).toContain("Clinical Assessment and Triage Report");
     expect(markdown).toContain("Uncontrolled Type 2 Diabetes Mellitus");
