@@ -25,6 +25,7 @@ import {
   appSettingsService,
 } from "@/shared/services/healthcare";
 import { getStaleInProgressResolution } from "@/shared/lib/professionalSessions";
+import { getPendingTelemedicineResolution } from "@/shared/lib/telemedicineLifecycle";
 
 // ─── Profile Hooks ──────────────────────────────────────────────
 
@@ -273,14 +274,16 @@ export function useProfessionalEncounters() {
       const { data, error } = await encounterService.getForProfessional(user!.id);
       if (error) throw error;
       const encounters = data || [];
-      const inProgressIds = encounters.filter((enc: any) => enc.status === "in_progress").map((enc: any) => enc.id);
+      const activeTelemedicineIds = encounters
+        .filter((enc: any) => enc.encounter_type === "telemedicine" && ["pending", "in_progress"].includes(enc.status))
+        .map((enc: any) => enc.id);
 
-      if (inProgressIds.length === 0) return encounters;
+      if (activeTelemedicineIds.length === 0) return encounters;
 
       const { data: rooms, error: roomError } = await supabase
         .from("consultation_rooms")
-        .select("id, encounter_id, status")
-        .in("encounter_id", inProgressIds);
+        .select("id, encounter_id, status, created_at, updated_at")
+        .in("encounter_id", activeTelemedicineIds);
 
       if (roomError) {
         console.error("Failed to verify live consultation rooms:", roomError);
@@ -291,7 +294,9 @@ export function useProfessionalEncounters() {
       return Promise.all(
         encounters.map(async (enc: any) => {
           const relatedRooms = roomList.filter((room: any) => room.encounter_id === enc.id);
-          const resolution = getStaleInProgressResolution(enc, relatedRooms);
+          const resolution =
+            getPendingTelemedicineResolution(enc, relatedRooms) ||
+            getStaleInProgressResolution(enc, relatedRooms);
           if (!resolution) return enc;
 
           const endedAt = enc.ended_at || new Date().toISOString();

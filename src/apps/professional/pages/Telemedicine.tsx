@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { getSessionStateMeta, isActiveSessionState } from "@/shared/lib/sessionStates";
 import { getStaleInProgressResolution } from "@/shared/lib/professionalSessions";
+import { getPendingTelemedicineResolution } from "@/shared/lib/telemedicineLifecycle";
 import { useProfessionalSettings } from "@/shared/hooks/useProfessionalSettings";
 import { isConsentGrantedByDefault } from "@/shared/lib/consents";
 
@@ -450,20 +451,22 @@ export default function ProfessionalTelemedicine() {
         .in("status", ["pending", "in_progress"]);
       if (error) throw error;
       let activeData = data || [];
-      const inProgressIds = activeData.filter((enc) => enc.status === "in_progress").map((enc) => enc.id);
+      const activeEncounterIds = activeData.map((enc) => enc.id);
 
-      if (inProgressIds.length > 0) {
+      if (activeEncounterIds.length > 0) {
         const { data: rooms, error: roomError } = await supabase
           .from("consultation_rooms")
-          .select("id, encounter_id, status")
-          .in("encounter_id", inProgressIds);
+          .select("id, encounter_id, status, created_at, updated_at")
+          .in("encounter_id", activeEncounterIds);
 
         if (!roomError) {
           const roomList = rooms || [];
           const reconciled = await Promise.all(
             activeData.map(async (enc) => {
               const relatedRooms = roomList.filter((room) => room.encounter_id === enc.id);
-              const resolution = getStaleInProgressResolution(enc, relatedRooms);
+              const resolution =
+                getPendingTelemedicineResolution(enc, relatedRooms) ||
+                getStaleInProgressResolution(enc, relatedRooms);
               if (!resolution) return enc;
 
               await supabase

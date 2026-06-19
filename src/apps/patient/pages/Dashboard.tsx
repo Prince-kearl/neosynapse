@@ -9,10 +9,9 @@ import { HealthProfileCard } from "@/legacy/components/HealthProfileCard";
 import { LocationSelector } from "@/legacy/components/LocationSelector";
 import { NearbyHospitalsSection } from "@/legacy/components/NearbyHospitalsSection";
 import {
-  Stethoscope, Bot, CalendarCheck, Hospital,
+  Stethoscope, Bot,
   Video, FileText, ChevronRight, HeartPulse,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const quickActions = [
   {
@@ -276,28 +275,25 @@ export default function PatientDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <section>
-          <h2 className="mb-3 font-display text-lg font-semibold lg:text-xl max-[380px]:mb-2 max-[380px]:text-base">
+        <section className="relative isolate">
+          <h2 className="mb-3 font-display text-lg font-semibold leading-tight lg:text-xl max-[380px]:mb-2 max-[380px]:text-base">
             Quick Actions
           </h2>
-          <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 max-[380px]:gap-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 max-[380px]:gap-2.5">
             {quickActions.map((action) => (
               <button
                 key={action.title}
                 onClick={() => navigate(action.url)}
-                className={cn(
-                  "flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-primary/30 bg-card px-4 py-3 text-left transition-all duration-200 max-[380px]:min-h-[50px] max-[380px]:gap-2 max-[380px]:px-3 max-[380px]:py-2.5",
-                  "hover:border-primary/60 hover:shadow-md active:scale-[0.98]"
-                )}
+                className="relative grid min-h-[84px] w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-3 overflow-hidden rounded-2xl border border-primary/30 bg-card px-4 py-3 text-left transition-colors hover:border-primary/60 hover:bg-card/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 max-[380px]:min-h-[76px] max-[380px]:grid-cols-[2.5rem_minmax(0,1fr)] max-[380px]:gap-2.5 max-[380px]:rounded-xl max-[380px]:px-3 max-[380px]:py-2.5"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 max-[380px]:h-8 max-[380px]:w-8">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 max-[380px]:h-10 max-[380px]:w-10">
                   <action.icon className="h-5 w-5 text-primary max-[380px]:h-4 max-[380px]:w-4" />
                 </div>
-                <div className="w-full min-w-0">
-                  <p className="break-words text-sm font-medium text-foreground max-[380px]:text-xs max-[380px]:leading-tight">
+                <div className="min-w-0 overflow-hidden">
+                  <p className="truncate text-base font-semibold leading-snug text-foreground max-[380px]:text-sm">
                     {action.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground max-[380px]:text-[11px] max-[380px]:leading-tight">
+                  <p className="mt-1 line-clamp-2 text-sm leading-snug text-muted-foreground max-[380px]:text-xs">
                     {action.subtitle}
                   </p>
                 </div>
@@ -316,6 +312,7 @@ export default function PatientDashboard() {
           onUseCurrentLocation={handleUseCurrentLocation}
           locationError={locationError}
           isLocating={isLocating}
+          locationAccuracy={locationAccuracy}
         />
       </main>
     </div>

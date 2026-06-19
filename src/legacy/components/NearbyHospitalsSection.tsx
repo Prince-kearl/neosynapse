@@ -44,6 +44,7 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
   const mapCenter = selectedHospital ? { lat: selectedHospital.lat, lng: selectedHospital.lng } : center;
   const mapZoom = selectedHospital ? 16 : 13;
   const sectionLabel = hasVerifiedCurrentLocation ? "Verified current location" : location || "Current Location";
+  const sectionMeta = `${sectionLabel} • within ${radius} km`;
 
   if (shouldRequestCurrentLocationVerification(location, gpsCoords)) {
     return (
@@ -101,10 +102,15 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 max-[380px]:mb-3">
-        <h2 className="font-display text-lg font-semibold lg:text-xl max-[380px]:text-base max-[380px]:leading-tight">
-          Nearby Hospitals ({sectionLabel}, within {radius} km)
-        </h2>
+      <div className="mb-4 grid gap-3 sm:flex sm:items-end sm:justify-between max-[380px]:mb-3">
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-semibold leading-tight lg:text-xl max-[380px]:text-base">
+            Nearby Hospitals
+          </h2>
+          <p className="mt-1 break-words text-sm leading-snug text-muted-foreground max-[380px]:text-xs">
+            {sectionMeta}
+          </p>
+        </div>
         <div className="w-full sm:w-auto">
           <LocationSelector
             selectedLocation={location}

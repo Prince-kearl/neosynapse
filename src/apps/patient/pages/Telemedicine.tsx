@@ -17,6 +17,11 @@ import { DoctorCard } from "@/components/telemedicine/DoctorCard";
 import { PreConsultationSettings } from "@/components/telemedicine/PreConsultationSettings";
 import { appointmentService } from "@/shared/services/healthcare";
 import { pushNotificationService } from "@/shared/services/pushNotificationService";
+import {
+  clearStoredPatientWaitingCall,
+  readStoredPatientWaitingCall,
+  writeStoredPatientWaitingCall,
+} from "@/shared/lib/telemedicineLifecycle";
 import type { AppointmentPriority } from "@/shared/types/healthcare";
 import { toast } from "@/hooks/use-toast";
 
@@ -109,6 +114,7 @@ export default function PatientTelemedicine() {
   const [selectedPriority, setSelectedPriority] = useState<AppointmentPriority>("routine");
   const [isScheduling, setIsScheduling] = useState(false);
   const consumedJoinLinkRef = useRef<string | null>(null);
+  const restoredWaitingCallRef = useRef<string | null>(null);
 
   const formatDateSlotKey = (date: Date) =>
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
@@ -248,9 +254,111 @@ export default function PatientTelemedicine() {
     userId: user?.id || "",
     onConnectionStateChange: (s) => {
       if (s === "connected") setState("active");
-      if (s === "failed" || s === "disconnected") setState("ended");
+      if ((s === "failed" || s === "disconnected") && state === "active") setState("ended");
     },
   });
+
+  const createRoomAndStartCall = useCallback(async (targetEncounterId: string, targetDoctorId: string) => {
+    if (!user?.id) return null;
+
+    await supabase
+      .from("encounters")
+      .update({ status: "pending", started_at: null, ended_at: null } as any)
+      .eq("id", targetEncounterId)
+      .eq("patient_id", user.id);
+
+    await supabase
+      .from("consultation_rooms")
+      .update({ status: "ended", updated_at: new Date().toISOString() } as any)
+      .eq("encounter_id", targetEncounterId)
+      .eq("created_by", user.id)
+      .in("status", ["waiting", "active"]);
+
+    const { data: room, error: roomError } = await supabase
+      .from("consultation_rooms")
+      .insert({
+        encounter_id: targetEncounterId,
+        created_by: user.id,
+        doctor_id: targetDoctorId,
+        consent_recording: consentRecording,
+        status: "waiting",
+      })
+      .select("id")
+      .single();
+
+    if (roomError || !room) {
+      console.error("Failed to create room:", roomError);
+      toast({ title: "Unable to start consultation", description: "Could not create call room.", variant: "destructive" });
+      return null;
+    }
+
+    setRoomId(room.id);
+    setEncounterId(targetEncounterId);
+    setSelectedDoctor(targetDoctorId);
+    setState("waiting");
+    writeStoredPatientWaitingCall({
+      encounterId: targetEncounterId,
+      roomId: room.id,
+      doctorId: targetDoctorId,
+      startedAt: new Date().toISOString(),
+    });
+
+    try {
+      await pushNotificationService.sendTelemedicineCallNotification({
+        professionalId: targetDoctorId,
+        encounterId: targetEncounterId,
+        roomId: room.id,
+        patientName: user.email || "Patient",
+      });
+    } catch (notificationError) {
+      console.error("Failed to send telemedicine push notification:", notificationError);
+    }
+
+    await startCall(videoEnabled, audioEnabled, room.id);
+    return room.id;
+  }, [audioEnabled, consentRecording, startCall, user?.email, user?.id, videoEnabled]);
+
+  useEffect(() => {
+    if (!user?.id || state !== "lobby") return;
+    const storedCall = readStoredPatientWaitingCall();
+    if (!storedCall) return;
+    if (restoredWaitingCallRef.current === storedCall.encounterId) return;
+
+    restoredWaitingCallRef.current = storedCall.encounterId;
+
+    const restoreWaitingCall = async () => {
+      const { data: encounter, error: encounterError } = await supabase
+        .from("encounters")
+        .select("id, patient_id, professional_id, status")
+        .eq("id", storedCall.encounterId)
+        .eq("patient_id", user.id)
+        .single();
+
+      if (encounterError || !encounter || !["pending", "in_progress"].includes(encounter.status)) {
+        clearStoredPatientWaitingCall();
+        restoredWaitingCallRef.current = null;
+        return;
+      }
+
+      const doctorId = encounter.professional_id || storedCall.doctorId;
+      if (!doctorId) {
+        clearStoredPatientWaitingCall();
+        restoredWaitingCallRef.current = null;
+        return;
+      }
+
+      setSelectedDoctor(doctorId);
+      setEncounterId(encounter.id);
+
+      toast({
+        title: "Resuming consultation request",
+        description: "We found your previous waiting call and are reconnecting it.",
+      });
+      await createRoomAndStartCall(encounter.id, doctorId);
+    };
+
+    void restoreWaitingCall();
+  }, [createRoomAndStartCall, state, user?.id]);
 
   useEffect(() => {
     const targetRoomId = searchParams.get("roomId")?.trim() || null;
@@ -306,6 +414,46 @@ export default function PatientTelemedicine() {
     setIsStartingConsultation(true);
     setState("waiting");
 
+    const { data: existingEncounters, error: existingEncounterError } = await supabase
+      .from("encounters")
+      .select("id, status, professional_id, created_at")
+      .eq("patient_id", user.id)
+      .eq("professional_id", selectedDoctor)
+      .eq("encounter_type", "telemedicine")
+      .in("status", ["pending", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    if (existingEncounterError) {
+      console.error("Failed to check existing consultation:", existingEncounterError);
+      toast({ title: "Unable to start consultation", description: "Please try again.", variant: "destructive" });
+      setState("lobby");
+      setIsStartingConsultation(false);
+      return;
+    }
+
+    const reusableEncounter = existingEncounters?.[0] || null;
+    if (reusableEncounter) {
+      if ((existingEncounters || []).length > 1) {
+        await supabase
+          .from("encounters")
+          .update({ status: "cancelled", ended_at: new Date().toISOString() })
+          .in("id", (existingEncounters || []).slice(1).map((enc) => enc.id));
+      }
+
+      const roomId = await createRoomAndStartCall(reusableEncounter.id, selectedDoctor);
+      if (!roomId) {
+        setState("lobby");
+      } else {
+        toast({
+          title: "Reconnected to waiting room",
+          description: "We resumed your existing consultation request instead of adding another queue entry.",
+        });
+      }
+      setIsStartingConsultation(false);
+      return;
+    }
+
     const { data: encounter, error: encounterError } = await supabase
       .from("encounters")
       .insert({
@@ -327,43 +475,16 @@ export default function PatientTelemedicine() {
 
     setEncounterId(encounter.id);
 
-    const { data: room, error: roomError } = await supabase
-      .from("consultation_rooms")
-      .insert({
-        encounter_id: encounter.id,
-        created_by: user.id,
-        doctor_id: selectedDoctor,
-        consent_recording: consentRecording,
-        status: "waiting",
-      })
-      .select("id")
-      .single();
-
-    if (roomError || !room) {
-      console.error("Failed to create room:", roomError);
+    const createdRoomId = await createRoomAndStartCall(encounter.id, selectedDoctor);
+    if (!createdRoomId) {
       await supabase.from("encounters").delete().eq("id", encounter.id);
-      toast({ title: "Unable to start consultation", description: "Could not create call room.", variant: "destructive" });
       setState("lobby");
       setIsStartingConsultation(false);
       return;
     }
 
-    setRoomId(room.id);
-
-    try {
-      await pushNotificationService.sendTelemedicineCallNotification({
-        professionalId: selectedDoctor,
-        encounterId: encounter.id,
-        roomId: room.id,
-        patientName: user.email || "Patient",
-      });
-    } catch (notificationError) {
-      console.error("Failed to send telemedicine push notification:", notificationError);
-    }
-
-    await startCall(videoEnabled, audioEnabled, room.id);
     setIsStartingConsultation(false);
-  }, [user, selectedDoctor, consentRecording, videoEnabled, audioEnabled, startCall, isStartingConsultation]);
+  }, [user, selectedDoctor, isStartingConsultation, createRoomAndStartCall]);
 
   const handleScheduleAppointment = useCallback(async () => {
     if (!user || !selectedDoctor || !scheduledDate || !scheduledTime || isScheduling) return;
@@ -443,6 +564,7 @@ export default function PatientTelemedicine() {
   );
 
   const handleCancelWaiting = useCallback(async () => {
+    clearStoredPatientWaitingCall();
     await endCall();
     if (encounterId) {
       await supabase
@@ -466,6 +588,7 @@ export default function PatientTelemedicine() {
     : "Choose a date and time.";
 
   const handleEndCall = useCallback(async () => {
+    clearStoredPatientWaitingCall();
     await endCall();
     if (encounterId) {
       await supabase
@@ -508,6 +631,7 @@ export default function PatientTelemedicine() {
             setState("active");
           }
           if (next?.status === "ended" && state !== "ended") {
+            clearStoredPatientWaitingCall();
             setState("ended");
           }
         }
@@ -526,6 +650,7 @@ export default function PatientTelemedicine() {
             setState("active");
           }
           if (["completed", "cancelled"].includes(next?.status || "") && state !== "ended") {
+            clearStoredPatientWaitingCall();
             setState("ended");
           }
         }
@@ -646,7 +771,7 @@ export default function PatientTelemedicine() {
               : "No recording was made."}
           </p>
           <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { setState("lobby"); setSelectedDoctor(null); setRoomId(null); setEncounterId(null); }}>
+            <Button variant="outline" onClick={() => { clearStoredPatientWaitingCall(); setState("lobby"); setSelectedDoctor(null); setRoomId(null); setEncounterId(null); }}>
               Back to Lobby
             </Button>
             <Button onClick={() => navigate("/patient/dashboard")}>Go to Dashboard</Button>

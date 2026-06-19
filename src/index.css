@@ -142,6 +142,8 @@
 
   html {
     font-size: calc(16px * var(--ui-scale));
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   * {
