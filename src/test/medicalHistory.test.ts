@@ -93,6 +93,35 @@ describe("medical history helpers", () => {
     expect(context).toContain("Uploaded medical documents: lab.pdf (lab_result)");
   });
 
+  it("builds complete AI context from every medical history input field", () => {
+    const completeHistory: MedicalHistory = {
+      ...history,
+      existing_conditions: ["Asthma", "Diabetes"],
+      allergies: ["Penicillin", "Peanuts"],
+      current_medications: ["Metformin 500mg twice daily", "Salbutamol inhaler as needed"],
+      past_surgeries: ["Appendectomy in 2020"],
+      family_medical_history: "Mother has hypertension; father had stroke.",
+      notes: "Avoids NSAIDs due to previous stomach irritation.",
+    };
+    const completeFiles: MedicalHistoryFile[] = [
+      {
+        ...files[0],
+        file_name: "recent-lab-result.pdf",
+        document_type: "lab_result",
+      },
+    ];
+
+    const context = buildMedicalHistoryContext(completeHistory, completeFiles);
+
+    expect(context).toContain("Existing conditions: Asthma, Diabetes");
+    expect(context).toContain("Allergies: Penicillin, Peanuts");
+    expect(context).toContain("Current medications: Metformin 500mg twice daily, Salbutamol inhaler as needed");
+    expect(context).toContain("Past surgeries: Appendectomy in 2020");
+    expect(context).toContain("Family medical history: Mother has hypertension; father had stroke.");
+    expect(context).toContain("Additional medical notes: Avoids NSAIDs due to previous stomach irritation.");
+    expect(context).toContain("Uploaded medical documents: recent-lab-result.pdf (lab_result)");
+  });
+
   it("builds appointment snapshots for doctor review", () => {
     const snapshot = buildMedicalHistorySnapshot(history, files, profile);
 

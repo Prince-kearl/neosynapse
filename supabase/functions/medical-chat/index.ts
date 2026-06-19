@@ -241,7 +241,10 @@ ${medicalHistoryContext ? `
 PATIENT MEDICAL HISTORY CONTEXT:
 ${medicalHistoryContext}
 
-Use this context to personalize the response, but do not invent facts beyond it.` : ""}
+Use this context to personalize the response, but do not invent facts beyond it.
+When relevant, adapt guidance around existing conditions, allergies, current medications, past surgeries, family history, notes, and uploaded-document context.
+Do not recommend medication, food, or exposure that conflicts with listed allergies or medical history.
+If the history changes the risk level or next step, state that briefly and plainly.` : ""}
 `;
 
     console.log(`[medical-chat] Using provider: ${provider.tag}, model: ${provider.model}`);

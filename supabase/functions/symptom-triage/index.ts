@@ -512,6 +512,10 @@ Ensure every condition object includes definition, causes, symptoms, treatments,
 - Every condition should have condition-specific first-aid guidance.
 - Reasons should typically be 2-5 sentences long.
 - The explanation should feel like it was written by a clinician reviewing the patient’s symptoms.
+- If medical history is provided, use it as patient-specific context when ranking possible conditions and writing first aid.
+- Explicitly account for relevant existing conditions, allergies, current medications, past surgeries, family history, notes, and uploaded-document context when they affect likelihood, safety, medication cautions, or next steps.
+- Do not recommend a medication, food, or exposure that conflicts with the patient’s listed allergies or known medical history.
+- If a history item is relevant, mention it briefly in the condition reason or first_aid. If it is not relevant, do not force it into the answer.
 
 `;
     const assessmentNotice =
@@ -526,7 +530,7 @@ Ensure every condition object includes definition, causes, symptoms, treatments,
     const medicalHistorySection = medicalHistoryContext ? `Medical History: ${medicalHistoryContext}\n` : "";
     const patientProfileSection = patientContext ? `Patient Profile: ${patientContext}\n` : "";
     const patientNameSection = patientName ? `Patient Name: ${patientName}\n` : "";
-    const userMessage = `Patient Info:\n- Age: ${age || "unknown"}\n- Gender: ${gender || "unknown"}\n${assessmentNotice}\n${patientNameSection}${medicalHistorySection}${patientProfileSection}Reported Symptoms: ${symptoms}\n\nUse these symptoms to generate possible conditions. Each condition must include a unique clinician-style reason that references the reported symptoms, explains the assigned likelihood, and shows how the symptom pattern supports that condition. The reason must not be identical to the definition and must not be reused across conditions. Each condition must also include first_aid with safe immediate self-care steps for the patient. Do not provide generic disease overviews or template language.`;
+    const userMessage = `Patient Info:\n- Age: ${age || "unknown"}\n- Gender: ${gender || "unknown"}\n${assessmentNotice}\n${patientNameSection}${medicalHistorySection}${patientProfileSection}Reported Symptoms: ${symptoms}\n\nUse these symptoms to generate possible conditions. When Medical History is present, treat it as patient-specific context: chronic conditions can change risk, allergies can change safe first aid, current medications can affect cautions, past surgeries can change likely explanations, and family history can influence risk. Each condition must include a unique clinician-style reason that references the reported symptoms, explains the assigned likelihood, and shows how the symptom pattern supports that condition. The reason must not be identical to the definition and must not be reused across conditions. Each condition must also include first_aid with safe immediate self-care steps for the patient and must avoid advice that conflicts with listed allergies, medications, or history. Do not provide generic disease overviews or template language.`;
 
     console.log(`[symptom-triage] Using provider: ${provider.tag}, model: ${provider.model}`);
 
