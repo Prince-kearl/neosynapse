@@ -43,6 +43,7 @@ interface TriageResult {
   medical_history_impact?: string[];
   questions: string[];
   warning_signs: string[];
+  fallback_mode?: boolean;
 }
 
 const urgencyConfig = {
@@ -123,6 +124,7 @@ const symptomCheckerCopy = {
     historyImpact: "How your history changed this",
     medicationReview: "Medication considerations",
     confidence: "confidence",
+    fallbackMode: "Limited safety fallback",
   },
   tw: {
     loadingTitle: "Yerehwehwɛ nsɛnkyerɛnne no",
@@ -326,6 +328,7 @@ function buildSymptomReport(params: {
     medical_history_impact: result.medical_history_impact || [],
     follow_up_questions: result.questions,
     warning_signs: result.warning_signs,
+    fallback_mode: result.fallback_mode || false,
     disclaimer: "This report is triage guidance only and is not a medical diagnosis.",
   };
 
@@ -611,6 +614,7 @@ export default function PatientSymptomChecker() {
         medical_history_impact: Array.isArray(data.medical_history_impact) ? data.medical_history_impact.filter((item: unknown): item is string => typeof item === "string") : [],
         questions: Array.isArray(data.questions) ? data.questions : [],
         warning_signs: Array.isArray(data.warning_signs) ? data.warning_signs : [],
+        fallback_mode: data.fallback_mode === true,
       };
 
       setResult(normalized);
@@ -770,6 +774,15 @@ export default function PatientSymptomChecker() {
           {result.urgency === "emergency" && (
             <div className="bg-destructive/20 border border-destructive/30 rounded-2xl p-4">
               <p className="font-bold text-destructive">⚠️ If this is an emergency, call emergency services immediately.</p>
+            </div>
+          )}
+
+          {result.fallback_mode && (
+            <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+              <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">{conciseCopy.fallbackMode}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Full AI analysis is temporarily unavailable, so Neo Synapse used conservative safety rules. Use this as basic triage guidance and seek professional care for concerning symptoms.
+              </p>
             </div>
           )}
 

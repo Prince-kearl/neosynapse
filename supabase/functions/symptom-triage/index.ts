@@ -26,6 +26,33 @@ interface ProviderConfig {
   tag: string;
 }
 
+type FallbackCondition = {
+  name: string;
+  likelihood: "high" | "medium" | "low";
+  confidence: number;
+  reason: string;
+  definition: string;
+  causes: string;
+  symptoms: string;
+  treatments: string;
+  first_aid: string;
+  sources: string[];
+};
+
+type FallbackTriageResult = {
+  urgency: "non-urgent" | "needs-attention" | "urgent" | "emergency";
+  summary: string;
+  possible_conditions: FallbackCondition[];
+  recommended_action: string;
+  urgency_reason: string;
+  risk_factors: string[];
+  medication_considerations: string[];
+  medical_history_impact: string[];
+  questions: string[];
+  warning_signs: string[];
+  fallback_mode: true;
+};
+
 function resolveProvider(): ProviderConfig {
   const googleKey = Deno.env.get("GOOGLE_AI_API_KEY");
   if (googleKey) {
@@ -331,6 +358,228 @@ async function ensureConditionReasons(
   return result;
 }
 
+function includesAny(value: string, terms: string[]): boolean {
+  return terms.some((term) => value.includes(term));
+}
+
+function fallbackCondition(overrides: Partial<FallbackCondition> & Pick<FallbackCondition, "name" | "likelihood" | "confidence" | "reason">): FallbackCondition {
+  return {
+    definition: "A possible explanation based on the symptom pattern and available health history.",
+    causes: "Causes vary and require clinical confirmation.",
+    symptoms: "Symptoms may overlap with other conditions.",
+    treatments: "Treatment depends on clinical assessment, examination, and relevant tests.",
+    first_aid: "Monitor symptoms, stay hydrated if safe, avoid triggers, and seek medical care if symptoms worsen.",
+    sources: ["CDC", "NHS", "Mayo Clinic"],
+    ...overrides,
+  };
+}
+
+function createFallbackTriageResult(params: {
+  symptoms: string;
+  age?: string;
+  gender?: string;
+  medicalHistoryContext?: string | null;
+}): FallbackTriageResult {
+  const symptomText = normalizeClinicalText(params.symptoms || "");
+  const historyText = normalizeClinicalText(params.medicalHistoryContext || "");
+  const ageNumber = Number(params.age);
+  const riskFactors: string[] = [];
+  const medicationConsiderations: string[] = [];
+  const historyImpact: string[] = [];
+  const conditions: FallbackCondition[] = [];
+
+  const hasDiabetes = includesAny(historyText, ["diabetes", "type 2 diabetes", "type ii diabetes", "metformin"]);
+  const hasCkd = includesAny(historyText, ["chronic kidney", "ckd", "kidney disease"]);
+  const hasHypertension = includesAny(historyText, ["hypertension", "high blood pressure", "amlodipine", "losartan"]);
+  const hasObesity = includesAny(historyText, ["obesity", "bmi 30", "bmi 31", "bmi 32", "bmi 33", "bmi 34", "bmi 35"]);
+  const hasMetformin = historyText.includes("metformin");
+  const hasUrinarySymptoms = includesAny(symptomText, ["frequent urination", "urination", "urine", "painful urination", "burning urination"]);
+  const hasPolydipsia = includesAny(symptomText, ["extreme thirst", "thirst"]);
+  const hasBlurredVision = includesAny(symptomText, ["blurred vision", "blurry vision", "vision"]);
+  const hasFatigue = includesAny(symptomText, ["fatigue", "tired", "weakness", "weak"]);
+  const hasFever = symptomText.includes("fever");
+  const hasRespiratory = includesAny(symptomText, ["cough", "sore throat", "runny nose", "shortness of breath", "wheezing"]);
+  const hasChestPain = includesAny(symptomText, ["chest pain", "chest tightness", "pressure in chest"]);
+  const hasShortnessOfBreath = includesAny(symptomText, ["shortness of breath", "difficulty breathing", "breathless"]);
+  const hasAbdominalPain = includesAny(symptomText, ["abdominal pain", "stomach pain", "belly pain"]);
+  const hasNausea = includesAny(symptomText, ["nausea", "vomiting"]);
+
+  if (hasDiabetes) {
+    riskFactors.push("Type 2 Diabetes or diabetes-related medication history");
+    historyImpact.push("Diabetes increases concern that frequent urination, extreme thirst, blurred vision, and fatigue may reflect high blood sugar rather than a minor isolated symptom.");
+  }
+  if (hasCkd) {
+    riskFactors.push("Chronic Kidney Disease history");
+    historyImpact.push("Kidney disease increases concern for dehydration and metabolic complications, so worsening thirst, weakness, or reduced urine output needs prompt review.");
+  }
+  if (hasHypertension) riskFactors.push("Hypertension history");
+  if (hasObesity) riskFactors.push("Obesity or elevated BMI history");
+  if (Number.isFinite(ageNumber) && ageNumber >= 55) riskFactors.push("Age 55 or older");
+  if (hasMetformin) medicationConsiderations.push("If Metformin doses were missed or vomiting/dehydration is present, blood sugar control and medication safety should be reviewed by a clinician.");
+  if (historyText.includes("losartan") || historyText.includes("amlodipine")) {
+    medicationConsiderations.push("Blood pressure medicines such as Losartan or Amlodipine may need review if dehydration, dizziness, fainting, or kidney symptoms occur.");
+  }
+
+  const diabetesEmergencyPattern = hasDiabetes && hasUrinarySymptoms && hasPolydipsia && (hasBlurredVision || hasFatigue);
+  const severeBreathingPattern = hasChestPain && hasShortnessOfBreath;
+
+  if (diabetesEmergencyPattern) {
+    conditions.push(fallbackCondition({
+      name: "Uncontrolled Diabetes / Hyperglycemia",
+      likelihood: "high",
+      confidence: 88,
+      definition: "Hyperglycemia means blood sugar is higher than normal.",
+      causes: "Missed diabetes medication, infection, dehydration, diet changes, illness, or progression of diabetes can contribute.",
+      symptoms: "Frequent urination, extreme thirst, blurred vision, fatigue, weakness, and dehydration can occur with high blood sugar.",
+      treatments: "Blood glucose testing, hydration if safe, medication review, and urgent clinical assessment may be needed.",
+      first_aid: "Check blood glucose now if a meter is available. Drink water if awake and able to swallow. Do not exercise to lower glucose if feeling very unwell. Seek urgent care, especially with vomiting, confusion, drowsiness, severe weakness, or very high glucose.",
+      reason: "Frequent urination and extreme thirst together are classic warning symptoms of high blood sugar because excess glucose pulls fluid into the urine. Blurred vision and fatigue strengthen this concern, and the saved diabetes history makes hyperglycemia more likely than a simple urinary complaint.",
+      sources: ["American Diabetes Association", "CDC", "Mayo Clinic"],
+    }));
+    conditions.push(fallbackCondition({
+      name: "Hyperosmolar Hyperglycemic State (HHS)",
+      likelihood: "medium",
+      confidence: 74,
+      definition: "HHS is a serious diabetes complication involving very high blood sugar and severe dehydration.",
+      causes: "It can be triggered by infection, missed medication, dehydration, or illness in people with type 2 diabetes.",
+      symptoms: "Extreme thirst, frequent urination, weakness, blurred vision, drowsiness, confusion, and dehydration are concerning signs.",
+      treatments: "HHS requires urgent hospital assessment, fluids, glucose monitoring, and medical treatment.",
+      first_aid: "Seek emergency medical care now if blood sugar is very high, the patient is confused, drowsy, vomiting, very weak, or unable to drink. Keep the person hydrated only if fully awake and able to swallow safely.",
+      reason: "The combination of diabetes history, extreme thirst, frequent urination, blurred vision, and fatigue raises concern for a dehydration-related hyperglycemic complication. HHS cannot be confirmed without blood glucose and clinical tests, but the pattern is serious enough to keep it high on the safety list.",
+      sources: ["American Diabetes Association", "NHS", "Mayo Clinic"],
+    }));
+  }
+
+  if (hasUrinarySymptoms) {
+    conditions.push(fallbackCondition({
+      name: "Urinary Tract Infection",
+      likelihood: diabetesEmergencyPattern ? "low" : "medium",
+      confidence: diabetesEmergencyPattern ? 34 : 62,
+      definition: "A urinary tract infection is an infection affecting the bladder, urethra, or kidneys.",
+      causes: "Bacteria entering the urinary tract are the most common cause.",
+      symptoms: "Frequent urination, urgency, burning urination, lower abdominal discomfort, fever, or flank pain may occur.",
+      treatments: "A urine test and antibiotics may be needed if infection is suspected.",
+      first_aid: "Drink fluids if safe, avoid delaying urination, and seek care promptly if there is fever, back/flank pain, pregnancy, diabetes, kidney disease, or worsening symptoms.",
+      reason: diabetesEmergencyPattern
+        ? "Frequent urination can occur with a urinary tract infection, but the paired extreme thirst, blurred vision, fatigue, and diabetes history point more strongly toward high blood sugar. UTI remains possible because infections can also trigger hyperglycemia in people with diabetes."
+        : "Frequent urination can fit a urinary tract infection, especially if urgency, burning, lower abdominal pain, fever, or back pain is also present. More details and a urine test would help separate infection from other causes.",
+      sources: ["CDC", "NHS", "Mayo Clinic"],
+    }));
+  }
+
+  if (severeBreathingPattern) {
+    conditions.push(fallbackCondition({
+      name: "Potential Heart or Lung Emergency",
+      likelihood: "high",
+      confidence: 86,
+      definition: "Chest pain with breathing difficulty can signal serious heart or lung conditions.",
+      causes: "Possible causes include heart attack, pulmonary embolism, severe asthma, pneumonia, or other urgent conditions.",
+      symptoms: "Chest pain, chest pressure, shortness of breath, sweating, fainting, or pain spreading to arm/jaw/back are warning signs.",
+      treatments: "Emergency medical evaluation is needed to identify the cause.",
+      first_aid: "Call emergency services now. Rest upright, avoid exertion, and do not drive yourself to hospital.",
+      reason: "Chest pain combined with shortness of breath is a high-risk pattern because both heart and lung emergencies can present this way. The safest triage action is emergency assessment rather than waiting for symptoms to evolve.",
+      sources: ["American Heart Association", "CDC", "NHS"],
+    }));
+  }
+
+  if (hasRespiratory && !severeBreathingPattern) {
+    conditions.push(fallbackCondition({
+      name: "Respiratory Infection or Airway Irritation",
+      likelihood: "medium",
+      confidence: 58,
+      definition: "Respiratory infections or airway irritation can affect the nose, throat, or lungs.",
+      causes: "Viruses, allergens, asthma, pollution, or bacterial infections can contribute.",
+      symptoms: "Cough, sore throat, runny nose, fever, wheezing, fatigue, or chest tightness may occur.",
+      treatments: "Treatment depends on severity and cause; rest, fluids, symptom relief, inhalers, or clinical review may be needed.",
+      first_aid: "Rest, drink fluids if safe, avoid smoke/dust, and seek urgent care for severe breathing difficulty, blue lips, chest pain, confusion, or worsening symptoms.",
+      reason: "Cough, sore throat, fever, wheezing, or shortness of breath can occur with respiratory infections or airway irritation. Without severe danger signs, this is usually assessed by severity, duration, and breathing status.",
+      sources: ["CDC", "NHS", "Mayo Clinic"],
+    }));
+  }
+
+  if (hasAbdominalPain || hasNausea) {
+    conditions.push(fallbackCondition({
+      name: "Gastrointestinal Illness",
+      likelihood: "medium",
+      confidence: 52,
+      definition: "Gastrointestinal illness refers to irritation or infection affecting the stomach or intestines.",
+      causes: "Food-related illness, viral infection, medication irritation, gastritis, or other abdominal conditions may contribute.",
+      symptoms: "Abdominal pain, nausea, vomiting, diarrhea, fever, or poor appetite may occur.",
+      treatments: "Hydration, diet adjustment, and clinical review may be needed depending on severity.",
+      first_aid: "Sip fluids, avoid heavy meals, and seek urgent care for severe abdominal pain, blood in stool/vomit, persistent vomiting, dehydration, fainting, or worsening symptoms.",
+      reason: "Abdominal pain or nausea can fit several gastrointestinal causes, ranging from mild irritation to urgent abdominal conditions. Duration, fever, vomiting, and pain location are important for triage.",
+      sources: ["NHS", "Mayo Clinic", "CDC"],
+    }));
+  }
+
+  if (conditions.length === 0) {
+    conditions.push(fallbackCondition({
+      name: "Non-specific Symptom Pattern",
+      likelihood: "medium",
+      confidence: 45,
+      reason: "The reported symptoms do not create a clear rule-based pattern, so this limited fallback cannot safely narrow the cause. A clinician or full AI assessment may be needed for a more personalized interpretation.",
+      first_aid: "Monitor symptoms, rest, stay hydrated if safe, and seek urgent care for severe pain, breathing difficulty, confusion, fainting, weakness, or symptoms that rapidly worsen.",
+    }));
+  }
+
+  const urgency: FallbackTriageResult["urgency"] = diabetesEmergencyPattern || severeBreathingPattern
+    ? "emergency"
+    : riskFactors.length > 0 || hasFever
+      ? "needs-attention"
+      : "non-urgent";
+
+  const urgencyReason = diabetesEmergencyPattern
+    ? "Diabetes history combined with frequent urination, extreme thirst, blurred vision, and fatigue can indicate severe high blood sugar or dehydration-related complications."
+    : severeBreathingPattern
+      ? "Chest pain with shortness of breath is a high-risk symptom pattern that needs emergency assessment."
+      : riskFactors.length > 0
+        ? "Saved health history includes risk factors that can make otherwise common symptoms more concerning."
+        : "No immediate high-risk rule was identified, but this fallback is limited and cannot replace clinical assessment.";
+
+  const summary = `Limited safety fallback used because the AI triage provider is unavailable. ${urgencyReason}`;
+  const recommendedAction = urgency === "emergency"
+    ? "Seek emergency medical care now. If available, check key measurements such as blood glucose, temperature, pulse, or blood pressure and share them with clinicians."
+    : urgency === "needs-attention"
+      ? "Arrange timely clinical review, especially if symptoms persist, worsen, or you have risk factors in your medical history."
+      : "Monitor symptoms and use self-care, but seek medical care if symptoms worsen or new warning signs appear.";
+
+  return {
+    urgency,
+    summary,
+    possible_conditions: conditions.slice(0, 4),
+    recommended_action: recommendedAction,
+    urgency_reason: urgencyReason,
+    risk_factors: riskFactors,
+    medication_considerations: medicationConsiderations,
+    medical_history_impact: historyImpact,
+    questions: [
+      "What are the current vital signs or blood glucose readings, if available?",
+      "When did the symptoms start and are they getting worse?",
+      "Have any prescribed medicines been missed or changed recently?",
+      "Are there red flags such as confusion, fainting, severe pain, vomiting, or breathing difficulty?",
+    ],
+    warning_signs: [
+      "Confusion, drowsiness, fainting, or severe weakness",
+      "Severe breathing difficulty or chest pain",
+      "Persistent vomiting or inability to keep fluids down",
+      "Very high blood sugar, severe dehydration, or rapidly worsening symptoms",
+    ],
+    fallback_mode: true,
+  };
+}
+
+function fallbackResponse(reason: string, params: {
+  symptoms: string;
+  age?: string;
+  gender?: string;
+  medicalHistoryContext?: string | null;
+}) {
+  console.warn(`[symptom-triage] Using fallback triage: ${reason}`);
+  return new Response(JSON.stringify(createFallbackTriageResult(params)), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 // --- Triage tool schema (OpenAI-compatible function calling) ------------------
 
 const triageTool = {
@@ -384,7 +633,17 @@ serve(async (req) => {
 
   try {
     const { symptoms, age, gender, language, medicalHistoryContext, assessmentFor, patientContext, patientName } = await req.json();
-    const provider = resolveProvider();
+    let provider: ProviderConfig;
+    try {
+      provider = resolveProvider();
+    } catch (error) {
+      return fallbackResponse(error instanceof Error ? error.message : "No AI provider configured", {
+        symptoms,
+        age,
+        gender,
+        medicalHistoryContext,
+      });
+    }
 
     const systemPrompt = `
 
@@ -581,22 +840,28 @@ Ensure the top-level response includes urgency_reason, risk_factors, medication_
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return fallbackResponse("Provider rate limit or quota exceeded", {
+          symptoms,
+          age,
+          gender,
+          medicalHistoryContext,
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Service credits exhausted." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return fallbackResponse("Provider credits exhausted", {
+          symptoms,
+          age,
+          gender,
+          medicalHistoryContext,
         });
       }
       const t = await response.text();
       console.error(`[symptom-triage] ${provider.tag} error:`, response.status, t);
-      return new Response(JSON.stringify({ error: "Triage service error" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return fallbackResponse(`Provider error ${response.status}`, {
+        symptoms,
+        age,
+        gender,
+        medicalHistoryContext,
       });
     }
 
@@ -641,15 +906,16 @@ Ensure the top-level response includes urgency_reason, risk_factors, medication_
       }
     }
 
-    return new Response(JSON.stringify({ error: "No triage result" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return fallbackResponse("No parseable AI triage result", {
+      symptoms,
+      age,
+      gender,
+      medicalHistoryContext,
     });
   } catch (e) {
     console.error("[symptom-triage] error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return fallbackResponse(e instanceof Error ? e.message : "Unknown error", {
+      symptoms: "",
     });
   }
 });
