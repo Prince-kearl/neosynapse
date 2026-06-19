@@ -40,6 +40,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { MedicalReportTools } from "./MedicalReportTools";
 import { medicalReportService } from "@/shared/services/healthcare";
+import { createReportDedupeKey, hasSavedReportKey, markReportKeySaved } from "@/shared/lib/reportDedupe";
 
 // Dynamically import pdfjs-dist for compatibility with Vite/ESM
 let pdfjsLib: any;
@@ -739,7 +740,8 @@ function AIAssistant() {
   const speakRequestIdRef = useRef(0);
   const prevMessageCountRef = useRef(0);
   const lastUrlQueryRef = useRef<string | null>(null);
-  const savedReportSignaturesRef = useRef<Set<string>>(new Set());
+  const savingReportKeysRef = useRef<Set<string>>(new Set());
+  const reportEligibleAfterMessageIndexRef = useRef<number | null>(null);
   // --- Suggestion chip highlight state ---
   const [highlightedChip, setHighlightedChip] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -967,12 +969,13 @@ function AIAssistant() {
     lastUrlQueryRef.current = queryFromUrl;
     setInput("");
     setAutoVoice(false);
+    reportEligibleAfterMessageIndexRef.current = messages.length;
     sendMessage(queryFromUrl);
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("query");
     setSearchParams(nextParams, { replace: true });
-  }, [isLoading, searchParams, sendMessage, setSearchParams]);
+  }, [isLoading, messages.length, searchParams, sendMessage, setSearchParams]);
 
   // Auto-play TTS when assistant finishes responding (voice-initiated)
   useEffect(() => {
@@ -1025,6 +1028,7 @@ function AIAssistant() {
     setAutoVoice(false);
     
     // Pass visible message content, image, and hidden context separately
+    reportEligibleAfterMessageIndexRef.current = messages.length;
     sendMessage(trimmed || "Please analyze the attached report.", imageUrl, hiddenContext);
   };
 
@@ -1231,6 +1235,7 @@ function AIAssistant() {
           transcriptRef.current = "";
           if (finalTranscript) {
             setAutoVoice(true);
+            reportEligibleAfterMessageIndexRef.current = messages.length;
             sendMessage(finalTranscript);
             setLiveTranscript("");
           } else if (!stopRequestedRef.current) {
@@ -1438,15 +1443,23 @@ function AIAssistant() {
   const inputDisabled = isLoading || isTranscribing;
 
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  const { markdown: generatedReportMarkdown, json: generatedReportJson } = extractReportAndJson(messages);
+  const { markdown: generatedReportMarkdown, json: generatedReportJson, messageIndex: generatedReportMessageIndex } = extractReportAndJson(messages);
 
   // Auto-save generated AI report to medical_reports so it appears in Reports history.
   useEffect(() => {
     if (!user?.id || !generatedReportMarkdown) return;
+    const eligibleAfterIndex = reportEligibleAfterMessageIndexRef.current;
+    if (eligibleAfterIndex === null || generatedReportMessageIndex <= eligibleAfterIndex) return;
 
-    const jsonKey = generatedReportJson ? JSON.stringify(generatedReportJson).slice(0, 300) : "";
-    const signature = `${generatedReportMarkdown.slice(0, 280)}|${jsonKey}`;
-    if (savedReportSignaturesRef.current.has(signature)) return;
+    const reportKey = createReportDedupeKey([
+      "ai_assistant",
+      user.id,
+      generatedReportMarkdown,
+      generatedReportJson || null,
+    ]);
+    reportEligibleAfterMessageIndexRef.current = null;
+    if (savingReportKeysRef.current.has(reportKey) || hasSavedReportKey(user.id, reportKey)) return;
+    savingReportKeysRef.current.add(reportKey);
 
     let cancelled = false;
     const persistReport = async () => {
@@ -1454,6 +1467,7 @@ function AIAssistant() {
         ...(generatedReportJson && typeof generatedReportJson === "object" ? generatedReportJson as Record<string, unknown> : {}),
         markdown: generatedReportMarkdown,
         source: "ai_assistant",
+        dedupe_key: reportKey,
         generated_at: new Date().toISOString(),
       };
 
@@ -1464,12 +1478,13 @@ function AIAssistant() {
       });
 
       if (cancelled) return;
+      savingReportKeysRef.current.delete(reportKey);
       if (error) {
         console.error("Failed to auto-save AI report:", error);
         return;
       }
 
-      savedReportSignaturesRef.current.add(signature);
+      markReportKeySaved(user.id, reportKey);
       queryClient.invalidateQueries({ queryKey: ["my-reports", user.id] });
       queryClient.invalidateQueries({ queryKey: ["recent-reports", user.id] });
       toast({ title: "Report saved to history" });
@@ -1478,8 +1493,9 @@ function AIAssistant() {
     persistReport();
     return () => {
       cancelled = true;
+      savingReportKeysRef.current.delete(reportKey);
     };
-  }, [generatedReportMarkdown, generatedReportJson, user?.id, queryClient]);
+  }, [generatedReportMarkdown, generatedReportJson, generatedReportMessageIndex, user?.id, queryClient]);
 
   // ---- Message Bubble ----
   const MessageBubble = ({ msg }: { msg: ChatMessage }) => {
@@ -1996,14 +2012,23 @@ function AIAssistant() {
 // --- Medical Report Extraction ---
 function extractReportAndJson(messages: ChatMessage[]) {
   // Find the last assistant message containing the report
-  const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant" && m.content.includes("---JSON---"));
-  if (!lastAssistantMsg) return { markdown: null, json: null };
+  let lastAssistantMsg: ChatMessage | null = null;
+  let messageIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "assistant" && message.content.includes("---JSON---")) {
+      lastAssistantMsg = message;
+      messageIndex = index;
+      break;
+    }
+  }
+  if (!lastAssistantMsg) return { markdown: null, json: null, messageIndex };
   const [markdownPart, jsonPart] = lastAssistantMsg.content.split("---JSON---");
   let json = null;
   try {
     json = JSON.parse(jsonPart);
   } catch {}
-  return { markdown: markdownPart?.trim() || null, json };
+  return { markdown: markdownPart?.trim() || null, json, messageIndex };
 }
 
 // --- PDF text extraction helper ---

@@ -18,6 +18,7 @@ import { medicalReportService } from "@/shared/services/healthcare";
 import { useMedicalHistory, useMedicalHistoryFiles, usePatientProfile } from "@/shared/hooks/useHealthcare";
 import type { PatientProfile } from "@/shared/types/healthcare";
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
+import { createReportDedupeKey, hasSavedReportKey, markReportKeySaved } from "@/shared/lib/reportDedupe";
 import { sortPossibleConditionsByLikelihood, truncateClinicalText } from "./symptomCheckerUtils";
 
 interface TriageResult {
@@ -377,7 +378,8 @@ export default function PatientSymptomChecker() {
   const [assessmentFor, setAssessmentFor] = useState<"self" | "other" | null>(null);
   const [patientName, setPatientName] = useState("");
   const [intakeStep, setIntakeStep] = useState<IntakeStep>("intro");
-  const savedReportSignaturesRef = useRef<Set<string>>(new Set());
+  const savingReportKeysRef = useRef<Set<string>>(new Set());
+  const freshResultPendingReportRef = useRef(false);
 
   const symptomCheckerStorageKey = "neosynapse.symptomCheckerState";
 
@@ -567,6 +569,7 @@ export default function PatientSymptomChecker() {
       };
 
       setResult(normalized);
+      freshResultPendingReportRef.current = true;
       setStep("result");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Triage service unavailable. Please try again.";
@@ -597,6 +600,7 @@ export default function PatientSymptomChecker() {
   // Auto-save generated symptom triage report into medical_reports.
   useEffect(() => {
     if (step !== "result" || !result || !user?.id) return;
+    if (!freshResultPendingReportRef.current) return;
 
     const autoReport = buildSymptomReport({
       result,
@@ -607,8 +611,23 @@ export default function PatientSymptomChecker() {
       duration,
     });
 
-    const signature = `${result.urgency}|${result.summary}|${autoReport.markdown.slice(0, 220)}`;
-    if (savedReportSignaturesRef.current.has(signature)) return;
+    const reportKey = createReportDedupeKey([
+      "symptom_triage",
+      user.id,
+      age || "unknown",
+      gender || "unknown",
+      duration || "unknown",
+      autoReport.json.symptoms,
+      result.urgency,
+      result.summary,
+      result.possible_conditions,
+      result.recommended_action,
+      result.questions,
+      result.warning_signs,
+    ]);
+    freshResultPendingReportRef.current = false;
+    if (savingReportKeysRef.current.has(reportKey) || hasSavedReportKey(user.id, reportKey)) return;
+    savingReportKeysRef.current.add(reportKey);
 
     let cancelled = false;
     const persistReport = async () => {
@@ -619,16 +638,18 @@ export default function PatientSymptomChecker() {
           ...autoReport.json,
           markdown: autoReport.markdown,
           source: "symptom_checker",
+          dedupe_key: reportKey,
         },
       });
 
       if (cancelled) return;
+      savingReportKeysRef.current.delete(reportKey);
       if (error) {
         console.error("Failed to auto-save symptom triage report:", error);
         return;
       }
 
-      savedReportSignaturesRef.current.add(signature);
+      markReportKeySaved(user.id, reportKey);
       queryClient.invalidateQueries({ queryKey: ["my-reports", user.id] });
       queryClient.invalidateQueries({ queryKey: ["recent-reports", user.id] });
       toast({ title: "Report saved to history" });
@@ -637,6 +658,7 @@ export default function PatientSymptomChecker() {
     persistReport();
     return () => {
       cancelled = true;
+      savingReportKeysRef.current.delete(reportKey);
     };
   }, [step, result, user?.id, age, gender, duration, selectedSymptoms, customSymptoms, symptomInput, queryClient, navigate]);
 
