@@ -150,10 +150,40 @@ export function getDateOfBirthValidationError(value?: string | null) {
   return undefined;
 }
 
+export function calculateAgeFromDateOfBirth(value?: string | null, referenceDate = new Date()): number | null {
+  const dateValue = trimToNull(value);
+  if (!dateValue || getDateOfBirthValidationError(dateValue)) return null;
+
+  const dob = new Date(`${dateValue}T00:00:00`);
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+  if (Number.isNaN(dob.getTime()) || dob > today) return null;
+
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDelta = today.getMonth() - dob.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 && age <= 130 ? age : null;
+}
+
+export function getAgeValidationError(value?: string | null, options?: { required?: boolean }) {
+  const required = options?.required ?? true;
+  const ageText = trimToNull(value);
+
+  if (!ageText) return required ? "Age is required" : undefined;
+  if (!/^\d{1,3}$/.test(ageText)) return "Enter age as a whole number";
+
+  const age = Number(ageText);
+  if (!Number.isInteger(age) || age < 0 || age > 130) return "Enter a realistic age";
+
+  return undefined;
+}
+
 export const optionalDateOfBirthSchema = z.string().optional().superRefine((value, ctx) => {
   const error = getDateOfBirthValidationError(value);
   if (error) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: error });
   }
 });
-

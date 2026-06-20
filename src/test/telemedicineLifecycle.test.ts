@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  getDuplicatePatientTelemedicineEncounterIds,
   getPendingTelemedicineResolution,
   isStoredPatientWaitingCallFresh,
   isWaitingRoomStale,
+  selectReusablePatientTelemedicineEncounter,
   WAITING_ROOM_STALE_MS,
 } from "@/shared/lib/telemedicineLifecycle";
 
@@ -68,5 +70,26 @@ describe("telemedicine lifecycle", () => {
         now,
       ),
     ).toBe(false);
+  });
+
+  it("reuses the newest open patient telemedicine encounter", () => {
+    const encounters = [
+      { id: "old-pending", status: "pending", professional_id: "doc-1", created_at: "2026-06-19T11:50:00.000Z" },
+      { id: "completed", status: "completed", professional_id: "doc-2", created_at: "2026-06-19T11:55:00.000Z" },
+      { id: "new-progress", status: "in_progress", professional_id: "doc-3", created_at: "2026-06-19T11:58:00.000Z" },
+    ];
+
+    expect(selectReusablePatientTelemedicineEncounter(encounters)?.id).toBe("new-progress");
+  });
+
+  it("identifies older duplicate patient queue entries for cancellation", () => {
+    const encounters = [
+      { id: "keep", status: "pending", created_at: "2026-06-19T11:58:00.000Z" },
+      { id: "cancel-1", status: "pending", created_at: "2026-06-19T11:57:00.000Z" },
+      { id: "cancel-2", status: "in_progress", created_at: "2026-06-19T11:56:00.000Z" },
+      { id: "done", status: "completed", created_at: "2026-06-19T11:55:00.000Z" },
+    ];
+
+    expect(getDuplicatePatientTelemedicineEncounterIds(encounters, "keep")).toEqual(["cancel-1", "cancel-2"]);
   });
 });

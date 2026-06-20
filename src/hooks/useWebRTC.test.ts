@@ -171,7 +171,7 @@ describe("useWebRTC telemedicine signaling", () => {
     expect(subscribeIndex).toBeLessThan(fetchIndex);
   });
 
-  it("marks the explicit room ended on unmount cleanup", async () => {
+  it("does not mark a room ended during passive unmount cleanup", async () => {
     const { result, unmount } = renderHook(() =>
       useWebRTC({ roomId: null, userId: "patient-user-id" })
     );
@@ -186,6 +186,23 @@ describe("useWebRTC telemedicine signaling", () => {
     expect(
       mockState.roomUpdates.some(
         (u) => u.id === "room-start-1" && u.values.status === "ended"
+      )
+    ).toBe(false);
+  });
+
+  it("marks the explicit room ended when the call is intentionally ended", async () => {
+    const { result } = renderHook(() =>
+      useWebRTC({ roomId: null, userId: "patient-user-id" })
+    );
+
+    await act(async () => {
+      await result.current.startCall(true, true, "room-start-2");
+      await result.current.endCall();
+    });
+
+    expect(
+      mockState.roomUpdates.some(
+        (u) => u.id === "room-start-2" && u.values.status === "ended"
       )
     ).toBe(true);
   });

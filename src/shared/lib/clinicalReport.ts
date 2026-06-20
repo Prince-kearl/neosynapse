@@ -1,4 +1,5 @@
 import type { MedicalHistory, PatientProfile } from "@/shared/types/healthcare";
+import { calculateAgeFromDateOfBirth } from "@/shared/lib/inputValidation";
 
 export type ClinicalReportUrgency = "non-urgent" | "needs-attention" | "urgent" | "emergency";
 
@@ -92,20 +93,9 @@ function tableCell(value?: string | number | null): string {
   return String(value ?? "Not recorded").replace(/\n/g, " ").trim() || "Not recorded";
 }
 
-function calculateAgeFromDob(dateOfBirth?: string | null): string | null {
-  if (!dateOfBirth) return null;
-  const dob = new Date(dateOfBirth);
-  if (Number.isNaN(dob.getTime())) return null;
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDelta = today.getMonth() - dob.getMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < dob.getDate())) age -= 1;
-  return age >= 0 ? String(age) : null;
-}
-
 function buildClinicalNarrative(input: BuildClinicalReportInput): string {
   const { result, patientProfile, medicalHistory, selectedSymptoms, duration } = input;
-  const age = input.age || calculateAgeFromDob(patientProfile?.date_of_birth) || "age not recorded";
+  const age = input.age || String(calculateAgeFromDateOfBirth(patientProfile?.date_of_birth) ?? "") || "age not recorded";
   const gender = input.gender || patientProfile?.gender || "gender not recorded";
   const conditions = printableList(medicalHistory?.existing_conditions, "no documented chronic conditions");
   const symptoms = printableList(selectedSymptoms, "reported symptoms not recorded");
@@ -186,7 +176,7 @@ function conditionRows(result: ClinicalReportResult): Array<{ condition: string;
 export function buildClinicalAssessmentReport(input: BuildClinicalReportInput): BuiltClinicalReport {
   const generatedAt = input.generatedAt ?? new Date();
   const reportId = reportIdFromDate(generatedAt, input.patientId);
-  const age = input.age || calculateAgeFromDob(input.patientProfile?.date_of_birth) || "Not recorded";
+  const age = input.age || String(calculateAgeFromDateOfBirth(input.patientProfile?.date_of_birth) ?? "") || "Not recorded";
   const gender = input.gender || input.patientProfile?.gender || "Not recorded";
   const patientName = input.patientName || input.patientEmail || "Not recorded";
   const emergencyContact = [

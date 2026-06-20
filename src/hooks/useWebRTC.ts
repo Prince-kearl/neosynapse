@@ -21,6 +21,7 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   // Tracks the active room ID set by startCall/joinCall regardless of whether it came
   // from the prop or an explicit argument — used for cleanup on unmount.
   const activeRoomIdRef = useRef<string | null>(null);
@@ -34,6 +35,7 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video, audio });
       setLocalStream(stream);
+      localStreamRef.current = stream;
       return stream;
     } catch (err) {
       console.error("Failed to get media devices:", err);
@@ -41,6 +43,7 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
         try {
           const audioStream = await navigator.mediaDevices.getUserMedia({ video: false, audio });
           setLocalStream(audioStream);
+          localStreamRef.current = audioStream;
           return audioStream;
         } catch {
           console.error("Failed to get audio device");
@@ -239,6 +242,8 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     const roomToEnd = activeRoomIdRef.current || roomId;
     activeRoomIdRef.current = null;
     localStream?.getTracks().forEach(track => track.stop());
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
     peerConnection.current?.close();
     peerConnection.current = null;
     setLocalStream(null);
@@ -252,22 +257,15 @@ export function useWebRTC({ roomId, userId, onRemoteStream, onConnectionStateCha
     }
   }, [localStream, roomId, updateState]);
 
-  // Cleanup on unmount — also marks the room ended so the professional's
-  // waiting list does not show a ghost encounter if the patient navigates away.
+  // Passive cleanup releases local resources but keeps the room open. Patient
+  // refreshes, app backgrounding, and route restoration should not create a
+  // duplicate queue entry or make a waiting consultation disappear.
   useEffect(() => {
     return () => {
-      localStream?.getTracks().forEach(track => track.stop());
+      localStreamRef.current?.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
       peerConnection.current?.close();
       channelRef.current?.unsubscribe();
-      const roomToEnd = activeRoomIdRef.current;
-      if (roomToEnd) {
-        // Fire-and-forget: browser delivers the fetch before the page unloads.
-        supabase
-          .from("consultation_rooms")
-          .update({ status: "ended" })
-          .eq("id", roomToEnd)
-          .then(() => {});
-      }
     };
   }, []);
 

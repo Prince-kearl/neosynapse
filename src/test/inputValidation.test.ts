@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateAgeFromDateOfBirth,
   emailSchema,
+  getAgeValidationError,
   getDateOfBirthValidationError,
   getEmailValidationError,
   getPhoneValidationError,
@@ -39,5 +41,20 @@ describe("input validation", () => {
     expect(getDateOfBirthValidationError("3000-01-01")).toBe("Date of birth cannot be in the future");
     expect(getDateOfBirthValidationError("1800-01-01")).toBe("Enter a realistic date of birth");
   });
-});
 
+  it("calculates age from date of birth using the reference date", () => {
+    const referenceDate = new Date("2026-06-20T12:00:00Z");
+
+    expect(calculateAgeFromDateOfBirth("2005-08-17", referenceDate)).toBe(20);
+    expect(calculateAgeFromDateOfBirth("2005-06-20", referenceDate)).toBe(21);
+    expect(calculateAgeFromDateOfBirth("3000-01-01", referenceDate)).toBeNull();
+  });
+
+  it("validates manually entered age values", () => {
+    expect(getAgeValidationError("35")).toBeUndefined();
+    expect(getAgeValidationError("", { required: false })).toBeUndefined();
+    expect(getAgeValidationError("35.5")).toBe("Enter age as a whole number");
+    expect(getAgeValidationError("-1")).toBe("Enter age as a whole number");
+    expect(getAgeValidationError("131")).toBe("Enter a realistic age");
+  });
+});

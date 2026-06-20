@@ -7,6 +7,7 @@ export type TelemedicineEncounterLike = {
   id: string;
   status: string | null;
   created_at?: string | null;
+  professional_id?: string | null;
 };
 
 export type TelemedicineRoomLike = {
@@ -62,6 +63,29 @@ export function getPendingTelemedicineResolution(
   if (rooms.some((room) => isLiveTelemedicineRoom(room) && isWaitingRoomStale(room, nowMs))) return "cancelled";
 
   return null;
+}
+
+export function isOpenTelemedicineEncounter(encounter: TelemedicineEncounterLike): boolean {
+  return ["pending", "in_progress"].includes(String(encounter.status || "").toLowerCase());
+}
+
+export function selectReusablePatientTelemedicineEncounter<T extends TelemedicineEncounterLike>(
+  encounters: T[],
+): T | null {
+  const openEncounters = encounters
+    .filter(isOpenTelemedicineEncounter)
+    .sort((a, b) => timestampMs(b.created_at) - timestampMs(a.created_at));
+
+  return openEncounters[0] || null;
+}
+
+export function getDuplicatePatientTelemedicineEncounterIds<T extends TelemedicineEncounterLike>(
+  encounters: T[],
+  reusableEncounterId: string | null,
+): string[] {
+  return encounters
+    .filter((encounter) => isOpenTelemedicineEncounter(encounter) && encounter.id !== reusableEncounterId)
+    .map((encounter) => encounter.id);
 }
 
 export function isStoredPatientWaitingCallFresh(

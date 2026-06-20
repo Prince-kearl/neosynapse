@@ -27,7 +27,7 @@ import {
 } from "@/shared/lib/patientSettings";
 import { toast } from "@/hooks/use-toast";
 import { getRoleLabel } from "@/auth/rolePriority";
-import { getDateOfBirthValidationError, getPhoneValidationError } from "@/shared/lib/inputValidation";
+import { calculateAgeFromDateOfBirth, getDateOfBirthValidationError, getPhoneValidationError } from "@/shared/lib/inputValidation";
 import { isConsentGrantedByDefault } from "@/shared/lib/consents";
 
 export default function PatientProfile() {
@@ -114,6 +114,8 @@ export default function PatientProfile() {
 
   const notificationSummary = getNotificationSummary(notificationSettingsMeta);
   const privacySummary = getPrivacySummary(privacySecuritySettingsMeta);
+  const calculatedAge = calculateAgeFromDateOfBirth(patientProfile?.date_of_birth);
+  const calculatedFormAge = calculateAgeFromDateOfBirth(formData.date_of_birth);
   const formDateOfBirthError = getDateOfBirthValidationError(formData.date_of_birth);
   const formPhoneError = getPhoneValidationError(formData.phone);
   const formEmergencyPhoneError = getPhoneValidationError(formData.emergency_contact_phone);
@@ -622,7 +624,7 @@ export default function PatientProfile() {
                     <p className="font-medium text-foreground">Personal Details</p>
                     <p className="text-sm text-muted-foreground">
                       {patientProfile?.date_of_birth 
-                        ? `DOB: ${new Date(patientProfile.date_of_birth).toLocaleDateString()}`
+                        ? `DOB: ${new Date(patientProfile.date_of_birth).toLocaleDateString()}${calculatedAge !== null ? ` • Age: ${calculatedAge} years` : ""}`
                         : "Date of birth, gender, contact"
                       }
                       {patientProfile?.gender && ` • ${patientProfile.gender}`}
@@ -648,6 +650,11 @@ export default function PatientProfile() {
                           aria-invalid={!!formDateOfBirthError}
                         />
                         {formDateOfBirthError && <p className="text-xs text-destructive">{formDateOfBirthError}</p>}
+                        {!formDateOfBirthError && formData.date_of_birth && (
+                          <p className="text-xs text-muted-foreground">
+                            Age is calculated automatically: {calculatedFormAge ?? "not available"} years.
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="gender">Gender</Label>

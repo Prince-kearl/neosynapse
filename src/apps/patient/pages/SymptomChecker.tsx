@@ -19,6 +19,7 @@ import { useMedicalHistory, useMedicalHistoryFiles, usePatientProfile } from "@/
 import type { MedicalHistory, PatientProfile } from "@/shared/types/healthcare";
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
 import { buildClinicalAssessmentReport } from "@/shared/lib/clinicalReport";
+import { calculateAgeFromDateOfBirth, getAgeValidationError } from "@/shared/lib/inputValidation";
 import { createReportDedupeKey, hasSavedReportKey, markReportKeySaved } from "@/shared/lib/reportDedupe";
 import { sortPossibleConditionsByLikelihood, truncateClinicalText } from "./symptomCheckerUtils";
 
@@ -285,6 +286,10 @@ function buildPatientProfileContext(profile?: PatientProfile | null): string | n
   const lines: string[] = [];
   if (profile.date_of_birth) {
     lines.push(`Date of birth: ${profile.date_of_birth}`);
+    const calculatedAge = calculateAgeFromDateOfBirth(profile.date_of_birth);
+    if (calculatedAge !== null) {
+      lines.push(`Verified age from date of birth: ${calculatedAge}`);
+    }
   }
   if (profile.gender) {
     lines.push(`Sex/gender: ${profile.gender}`);
@@ -454,6 +459,10 @@ export default function PatientSymptomChecker() {
     ...symptomCheckerCopy.en,
     ...copy,
   };
+  const profileAge = calculateAgeFromDateOfBirth(patientProfile?.date_of_birth);
+  const usesVerifiedProfileAge = assessmentFor === "self" && profileAge !== null;
+  const effectiveAge = usesVerifiedProfileAge ? String(profileAge) : age.trim();
+  const ageValidationError = getAgeValidationError(effectiveAge, { required: true });
   const parsedSymptoms = parseSymptoms(selectedSymptoms, customSymptoms, symptomInput);
   const normalizedName = patientName.trim();
   const possessiveName = normalizedName
@@ -510,12 +519,9 @@ export default function PatientSymptomChecker() {
       return;
     }
 
-    if (age.trim()) {
-      const ageNumber = Number(age);
-      if (!Number.isFinite(ageNumber) || ageNumber <= 0 || ageNumber > 120) {
-        toast({ title: "Invalid age", description: "Please enter an age between 1 and 120.", variant: "destructive" });
-        return;
-      }
+    if (ageValidationError) {
+      toast({ title: "Invalid age", description: ageValidationError, variant: "destructive" });
+      return;
     }
 
     setStep("loading");
@@ -524,7 +530,7 @@ export default function PatientSymptomChecker() {
       const { data, error } = await supabase.functions.invoke("symptom-triage", {
         body: {
           symptoms: symptomsForTriage,
-          age,
+          age: effectiveAge,
           gender,
           language,
           medicalHistoryContext,
@@ -620,7 +626,7 @@ export default function PatientSymptomChecker() {
       patientEmail: user.email,
       patientProfile: assessmentFor === "self" ? patientProfile : null,
       medicalHistory: assessmentFor === "self" ? medicalHistory : null,
-      age,
+      age: effectiveAge,
       gender,
       selectedSymptoms,
       additionalSymptoms: [...customSymptoms, ...extractSymptomTokens(symptomInput)],
@@ -630,7 +636,7 @@ export default function PatientSymptomChecker() {
     const reportKey = createReportDedupeKey([
       "symptom_triage",
       user.id,
-      age || "unknown",
+      effectiveAge || "unknown",
       gender || "unknown",
       duration || "unknown",
       autoReport.json.symptoms,
@@ -676,7 +682,7 @@ export default function PatientSymptomChecker() {
       cancelled = true;
       savingReportKeysRef.current.delete(reportKey);
     };
-  }, [step, result, user, age, gender, duration, selectedSymptoms, customSymptoms, symptomInput, assessmentFor, normalizedName, patientProfile, medicalHistory, queryClient, navigate]);
+  }, [step, result, user, effectiveAge, gender, duration, selectedSymptoms, customSymptoms, symptomInput, assessmentFor, normalizedName, patientProfile, medicalHistory, queryClient, navigate]);
 
   if (step === "loading") {
     return (
@@ -711,7 +717,7 @@ export default function PatientSymptomChecker() {
       patientEmail: user?.email,
       patientProfile: assessmentFor === "self" ? patientProfile : null,
       medicalHistory: assessmentFor === "self" ? medicalHistory : null,
-      age,
+      age: effectiveAge,
       gender,
       selectedSymptoms,
       additionalSymptoms: [...customSymptoms, ...extractSymptomTokens(symptomInput)],
@@ -962,7 +968,7 @@ export default function PatientSymptomChecker() {
     setIntakeStep(order[idx - 1]);
   };
 
-  const canContinueAge = age.trim().length > 0;
+  const canContinueAge = !ageValidationError;
   const canContinueName = assessmentFor === "self" || patientName.trim().length > 1;
 
   // Input Step (ADA-inspired conversational intake)
@@ -1075,6 +1081,7 @@ export default function PatientSymptomChecker() {
                   className={answerPillClass}
                   onClick={() => {
                     setGender("female");
+                    if (usesVerifiedProfileAge) setAge(effectiveAge);
                     setIntakeStep("age");
                   }}
                 >
@@ -1085,6 +1092,7 @@ export default function PatientSymptomChecker() {
                   className={answerPillClass}
                   onClick={() => {
                     setGender("male");
+                    if (usesVerifiedProfileAge) setAge(effectiveAge);
                     setIntakeStep("age");
                   }}
                 >
@@ -1095,6 +1103,7 @@ export default function PatientSymptomChecker() {
                   className={answerPillClass}
                   onClick={() => {
                     setGender("other");
+                    if (usesVerifiedProfileAge) setAge(effectiveAge);
                     setIntakeStep("age");
                   }}
                 >
@@ -1107,15 +1116,31 @@ export default function PatientSymptomChecker() {
           {intakeStep === "age" && (
             <section className="space-y-6">
               <h2 className={sectionTitleClass}>{ageQuestion}</h2>
-              <Input
-                type="number"
-                value={age}
-                min={1}
-                max={120}
-                onChange={(e) => setAge(e.target.value)}
-                placeholder={copy.agePlaceholder}
-                className="h-12 rounded-full border-border bg-background px-6 text-base sm:h-14 sm:text-lg"
-              />
+              {usesVerifiedProfileAge ? (
+                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
+                  <p className="text-sm font-medium text-foreground">Verified age from your date of birth</p>
+                  <p className="mt-1 text-2xl font-semibold text-primary">{effectiveAge} years</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Update your Date of Birth in Personal Details if this is not correct.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    type="number"
+                    value={age}
+                    min={0}
+                    max={130}
+                    onChange={(e) => setAge(e.target.value)}
+                    placeholder={copy.agePlaceholder}
+                    aria-invalid={!!ageValidationError}
+                    className="h-12 rounded-full border-border bg-background px-6 text-base sm:h-14 sm:text-lg"
+                  />
+                  {ageValidationError && age.trim() && (
+                    <p className="text-xs text-destructive">{ageValidationError}</p>
+                  )}
+                </>
+              )}
               <div className="flex justify-end">
                 <Button
                   className={primaryCtaClass}

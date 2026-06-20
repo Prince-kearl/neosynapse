@@ -19,7 +19,9 @@ import { appointmentService } from "@/shared/services/healthcare";
 import { pushNotificationService } from "@/shared/services/pushNotificationService";
 import {
   clearStoredPatientWaitingCall,
+  getDuplicatePatientTelemedicineEncounterIds,
   readStoredPatientWaitingCall,
+  selectReusablePatientTelemedicineEncounter,
   writeStoredPatientWaitingCall,
 } from "@/shared/lib/telemedicineLifecycle";
 import type { AppointmentPriority } from "@/shared/types/healthcare";
@@ -267,30 +269,65 @@ export default function PatientTelemedicine() {
       .eq("id", targetEncounterId)
       .eq("patient_id", user.id);
 
+    const { data: existingRooms, error: existingRoomError } = await supabase
+      .from("consultation_rooms")
+      .select("id, status, created_at, updated_at")
+      .eq("encounter_id", targetEncounterId)
+      .in("status", ["waiting", "active"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (existingRoomError) {
+      console.error("Failed to check existing room:", existingRoomError);
+      toast({ title: "Unable to reconnect", description: "Could not check your existing call room.", variant: "destructive" });
+      return null;
+    }
+
+    const reusableRoom = existingRooms?.[0] || null;
+
+    if (reusableRoom?.id) {
+      await supabase
+        .from("consultation_rooms")
+        .update({ status: "ended", updated_at: new Date().toISOString() } as any)
+        .eq("encounter_id", targetEncounterId)
+        .eq("created_by", user.id)
+        .neq("id", reusableRoom.id)
+        .in("status", ["waiting", "active"]);
+    }
+
+    let room = reusableRoom;
+
+    if (!room) {
+      const { data: createdRoom, error: roomError } = await supabase
+        .from("consultation_rooms")
+        .insert({
+          encounter_id: targetEncounterId,
+          created_by: user.id,
+          doctor_id: targetDoctorId,
+          consent_recording: consentRecording,
+          status: "waiting",
+        })
+        .select("id")
+        .single();
+
+      if (roomError || !createdRoom) {
+        console.error("Failed to create room:", roomError);
+        toast({ title: "Unable to start consultation", description: "Could not create call room.", variant: "destructive" });
+        return null;
+      }
+
+      room = createdRoom;
+    }
+
     await supabase
       .from("consultation_rooms")
-      .update({ status: "ended", updated_at: new Date().toISOString() } as any)
-      .eq("encounter_id", targetEncounterId)
-      .eq("created_by", user.id)
-      .in("status", ["waiting", "active"]);
-
-    const { data: room, error: roomError } = await supabase
-      .from("consultation_rooms")
-      .insert({
-        encounter_id: targetEncounterId,
-        created_by: user.id,
+      .update({
         doctor_id: targetDoctorId,
         consent_recording: consentRecording,
         status: "waiting",
-      })
-      .select("id")
-      .single();
-
-    if (roomError || !room) {
-      console.error("Failed to create room:", roomError);
-      toast({ title: "Unable to start consultation", description: "Could not create call room.", variant: "destructive" });
-      return null;
-    }
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", room.id);
 
     setRoomId(room.id);
     setEncounterId(targetEncounterId);
@@ -418,11 +455,10 @@ export default function PatientTelemedicine() {
       .from("encounters")
       .select("id, status, professional_id, created_at")
       .eq("patient_id", user.id)
-      .eq("professional_id", selectedDoctor)
       .eq("encounter_type", "telemedicine")
       .in("status", ["pending", "in_progress"])
       .order("created_at", { ascending: false })
-      .limit(3);
+      .limit(10);
 
     if (existingEncounterError) {
       console.error("Failed to check existing consultation:", existingEncounterError);
@@ -432,16 +468,18 @@ export default function PatientTelemedicine() {
       return;
     }
 
-    const reusableEncounter = existingEncounters?.[0] || null;
+    const reusableEncounter = selectReusablePatientTelemedicineEncounter(existingEncounters || []);
     if (reusableEncounter) {
-      if ((existingEncounters || []).length > 1) {
+      const duplicateIds = getDuplicatePatientTelemedicineEncounterIds(existingEncounters || [], reusableEncounter.id);
+      if (duplicateIds.length > 0) {
         await supabase
           .from("encounters")
           .update({ status: "cancelled", ended_at: new Date().toISOString() })
-          .in("id", (existingEncounters || []).slice(1).map((enc) => enc.id));
+          .in("id", duplicateIds);
       }
 
-      const roomId = await createRoomAndStartCall(reusableEncounter.id, selectedDoctor);
+      const doctorForRequest = reusableEncounter.professional_id || selectedDoctor;
+      const roomId = await createRoomAndStartCall(reusableEncounter.id, doctorForRequest);
       if (!roomId) {
         setState("lobby");
       } else {

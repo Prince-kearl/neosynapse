@@ -11,6 +11,7 @@ import { useClinicalNotesForAssignedPatient, useMedicalHistoryForAssignedPatient
 import { buildMedicalHistoryContext } from "@/shared/lib/medicalHistory";
 import { buildClinicalNoteMarkdown, getClinicalNoteTitle } from "@/shared/lib/clinicalNotes";
 import { getLinkedNoteId, getLinkedTranscriptId, getReportSourceLabel, getReportStatus, getReportSummary, getReportTitle, toReportTitleCase } from "@/shared/lib/reports";
+import { calculateAgeFromDateOfBirth } from "@/shared/lib/inputValidation";
 import type { MedicalHistory } from "@/shared/types/healthcare";
 
 const patientDetailActionButtonClass =
@@ -48,6 +49,7 @@ export default function PatientDetail() {
   // Fetch patient name
   const { data: nameMap = {} } = useProfileNames(patientId ? [patientId] : []);
   const patientName = nameMap[patientId!] || patientProfile?.display_name || "Patient";
+  const calculatedAge = calculateAgeFromDateOfBirth(patientProfile?.date_of_birth);
 
   const isLoading = profileLoading || historyLoading || filesLoading || notesLoading || reportsLoading;
 
@@ -120,6 +122,7 @@ export default function PatientDetail() {
                           month: "long",
                           year: "numeric",
                         })}
+                        {calculatedAge !== null ? ` • Age ${calculatedAge}` : ""}
                       </p>
                     </div>
                   )}
