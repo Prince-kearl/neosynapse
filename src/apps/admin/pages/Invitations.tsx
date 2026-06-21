@@ -12,6 +12,7 @@ import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
 import { buildInvitationLink, buildInvitationMailtoUrl, buildWhatsAppShareUrl } from "@/shared/lib/invitations";
 import { getEmailValidationError, normalizeEmail } from "@/shared/lib/inputValidation";
+import { PUBLIC_APP_URL } from "@/shared/lib/appUrl";
 
 type InvitationRow = {
   id: string;
@@ -32,6 +33,9 @@ type EmailDraft = {
   recipient: string;
   url: string;
 };
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unable to create invitation right now.";
 
 const openMailtoLink = (url: string) => {
   const link = document.createElement("a");
@@ -127,7 +131,7 @@ export default function AdminInvitations() {
       return { invitation: data as InvitationRow, reused: false };
     },
     onSuccess: ({ invitation, reused }) => {
-      const link = buildInvitationLink(window.location.origin, invitation.token);
+      const link = buildInvitationLink(PUBLIC_APP_URL, invitation.token);
       const mailtoUrl = buildInvitationMailtoUrl(invitation.email, link, invitation.role);
       const composerWindow = pendingComposerWindow.current;
 
@@ -146,10 +150,10 @@ export default function AdminInvitations() {
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
     },
-    onError: (e: any) => {
+    onError: (error: unknown) => {
       pendingComposerWindow.current?.close();
       pendingComposerWindow.current = null;
-      toast({ title: "Error creating invitation", description: e.message, variant: "destructive" });
+      toast({ title: "Error creating invitation", description: getErrorMessage(error), variant: "destructive" });
     },
   });
 
@@ -174,19 +178,19 @@ export default function AdminInvitations() {
   });
 
   const copyInviteLink = (token: string) => {
-    const link = buildInvitationLink(window.location.origin, token);
+    const link = buildInvitationLink(PUBLIC_APP_URL, token);
     navigator.clipboard.writeText(link).then(() => {
       toast({ title: "Link copied", description: "Invite link copied to clipboard" });
     });
   };
 
   const shareViaWhatsApp = (inv: InvitationRow) => {
-    const link = buildInvitationLink(window.location.origin, inv.token);
+    const link = buildInvitationLink(PUBLIC_APP_URL, inv.token);
     window.open(buildWhatsAppShareUrl(link, inv.role), "_blank", "noopener,noreferrer");
   };
 
   const shareViaEmail = (inv: InvitationRow) => {
-    const link = buildInvitationLink(window.location.origin, inv.token);
+    const link = buildInvitationLink(PUBLIC_APP_URL, inv.token);
     const mailtoUrl = buildInvitationMailtoUrl(inv.email, link, inv.role);
     setEmailDraft({ recipient: inv.email, url: mailtoUrl });
     openMailtoLink(mailtoUrl);

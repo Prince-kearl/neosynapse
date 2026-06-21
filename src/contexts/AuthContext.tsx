@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureNativePushRegistration } from "@/mobile/pushNotifications";
 import { getEmailValidationError, normalizeEmail } from "@/shared/lib/inputValidation";
+import { buildPublicAppUrl } from "@/shared/lib/appUrl";
 
 interface AuthContextType {
   user: User | null;
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: new Error(emailValidationError), session: null, user: null };
     }
 
-    const emailRedirectTo = `${window.location.origin}/auth/sign-in`;
+    const emailRedirectTo = buildPublicAppUrl("/auth/sign-in");
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,

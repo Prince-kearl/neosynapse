@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { emailSchema, normalizeEmail } from "@/shared/lib/inputValidation";
+import { buildPublicAppUrl } from "@/shared/lib/appUrl";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -28,7 +29,7 @@ export default function ForgotPassword() {
     try {
       const normalizedEmail = normalizeEmail(email);
       const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: buildPublicAppUrl("/auth/reset-password"),
       });
 
       if (error && !/user not found|no user/.test(error.message.toLowerCase())) {

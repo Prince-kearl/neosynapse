@@ -2,7 +2,7 @@
 
 NeoSynapse is a multi-role healthcare platform for patients, healthcare professionals, and administrators. It ships as a Vite/React web app and is wrapped for Android/iOS with Capacitor.
 
-The full system overview, architecture notes, schema summary, Edge Function details, and operational checklist live in [DOCUMENTATION.md](DOCUMENTATION.md).
+The full system overview, architecture notes, schema summary, Edge Function details, and operational checklist live in [DOCUMENTATION.md](DOCUMENTATION.md). Production domain setup lives in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Core Apps
 
@@ -33,7 +33,12 @@ Required frontend environment variables:
 ```sh
 VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
+VITE_APP_URL=https://neosynapseai.com
 ```
+
+The production web app uses `https://neosynapseai.com` as its canonical origin for authentication callbacks, password recovery, and invitation links.
+
+For DNS, Supabase Auth redirect URLs, and production hosting variables, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Verification
 

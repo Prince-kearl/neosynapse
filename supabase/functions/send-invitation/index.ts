@@ -153,8 +153,8 @@ Deno.serve(async (req) => {
     }
 
     // 2. Build the invite link
-    // In production, replace with your actual app domain
-    // APP_URL must be set as a Supabase secret (e.g. https://your-domain.com)
+    // APP_URL must be set as a Supabase secret in production:
+    // supabase secrets set APP_URL=https://neosynapseai.com --project-ref yzdnjmgpfuifgdizzlpz
     const appUrl = Deno.env.get("APP_URL");
     if (!appUrl) {
       console.warn("APP_URL secret not set — invitation links will use request origin as fallback");

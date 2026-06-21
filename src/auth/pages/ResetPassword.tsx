@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { emailSchema, normalizeEmail, passwordSchema } from "@/shared/lib/inputValidation";
+import { buildPublicAppUrl } from "@/shared/lib/appUrl";
 
 function parseRecoveryParams() {
   const searchParams = new URLSearchParams(window.location.search);
@@ -20,6 +21,10 @@ function parseRecoveryParams() {
       hashParams.get("error_description") ?? searchParams.get("error_description"),
   };
 }
+
+type SupabaseAuthWithSessionFromUrl = {
+  getSessionFromUrl?: (options: { storeSession: boolean }) => Promise<unknown>;
+};
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -59,7 +64,7 @@ export default function ResetPassword() {
       window.history.replaceState({}, "", window.location.pathname + window.location.search);
     }
 
-    const maybeGetSessionFromUrl = (supabase.auth as any).getSessionFromUrl;
+    const maybeGetSessionFromUrl = (supabase.auth as SupabaseAuthWithSessionFromUrl).getSessionFromUrl;
     if (typeof maybeGetSessionFromUrl === "function") {
       void maybeGetSessionFromUrl({ storeSession: true }).catch(() => {
         // Silent fallback; user can still attempt to reset password if recovery session is present.
@@ -116,7 +121,7 @@ export default function ResetPassword() {
     setIsResending(true);
     try {
       const { error: resendErr } = await supabase.auth.resetPasswordForEmail(normalizeEmail(resendEmail), {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: buildPublicAppUrl("/auth/reset-password"),
       });
 
       if (resendErr && !/user not found|no user/.test(resendErr.message.toLowerCase())) {
