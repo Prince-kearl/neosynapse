@@ -1,11 +1,13 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Hospital, MapPin, ShieldCheck } from "lucide-react";
 import { LocationSelector } from "@/legacy/components/LocationSelector";
 import { GoogleMap, OverlayView, InfoWindow, useLoadScript } from "@react-google-maps/api";
 import {
   formatDistanceKm,
   getLocationCoordinates,
+  haversineDistanceKm,
   isValidCoordinates,
+  type HospitalFacility,
   rankHospitalsByDistance,
   shouldRequestCurrentLocationVerification,
   type Coordinates,
@@ -15,36 +17,101 @@ interface NearbyHospitalsSectionProps {
   location: string;
   radius: number;
   gpsCoords?: Coordinates | null;
+  customCenter?: Coordinates | null;
   onLocationChange?: (location: string) => void;
   onRadiusChange?: (radius: number) => void;
   onUseCurrentLocation?: () => void;
+  onSearchQuery?: (query: string) => Promise<string | null>;
+  searchSuggestions?: string[];
   locationError?: string | null;
   isLocating?: boolean;
   locationAccuracy?: number | null;
 }
 
-export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocationChange, onRadiusChange, onUseCurrentLocation, locationError, isLocating, locationAccuracy }: NearbyHospitalsSectionProps) {
+export function NearbyHospitalsSection({ location, radius, gpsCoords, customCenter, onLocationChange, onRadiusChange, onUseCurrentLocation, onSearchQuery, searchSuggestions, locationError, isLocating, locationAccuracy }: NearbyHospitalsSectionProps) {
   const [selectedHospitalId, setSelectedHospitalId] = useState<string | null>(null);
+  const [liveHospitals, setLiveHospitals] = useState<HospitalFacility[] | null>(null);
+  const [isLiveLookupBusy, setIsLiveLookupBusy] = useState(false);
   const isCurrentLocation = location === "Current Location";
   const hasVerifiedCurrentLocation = isCurrentLocation && isValidCoordinates(gpsCoords);
   const center = useMemo(() => {
+    if (isValidCoordinates(customCenter)) {
+      return customCenter;
+    }
     return getLocationCoordinates(location, gpsCoords);
-  }, [location, gpsCoords]);
+  }, [customCenter, location, gpsCoords]);
 
-  const withDistance = useMemo(() => rankHospitalsByDistance(center), [center]);
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: "AIzaSyDrddv4x_Qvf_77eJE2HBAG2paNDW3swbs",
+    libraries: ["places"],
+  });
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const googleMaps = (window as { google?: any }).google?.maps;
+    if (!googleMaps?.places) return;
+
+    setIsLiveLookupBusy(true);
+    const service = new googleMaps.places.PlacesService(document.createElement("div"));
+    const request = {
+      location: new googleMaps.LatLng(center.lat, center.lng),
+      radius: Math.max(5000, Math.min(radius * 1000, 50000)),
+      keyword: "hospital",
+      type: "hospital",
+    };
+
+    service.nearbySearch(request, (results, status) => {
+      if (status !== googleMaps.places.PlacesServiceStatus.OK || !results || results.length === 0) {
+        setLiveHospitals(null);
+        setIsLiveLookupBusy(false);
+        return;
+      }
+
+      const transformed: HospitalFacility[] = results
+        .map((place) => {
+          const lat = place.geometry?.location?.lat?.();
+          const lng = place.geometry?.location?.lng?.();
+          if (typeof lat !== "number" || typeof lng !== "number") return null;
+
+          return {
+            id: place.place_id || `${place.name || "hospital"}-${lat}-${lng}`,
+            name: place.name || "Hospital",
+            lat,
+            lng,
+            status: place.opening_hours?.open_now === false ? "Unknown" : "Open",
+            address: place.vicinity || place.formatted_address || "Address unavailable",
+          };
+        })
+        .filter((item): item is HospitalFacility => !!item);
+
+      setLiveHospitals(transformed.length > 0 ? transformed : null);
+      setIsLiveLookupBusy(false);
+    });
+  }, [center, isLoaded, radius]);
+
+  const withDistance = useMemo(() => {
+    if (!liveHospitals || liveHospitals.length === 0) {
+      return rankHospitalsByDistance(center);
+    }
+
+    return liveHospitals
+      .map((hospital) => ({
+        ...hospital,
+        distance: haversineDistanceKm(center, hospital),
+      }))
+      .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name));
+  }, [center, liveHospitals]);
 
   const filtered = withDistance.filter((hospital) => hospital.distance <= radius);
   const chosen = filtered.length > 0 ? filtered : withDistance.slice(0, 3);
   const selectedHospital = chosen.find(h => h.id === selectedHospitalId) || chosen[0];
 
-  // Google Maps
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: "AIzaSyDrddv4x_Qvf_77eJE2HBAG2paNDW3swbs"
-  });
   const mapCenter = selectedHospital ? { lat: selectedHospital.lat, lng: selectedHospital.lng } : center;
   const mapZoom = selectedHospital ? 16 : 13;
   const sectionLabel = hasVerifiedCurrentLocation ? "Verified current location" : location || "Current Location";
-  const sectionMeta = `${sectionLabel} • within ${radius} km`;
+  const sourceLabel = liveHospitals && liveHospitals.length > 0 ? "live nearby hospitals" : "local hospital index";
+  const sectionMeta = `${sectionLabel} • within ${radius} km • ${sourceLabel}`;
 
   if (shouldRequestCurrentLocationVerification(location, gpsCoords)) {
     return (
@@ -118,6 +185,8 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
             onLocationChange={onLocationChange}
             onRadiusChange={onRadiusChange}
             onUseCurrentLocation={onUseCurrentLocation}
+            onSearchQuery={onSearchQuery}
+            searchSuggestions={searchSuggestions}
             locationError={locationError}
             isLocating={isLocating}
           />
@@ -131,6 +200,12 @@ export function NearbyHospitalsSection({ location, radius, gpsCoords, onLocation
           {typeof locationAccuracy === "number" && Number.isFinite(locationAccuracy) && (
             <span className="text-primary/80">Accuracy about {Math.round(locationAccuracy)} m</span>
           )}
+        </div>
+      )}
+
+      {isLiveLookupBusy && (
+        <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+          Finding nearby hospitals around {location}...
         </div>
       )}
 

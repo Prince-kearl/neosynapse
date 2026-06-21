@@ -352,6 +352,9 @@ After authentication, `RoleRedirect` (mounted at `/`) reads the user's primary r
   | Medical Reports | View generated reports and summaries |
 - **Location selector** — auto-detects GPS via `navigator.geolocation`, reverse-geocodes with OpenStreetMap Nominatim.
 - **Nearby hospitals map** — Leaflet map showing hospitals within configured delivery radius.
+- **Hospital/location search** — supports searching by area (for example, Adabraka) or hospital name; local preset/hospital matches resolve immediately, and unmatched queries geocode via OpenStreetMap Nominatim (Ghana scope) before ranking the nearest hospitals around the searched point.
+- **Live proximity accuracy** — the map/list now performs a live Google Places nearby-hospital lookup around the active center (current location or searched place), with fallback to the local hospital index when live places are unavailable.
+- **Natural-language query parsing** — phrases like "closest hospital in oyarifa" are normalized to location terms before geocoding/ranking.
 
 #### 6.2 AI Health Assistant (`/patient/ai-assistant`)
 
@@ -1414,6 +1417,9 @@ supabase db push --yes
 
 | Date | Change | Files affected |
 |---|---|---|
+| 2026-06-21 | Improved map proximity accuracy for places like Oyarifa by adding live Google Places nearby-hospital lookup around the selected center and natural-language search-term extraction for queries such as "closest hospital in <location>" | `src/legacy/components/NearbyHospitalsSection.tsx`, `src/shared/lib/hospitalProximity.ts`, `src/apps/patient/pages/Dashboard.tsx`, `src/legacy/components/MobileHeader.tsx`, `src/test/hospitalProximity.test.ts`, `DOCUMENTATION.md` |
+| 2026-06-21 | Improved location selector accuracy for typed searches by routing quick-list selections through coordinate resolution and preferring geocoded coordinates for location-name searches while preserving exact hospital-centre matching | `src/legacy/components/LocationSelector.tsx`, `src/apps/patient/pages/Dashboard.tsx`, `DOCUMENTATION.md` |
+| 2026-06-21 | Fixed patient map location search and nearest-hospital behavior by enabling hospital/location query resolution, Ghana geocoding fallback, and searched-coordinate map ranking; also improved location selector no-match handling | `src/apps/patient/pages/Dashboard.tsx`, `src/legacy/components/LocationSelector.tsx`, `src/legacy/components/NearbyHospitalsSection.tsx`, `src/shared/lib/hospitalProximity.ts`, `src/test/hospitalProximity.test.ts`, `DOCUMENTATION.md` |
 | 2026-06-21 | Hardened the scheduled appointment reminder workflow to avoid repeated failure emails by adding secret validation, fallback URL handling, and warning-only behavior for non-2xx responses | `.github/workflows/notify-appointments-due.yml`, `DOCUMENTATION.md` |
 | 2026-06-21 | Fixed mobile-only false degraded status in Admin System Health by adding a direct deployment-probe fallback when `system-health` invoke fails and improving error detail messaging | `src/apps/admin/pages/SystemHealth.tsx`, `DOCUMENTATION.md` |
 | 2026-04-06 | Created `app_settings` table; built `appSettingsService`, `useAppSettings()`, `AppThemeSync` | `healthcare.ts`, `useHealthcare.ts`, `AppThemeSync.tsx`, migration |

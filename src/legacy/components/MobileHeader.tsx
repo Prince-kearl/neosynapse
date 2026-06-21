@@ -20,6 +20,8 @@ interface MobileHeaderProps {
   onLocationChange?: (location: string) => void;
   onRadiusChange?: (radius: number) => void;
   onUseCurrentLocation?: () => void;
+  onSearchQuery?: (query: string) => Promise<string | null>;
+  searchSuggestions?: string[];
   locationError?: string | null;
   isLocating?: boolean;
 }
@@ -37,6 +39,8 @@ export function MobileHeader({
   onLocationChange,
   onRadiusChange,
   onUseCurrentLocation,
+  onSearchQuery,
+  searchSuggestions,
   locationError,
   isLocating
 }: MobileHeaderProps) {
@@ -59,6 +63,8 @@ export function MobileHeader({
             onLocationChange={onLocationChange}
             onRadiusChange={onRadiusChange}
             onUseCurrentLocation={onUseCurrentLocation}
+            onSearchQuery={onSearchQuery}
+            searchSuggestions={searchSuggestions}
             locationError={locationError}
             isLocating={isLocating}
           />

@@ -30,6 +30,7 @@ export const ACCRA_LOCATION_COORDINATES: Record<string, Coordinates> = {
   Dansoman: { lat: 5.584, lng: -0.2841 },
   Kaneshie: { lat: 5.5713, lng: -0.2341 },
   Adabraka: { lat: 5.5587, lng: -0.2058 },
+  Oyarifa: { lat: 5.7602, lng: -0.1594 },
 };
 
 export const ACCRA_HOSPITALS: HospitalFacility[] = [
@@ -164,4 +165,100 @@ export const formatDistanceKm = (distance: number) => {
   }
 
   return `${distance.toFixed(1)} km`;
+};
+
+const normalizeQuery = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+
+export const extractLocationSearchTerm = (query: string) => {
+  const trimmed = query.trim();
+  if (!trimmed) return "";
+
+  const cleaned = trimmed
+    .replace(/^(closest|nearest)\s+hospitals?\s*(to|in|near)?\s*/i, "")
+    .replace(/^hospitals?\s*(to|in|near)?\s*/i, "")
+    .replace(/^(closest|nearest)\s+hospital\s*(to|in|near)?\s*/i, "")
+    .replace(/\?+$/g, "")
+    .trim();
+
+  return cleaned || trimmed;
+};
+
+export type LocationSearchMatch = {
+  label: string;
+  coordinates: Coordinates;
+  source: "preset-location" | "hospital";
+};
+
+export const resolvePresetOrHospitalSearch = (query: string): LocationSearchMatch | null => {
+  const normalized = normalizeQuery(query);
+  if (!normalized) return null;
+
+  const exactLocationEntry = Object.entries(ACCRA_LOCATION_COORDINATES).find(
+    ([name]) => normalizeQuery(name) === normalized,
+  );
+  if (exactLocationEntry) {
+    return {
+      label: exactLocationEntry[0],
+      coordinates: exactLocationEntry[1],
+      source: "preset-location",
+    };
+  }
+
+  const containsLocationEntry = Object.entries(ACCRA_LOCATION_COORDINATES).find(
+    ([name]) => normalizeQuery(name).includes(normalized),
+  );
+  if (containsLocationEntry) {
+    return {
+      label: containsLocationEntry[0],
+      coordinates: containsLocationEntry[1],
+      source: "preset-location",
+    };
+  }
+
+  const exactHospital = ACCRA_HOSPITALS.find((hospital) => normalizeQuery(hospital.name) === normalized);
+  if (exactHospital) {
+    return {
+      label: exactHospital.name,
+      coordinates: { lat: exactHospital.lat, lng: exactHospital.lng },
+      source: "hospital",
+    };
+  }
+
+  const containsHospital = ACCRA_HOSPITALS.find((hospital) => normalizeQuery(hospital.name).includes(normalized));
+  if (containsHospital) {
+    return {
+      label: containsHospital.name,
+      coordinates: { lat: containsHospital.lat, lng: containsHospital.lng },
+      source: "hospital",
+    };
+  }
+
+  return null;
+};
+
+export const geocodeInGhana = async (query: string): Promise<Coordinates | null> => {
+  const normalized = query.trim();
+  if (!normalized) return null;
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", `${normalized}, Ghana`);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "gh");
+  url.searchParams.set("addressdetails", "0");
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) return null;
+  const payload = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+  const top = Array.isArray(payload) ? payload[0] : undefined;
+  if (!top?.lat || !top?.lon) return null;
+
+  const coords = { lat: Number(top.lat), lng: Number(top.lon) };
+  return isValidCoordinates(coords) ? coords : null;
 };

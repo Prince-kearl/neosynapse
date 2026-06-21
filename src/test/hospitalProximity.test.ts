@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractLocationSearchTerm,
   formatDistanceKm,
   getLocationCoordinates,
   haversineDistanceKm,
   rankHospitalsByDistance,
+  resolvePresetOrHospitalSearch,
   shouldRequestCurrentLocationVerification,
 } from "@/shared/lib/hospitalProximity";
 
@@ -38,5 +40,27 @@ describe("hospital proximity", () => {
 
     expect(distance).toBeLessThan(0.05);
     expect(formatDistanceKm(distance)).toMatch(/m$/);
+  });
+
+  it("resolves hospital name search to hospital coordinates", () => {
+    const match = resolvePresetOrHospitalSearch("korle bu");
+
+    expect(match).not.toBeNull();
+    expect(match?.source).toBe("hospital");
+    expect(match?.label).toBe("Korle Bu Teaching Hospital");
+  });
+
+  it("resolves preset location search to location coordinates", () => {
+    const match = resolvePresetOrHospitalSearch("adabraka");
+
+    expect(match).not.toBeNull();
+    expect(match?.source).toBe("preset-location");
+    expect(match?.label).toBe("Adabraka");
+  });
+
+  it("extracts location terms from natural-language hospital queries", () => {
+    expect(extractLocationSearchTerm("closest hospital in oyarifa")).toBe("oyarifa");
+    expect(extractLocationSearchTerm("nearest hospitals to adabraka")).toBe("adabraka");
+    expect(extractLocationSearchTerm("hospital near tema?")).toBe("tema");
   });
 });

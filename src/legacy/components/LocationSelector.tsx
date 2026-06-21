@@ -19,6 +19,8 @@ interface LocationSelectorProps {
   onLocationChange?: (location: string) => void;
   onRadiusChange?: (radius: number) => void;
   onUseCurrentLocation?: () => void;
+  onSearchQuery?: (query: string) => Promise<string | null>;
+  searchSuggestions?: string[];
   locationError?: string | null;
   isLocating?: boolean;
   variant?: "default" | "mobile-header";
@@ -30,6 +32,8 @@ export function LocationSelector({
   onLocationChange,
   onRadiusChange,
   onUseCurrentLocation,
+  onSearchQuery,
+  searchSuggestions,
   locationError,
   isLocating,
   variant = "default",
@@ -37,14 +41,56 @@ export function LocationSelector({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(selectedLocation);
   const [filter, setFilter] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  const visibleLocations = locations.filter((loc) =>
+  const searchableItems = searchSuggestions?.length ? searchSuggestions : locations;
+
+  const visibleLocations = searchableItems.filter((loc) =>
     loc.toLowerCase().includes(filter.toLowerCase())
   );
 
   useEffect(() => {
     setSelected(selectedLocation);
   }, [selectedLocation]);
+
+  const handleSearchSubmit = async () => {
+    const query = filter.trim();
+    if (!query) {
+      setSearchError("Type a location or hospital name first.");
+      return;
+    }
+
+    if (!onSearchQuery) {
+      const knownLocation = locations.find((loc) => loc.toLowerCase() === query.toLowerCase());
+      if (!knownLocation) {
+        setSearchError("No matching location found in the quick list.");
+        return;
+      }
+      setSelected(knownLocation);
+      onLocationChange?.(knownLocation);
+      setSearchError(null);
+      setOpen(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+    try {
+      const resolvedLabel = await onSearchQuery(query);
+      if (!resolvedLabel) {
+        setSearchError("No matching location or hospital found.");
+        return;
+      }
+      setSelected(resolvedLabel);
+      setFilter("");
+      setOpen(false);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : "Could not resolve this search.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -78,13 +124,34 @@ export function LocationSelector({
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void handleSearchSubmit();
+              }
+            }}
             placeholder="Search delivery area..."
             className="w-full rounded-xl border border-primary/30 px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
 
+          <button
+            type="button"
+            onClick={() => void handleSearchSubmit()}
+            disabled={isSearching}
+            className="w-full rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 disabled:opacity-60"
+          >
+            {isSearching ? "Searching..." : "Search location or hospital"}
+          </button>
+
           {locationError && (
             <div className="rounded-lg bg-rose-100/90 p-2 text-xs text-rose-700 border border-rose-200">
               <span className="font-medium">{locationError}</span>
+            </div>
+          )}
+
+          {searchError && (
+            <div className="rounded-lg bg-amber-100/90 p-2 text-xs text-amber-800 border border-amber-200">
+              <span className="font-medium">{searchError}</span>
             </div>
           )}
 
@@ -125,14 +192,20 @@ export function LocationSelector({
           </div>
 
           <div className="max-h-40 overflow-y-auto rounded-xl border border-border/30 bg-white/80 p-1 dark:bg-slate-900/70">
-            {(visibleLocations.length > 0 ? visibleLocations : ["No matches found"]).map((loc) => (
+            {visibleLocations.length > 0 ? visibleLocations.map((loc) => (
               <button
                 key={loc}
                 onClick={() => {
-              setSelected(loc);
-              onLocationChange?.(loc);
-              setOpen(false);
-            }}
+                  if (onSearchQuery) {
+                    setFilter(loc);
+                    void handleSearchSubmit();
+                    return;
+                  }
+                  setSelected(loc);
+                  onLocationChange?.(loc);
+                  setSearchError(null);
+                  setOpen(false);
+                }}
                 className={cn(
                   "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors",
                   selected === loc
@@ -142,7 +215,11 @@ export function LocationSelector({
               >
                 {loc}
               </button>
-            ))}
+            )) : (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No quick matches. Use search above.
+              </div>
+            )}
           </div>
         </div>
       </PopoverContent>

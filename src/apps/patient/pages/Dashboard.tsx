@@ -12,6 +12,14 @@ import {
   Stethoscope, Bot,
   Video, FileText, ChevronRight, HeartPulse,
 } from "lucide-react";
+import {
+  ACCRA_HOSPITALS,
+  ACCRA_LOCATION_COORDINATES,
+  extractLocationSearchTerm,
+  geocodeInGhana,
+  resolvePresetOrHospitalSearch,
+  type Coordinates,
+} from "@/shared/lib/hospitalProximity";
 
 const quickActions = [
   {
@@ -54,7 +62,47 @@ export default function PatientDashboard() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchedCoords, setSearchedCoords] = useState<Coordinates | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+
+  const locationSearchSuggestions = [
+    ...Object.keys(ACCRA_LOCATION_COORDINATES),
+    ...ACCRA_HOSPITALS.map((hospital) => hospital.name),
+  ];
+
+  const detectCurrentLocation = useCallback(() => {
+    setIsLocating(true);
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation not supported by your browser.");
+      setGpsCoords(null);
+      setLocationAccuracy(null);
+      setIsLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { accuracy, latitude, longitude } = pos.coords;
+        setGpsCoords({ lat: latitude, lng: longitude });
+        setSearchedCoords(null);
+        setLocationAccuracy(accuracy);
+        setSelectedLocation("Current Location");
+        setLocationError(null);
+        setIsLocating(false);
+      },
+      () => {
+        setLocationError("Location access denied. Please enable GPS or select a location manually.");
+        setGpsCoords(null);
+        setLocationAccuracy(null);
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  }, []);
 
   const handleSearch = useCallback((query: string) => {
     if (query.trim()) {
@@ -64,62 +112,60 @@ export default function PatientDashboard() {
 
   // Automatic location detection on mount
   useEffect(() => {
-    setIsLocating(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { accuracy, latitude, longitude } = pos.coords;
-          setGpsCoords({ lat: latitude, lng: longitude });
-          setLocationAccuracy(accuracy);
-          setSelectedLocation("Current Location");
-          setLocationError(null);
-          setIsLocating(false);
-        },
-        (err) => {
-          setLocationError("Location access denied. Please enable GPS or select a location manually.");
-          setGpsCoords(null);
-          setLocationAccuracy(null);
-          setIsLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    } else {
-      setLocationError("Geolocation not supported by your browser.");
-      setGpsCoords(null);
-      setLocationAccuracy(null);
-      setIsLocating(false);
-    }
+    detectCurrentLocation();
     // eslint-disable-next-line
-  }, []);
+  }, [detectCurrentLocation]);
 
   // Handler for 'Use Current Location' button
   const handleUseCurrentLocation = useCallback(() => {
-    setIsLocating(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { accuracy, latitude, longitude } = pos.coords;
-          setGpsCoords({ lat: latitude, lng: longitude });
-          setLocationAccuracy(accuracy);
-          setSelectedLocation("Current Location");
-          setLocationError(null);
-          setIsLocating(false);
-        },
-        (err) => {
-          setLocationError("Location access denied. Please enable GPS or select a location manually.");
-          setGpsCoords(null);
-          setLocationAccuracy(null);
-          setIsLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    } else {
-      setLocationError("Geolocation not supported by your browser.");
-      setGpsCoords(null);
-      setLocationAccuracy(null);
-      setIsLocating(false);
+    detectCurrentLocation();
+  }, [detectCurrentLocation]);
+
+  const handleLocationChange = useCallback((location: string) => {
+    setSelectedLocation(location);
+    if (location !== "Current Location") {
+      setSearchedCoords(null);
+      setLocationError(null);
     }
   }, []);
+
+  const handleLocationSearchQuery = useCallback(async (query: string) => {
+    const normalized = extractLocationSearchTerm(query);
+    if (!normalized) return null;
+
+    if (normalized.toLowerCase() === "current location") {
+      detectCurrentLocation();
+      return "Current Location";
+    }
+
+    const localMatch = resolvePresetOrHospitalSearch(normalized);
+    if (localMatch?.source === "hospital") {
+      setSelectedLocation(localMatch.label);
+      setSearchedCoords(localMatch.coordinates);
+      setLocationError(null);
+      return localMatch.label;
+    }
+
+    const geocoded = await geocodeInGhana(normalized);
+    if (!geocoded && localMatch) {
+      setSelectedLocation(localMatch.label);
+      setSearchedCoords(localMatch.coordinates);
+      setLocationError(null);
+      return localMatch.label;
+    }
+    if (!geocoded) return null;
+
+    const title = normalized
+      .split(" ")
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+
+    setSelectedLocation(title);
+    setSearchedCoords(geocoded);
+    setLocationError(null);
+    return title;
+  }, [detectCurrentLocation]);
 
   const displayName = profile?.full_name || profile?.display_name || user?.email?.split("@")[0] || "there";
 
@@ -157,9 +203,11 @@ export default function PatientDashboard() {
           onFilterChange={setSelectedFilters}
           location={selectedLocation}
           radius={deliveryRadius}
-          onLocationChange={setSelectedLocation}
+          onLocationChange={handleLocationChange}
           onRadiusChange={setDeliveryRadius}
           onUseCurrentLocation={handleUseCurrentLocation}
+          onSearchQuery={handleLocationSearchQuery}
+          searchSuggestions={locationSearchSuggestions}
           locationError={locationError}
           isLocating={isLocating}
           locationAccuracy={locationAccuracy}
@@ -307,9 +355,12 @@ export default function PatientDashboard() {
           location={selectedLocation}
           radius={deliveryRadius}
           gpsCoords={gpsCoords}
-          onLocationChange={setSelectedLocation}
+          customCenter={searchedCoords}
+          onLocationChange={handleLocationChange}
           onRadiusChange={setDeliveryRadius}
           onUseCurrentLocation={handleUseCurrentLocation}
+          onSearchQuery={handleLocationSearchQuery}
+          searchSuggestions={locationSearchSuggestions}
           locationError={locationError}
           isLocating={isLocating}
           locationAccuracy={locationAccuracy}
