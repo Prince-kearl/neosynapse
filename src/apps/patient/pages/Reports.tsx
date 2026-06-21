@@ -166,6 +166,217 @@ export default function PatientReports() {
     URL.revokeObjectURL(url);
   };
 
+  const renderReportDetail = (report: any) => {
+    const reportData = asRecord(report.report_json) || {};
+    const clinicalReport = asRecord(reportData.clinical_report);
+    const clinicalPatient = asRecord(clinicalReport.patient);
+    const clinicalComplaints = asRecord(clinicalReport.presenting_complaints);
+    const legacyPatient = asRecord(reportData.patient);
+    const patient = Object.keys(legacyPatient).length > 0 ? legacyPatient : clinicalPatient;
+    const urgencyKey = asText(reportData.urgency).toLowerCase();
+    const urgency = urgencyConfig[urgencyKey] || null;
+    const summary = getReportSummary(report);
+    const recommendedAction = getReportRecommendedAction(report);
+    const reportType = asText(report.report_type) || "medical_report";
+    const symptoms = asStringArray(reportData.symptoms).length > 0
+      ? asStringArray(reportData.symptoms)
+      : asStringArray(clinicalComplaints.symptoms);
+    const warningSigns = asStringArray(reportData.warning_signs);
+    const followUpQuestions = asStringArray(reportData.follow_up_questions).length > 0
+      ? asStringArray(reportData.follow_up_questions)
+      : asStringArray(reportData.questions);
+    const possibleConditions = Array.isArray(reportData.possible_conditions)
+      ? reportData.possible_conditions
+        .map((item) => asRecord(item))
+        .filter((item) => Object.keys(item).length > 0)
+        .map((item) => ({
+          name: asText(item?.name) || "Unknown condition",
+          likelihood: asText(item?.likelihood) || "unknown",
+        }))
+      : [];
+    const labResults = normalizeLabResults(reportData);
+
+    return (
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4 space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Report type</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{toTitleCase(reportType)}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Generated on</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{formatDateTime(reportData.generatedAt || report.created_at)}</p>
+          </div>
+        </div>
+
+        {urgency && (
+          <div className={`rounded-xl border px-4 py-3 ${urgency.className}`}>
+            <p className="text-xs uppercase tracking-wide">Urgency level</p>
+            <p className="text-base font-semibold">{urgency.label}</p>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Summary</h3>
+              <p className="text-xs text-muted-foreground">Translated into {currentLanguage.nativeName} when available.</p>
+            </div>
+            {language !== "en" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => translateReportContent(summary, recommendedAction)}
+                disabled={isTranslating}
+              >
+                {isTranslating ? "Translating..." : `Translate to ${currentLanguage.nativeName}`}
+              </Button>
+            )}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedSummary ?? summary}</p>
+        </div>
+
+        {labResults.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Lab results</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Each lab result shows the reference range, how the value compares, and a short explanation.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-4">
+              {labResults.map((result) => (
+                <div key={`${result.label}-${result.rawValue}`} className="rounded-2xl border border-border/80 bg-muted/50 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="font-medium text-foreground">{result.label}</p>
+                    <Badge variant="outline" className={`capitalize ${
+                      result.status === "normal"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                        : result.status === "low"
+                        ? "border-orange-500/30 bg-orange-500/10 text-orange-700"
+                        : result.status === "high"
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+                        : result.status === "critical"
+                        ? "border-red-500/30 bg-red-500/10 text-red-700"
+                        : "border-slate-500/30 bg-slate-500/10 text-slate-700"
+                    }`}>
+                      {result.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Value:</span> {result.rawValue}{result.units ? ` ${result.units}` : ""}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Reference range:</span> {result.referenceRange ?? "Not provided"}
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.explanation}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground">Recommended next step</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedAction ?? recommendedAction}</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Patient details</h3>
+            <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
+              <div className="flex justify-between gap-3">
+                <dt>Age</dt>
+                <dd className="font-medium text-foreground">{asText(patient.age) || "Not provided"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Sex</dt>
+                <dd className="font-medium text-foreground">{toTitleCase(asText(patient.gender) || "not provided")}</dd>
+              </div>
+              {(asText(reportData.duration) || asText(clinicalComplaints.duration)) && (
+                <div className="flex justify-between gap-3">
+                  <dt>Duration</dt>
+                  <dd className="font-medium text-foreground">{asText(reportData.duration) || asText(clinicalComplaints.duration)}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Reported symptoms</h3>
+            {symptoms.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                {symptoms.map((symptom) => (
+                  <li key={symptom}>• {symptom}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-muted-foreground">No symptoms were listed.</p>
+            )}
+          </div>
+        </div>
+
+        {possibleConditions.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Possible causes to discuss with your clinician</h3>
+            <div className="mt-3 space-y-2">
+              {possibleConditions.map((condition) => (
+                <div key={`${condition.name}-${condition.likelihood}`} className="flex items-center justify-between gap-3 rounded-lg border border-border/80 p-3">
+                  <p className="text-sm text-foreground">{condition.name}</p>
+                  <Badge variant="outline" className="capitalize">{condition.likelihood}</Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {warningSigns.length > 0 && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+            <h3 className="text-sm font-semibold text-red-700">Warning signs to watch for</h3>
+            <ul className="mt-2 space-y-1 text-sm text-red-700/90">
+              {warningSigns.map((item) => (
+                <li key={item}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {followUpQuestions.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Questions to ask during your consultation</h3>
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+              {followUpQuestions.map((question) => (
+                <li key={question}>• {question}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <details className="rounded-xl border border-border bg-muted/20 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">Show technical report data (JSON)</summary>
+          <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-3 text-xs">
+            {JSON.stringify(reportData.report_json ?? {}, null, 2)}
+          </pre>
+        </details>
+
+        <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-3 sm:flex sm:border-t-0 sm:pt-0">
+          <Button size="sm" className={reportActionButtonClass} onClick={() => downloadReportJson(report)}>
+            <Download className="w-4 h-4" /> Export JSON
+          </Button>
+          <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => downloadReportPdf(report)}>
+            <Download className="w-4 h-4" /> Download PDF
+          </Button>
+          <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => shareReport(report)}>
+            <Share2 className="w-4 h-4" /> Share
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   useEffect(() => {
     if (!selectedReport) return;
     if (searchParams.get("action") !== "export") return;
@@ -207,235 +418,9 @@ export default function PatientReports() {
           <p className="text-muted-foreground">Your clinical documentation and health records</p>
         </div>
 
-        {reportId && (
-          <div className="bg-card rounded-2xl p-5 border border-border space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-semibold">Report Detail</h2>
-                <p className="text-sm text-muted-foreground">Report ID: {reportId}</p>
-              </div>
-              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => navigate("/patient/reports")}>
-                Back to Reports
-              </Button>
-            </div>
-
-            {!isLoading && !selectedReport && (
-              <p className="text-sm text-destructive">Report not found for this route parameter.</p>
-            )}
-
-            {selectedReport && (
-              <>
-                {(() => {
-                  const reportData = asRecord(selectedReport.report_json) || {};
-                  const clinicalReport = asRecord(reportData.clinical_report);
-                  const clinicalPatient = asRecord(clinicalReport.patient);
-                  const clinicalComplaints = asRecord(clinicalReport.presenting_complaints);
-                  const legacyPatient = asRecord(reportData.patient);
-                  const patient = Object.keys(legacyPatient).length > 0 ? legacyPatient : clinicalPatient;
-                  const urgencyKey = asText(reportData.urgency).toLowerCase();
-                  const urgency = urgencyConfig[urgencyKey] || null;
-                  const summary = getReportSummary(selectedReport);
-                  const recommendedAction = getReportRecommendedAction(selectedReport);
-                  const reportType = asText(selectedReport.report_type) || "medical_report";
-                  const symptoms = asStringArray(reportData.symptoms).length > 0
-                    ? asStringArray(reportData.symptoms)
-                    : asStringArray(clinicalComplaints.symptoms);
-                  const warningSigns = asStringArray(reportData.warning_signs);
-                  const followUpQuestions = asStringArray(reportData.follow_up_questions).length > 0
-                    ? asStringArray(reportData.follow_up_questions)
-                    : asStringArray(reportData.questions);
-                  const possibleConditions = Array.isArray(reportData.possible_conditions)
-                    ? reportData.possible_conditions
-                      .map((item) => asRecord(item))
-                      .filter((item) => Object.keys(item).length > 0)
-                      .map((item) => ({
-                        name: asText(item?.name) || "Unknown condition",
-                        likelihood: asText(item?.likelihood) || "unknown",
-                      }))
-                    : [];
-                  const labResults = normalizeLabResults(reportData);
-
-                  return (
-                    <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-border bg-muted/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Report type</p>
-                          <p className="mt-1 text-sm font-medium text-foreground">{toTitleCase(reportType)}</p>
-                        </div>
-                        <div className="rounded-xl border border-border bg-muted/20 p-4">
-                          <p className="text-xs uppercase tracking-wide text-muted-foreground">Generated on</p>
-                          <p className="mt-1 text-sm font-medium text-foreground">{formatDateTime(reportData.generatedAt || selectedReport.created_at)}</p>
-                        </div>
-                      </div>
-
-                      {urgency && (
-                        <div className={`rounded-xl border px-4 py-3 ${urgency.className}`}>
-                          <p className="text-xs uppercase tracking-wide">Urgency level</p>
-                          <p className="text-base font-semibold">{urgency.label}</p>
-                        </div>
-                      )}
-
-                      <div className="rounded-xl border border-border bg-card p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <h3 className="text-sm font-semibold text-foreground">Summary</h3>
-                            <p className="text-xs text-muted-foreground">Translated into {currentLanguage.nativeName} when available.</p>
-                          </div>
-                          {language !== "en" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => translateReportContent(summary, recommendedAction)}
-                              disabled={isTranslating}
-                            >
-                              {isTranslating ? "Translating..." : `Translate to ${currentLanguage.nativeName}`}
-                            </Button>
-                          )}
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedSummary ?? summary}</p>
-                      </div>
-
-                      {labResults.length > 0 && (
-                        <div className="rounded-xl border border-border bg-card p-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <h3 className="text-sm font-semibold text-foreground">Lab results</h3>
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                Each lab result shows the reference range, how the value compares, and a short explanation.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-4">
-                            {labResults.map((result) => (
-                              <div key={`${result.label}-${result.rawValue}`} className="rounded-2xl border border-border/80 bg-muted/50 p-4">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <p className="font-medium text-foreground">{result.label}</p>
-                                  <Badge variant="outline" className={`capitalize ${
-                                    result.status === "normal"
-                                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                                      : result.status === "low"
-                                      ? "border-orange-500/30 bg-orange-500/10 text-orange-700"
-                                      : result.status === "high"
-                                      ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
-                                      : result.status === "critical"
-                                      ? "border-red-500/30 bg-red-500/10 text-red-700"
-                                      : "border-slate-500/30 bg-slate-500/10 text-slate-700"
-                                  }`}>
-                                    {result.status}
-                                  </Badge>
-                                </div>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                  <div className="text-sm text-muted-foreground">
-                                    <span className="font-medium text-foreground">Value:</span> {result.rawValue}{result.units ? ` ${result.units}` : ""}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    <span className="font-medium text-foreground">Reference range:</span> {result.referenceRange ?? "Not provided"}
-                                  </div>
-                                </div>
-                                <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.explanation}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="rounded-xl border border-border bg-card p-4">
-                        <h3 className="text-sm font-semibold text-foreground">Recommended next step</h3>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedAction ?? recommendedAction}</p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-border bg-card p-4">
-                          <h3 className="text-sm font-semibold text-foreground">Patient details</h3>
-                          <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
-                            <div className="flex justify-between gap-3">
-                              <dt>Age</dt>
-                              <dd className="font-medium text-foreground">{asText(patient.age) || "Not provided"}</dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt>Sex</dt>
-                              <dd className="font-medium text-foreground">{toTitleCase(asText(patient.gender) || "not provided")}</dd>
-                            </div>
-                            {(asText(reportData.duration) || asText(clinicalComplaints.duration)) && (
-                              <div className="flex justify-between gap-3">
-                                <dt>Duration</dt>
-                                <dd className="font-medium text-foreground">{asText(reportData.duration) || asText(clinicalComplaints.duration)}</dd>
-                              </div>
-                            )}
-                          </dl>
-                        </div>
-                        <div className="rounded-xl border border-border bg-card p-4">
-                          <h3 className="text-sm font-semibold text-foreground">Reported symptoms</h3>
-                          {symptoms.length > 0 ? (
-                            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                              {symptoms.map((symptom) => (
-                                <li key={symptom}>• {symptom}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="mt-2 text-sm text-muted-foreground">No symptoms were listed.</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {possibleConditions.length > 0 && (
-                        <div className="rounded-xl border border-border bg-card p-4">
-                          <h3 className="text-sm font-semibold text-foreground">Possible causes to discuss with your clinician</h3>
-                          <div className="mt-3 space-y-2">
-                            {possibleConditions.map((condition) => (
-                              <div key={`${condition.name}-${condition.likelihood}`} className="flex items-center justify-between gap-3 rounded-lg border border-border/80 p-3">
-                                <p className="text-sm text-foreground">{condition.name}</p>
-                                <Badge variant="outline" className="capitalize">{condition.likelihood}</Badge>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {warningSigns.length > 0 && (
-                        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-                          <h3 className="text-sm font-semibold text-red-700">Warning signs to watch for</h3>
-                          <ul className="mt-2 space-y-1 text-sm text-red-700/90">
-                            {warningSigns.map((item) => (
-                              <li key={item}>• {item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {followUpQuestions.length > 0 && (
-                        <div className="rounded-xl border border-border bg-card p-4">
-                          <h3 className="text-sm font-semibold text-foreground">Questions to ask during your consultation</h3>
-                          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                            {followUpQuestions.map((question) => (
-                              <li key={question}>• {question}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      <details className="rounded-xl border border-border bg-muted/20 p-4">
-                        <summary className="cursor-pointer text-sm font-medium text-foreground">Show technical report data (JSON)</summary>
-                        <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-3 text-xs">
-                          {JSON.stringify(selectedReport.report_json ?? {}, null, 2)}
-                        </pre>
-                      </details>
-                    </div>
-                  );
-                })()}
-                <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-3 sm:flex sm:border-t-0 sm:pt-0">
-                  <Button size="sm" className={reportActionButtonClass} onClick={() => downloadReportJson(selectedReport)}>
-                    <Download className="w-4 h-4" /> Export JSON
-                  </Button>
-                  <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => downloadReportPdf(selectedReport)}>
-                    <Download className="w-4 h-4" /> Download PDF
-                  </Button>
-                  <Button size="sm" variant="outline" className={reportActionButtonClass} onClick={() => shareReport(selectedReport)}>
-                    <Share2 className="w-4 h-4" /> Share
-                  </Button>
-                </div>
-              </>
-            )}
+        {reportId && !isLoading && !selectedReport && (
+          <div className="bg-card rounded-2xl p-5 border border-border text-sm text-destructive">
+            Report not found for this route parameter.
           </div>
         )}
 
@@ -450,6 +435,7 @@ export default function PatientReports() {
               const title = getReportTitle(report);
               const doctor = (reportData?.doctor as string) || "Healthcare Provider";
               const status = (reportData?.status as string) || "approved";
+              const isOpenReport = report.id === reportId;
 
               return (
                 <div key={report.id} className="bg-card rounded-2xl p-4 shadow-food-card border border-border">
@@ -470,10 +456,10 @@ export default function PatientReports() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                       <Clock className="w-3 h-3" />
-                      {new Date(report.created_at).toLocaleDateString("en-GB", { 
-                        day: "numeric", 
-                        month: "short", 
-                        year: "numeric" 
+                      {new Date(report.created_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
                       })}
                       <span>•</span>
                       <span>{report.report_type}</span>
@@ -513,6 +499,21 @@ export default function PatientReports() {
                       </Button>
                     </div>
                   </div>
+
+                  {isOpenReport && (
+                    <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h2 className="font-semibold">Report Detail</h2>
+                          <p className="text-sm text-muted-foreground">Report ID: {report.id}</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => navigate("/patient/reports") }>
+                          Back to Reports
+                        </Button>
+                      </div>
+                      {renderReportDetail(report)}
+                    </div>
+                  )}
                 </div>
               );
             })}
