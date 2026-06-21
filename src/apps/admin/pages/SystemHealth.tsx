@@ -73,6 +73,60 @@ const STATUS_META: Record<DiagnosticStatus, { label: string; icon: LucideIcon; c
 
 type CheckOutcome = Pick<DiagnosticCheck, "status" | "detail">;
 
+function getInvokeErrorDetails(error: unknown) {
+  const fallback = { status: undefined as number | undefined, message: "Unknown invoke error" };
+  if (!error || typeof error !== "object") return fallback;
+
+  const candidate = error as { message?: unknown; context?: { status?: unknown } };
+  return {
+    status: typeof candidate.context?.status === "number" ? candidate.context.status : undefined,
+    message: typeof candidate.message === "string" && candidate.message.trim().length > 0
+      ? candidate.message
+      : fallback.message,
+  };
+}
+
+async function probeSystemHealthEndpoint() {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  if (!supabaseUrl || !publishableKey) {
+    return { ok: false as const, status: null as number | null, detail: "Supabase URL or publishable key is missing in runtime configuration." };
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  const headers = new Headers({
+    apikey: publishableKey,
+  });
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/system-health`, {
+      method: "OPTIONS",
+      headers,
+    });
+
+    if (response.status >= 200 && response.status < 400) {
+      return { ok: true as const, status: response.status, detail: "Edge Function endpoint is reachable via deployment probe (OPTIONS)." };
+    }
+    if (response.status === 401 || response.status === 403) {
+      return { ok: true as const, status: response.status, detail: "Edge Function is deployed but gateway-protected for this session." };
+    }
+    if (response.status === 404) {
+      return { ok: false as const, status: response.status, detail: "system-health endpoint returned 404 (function missing)." };
+    }
+    return { ok: false as const, status: response.status, detail: `Deployment probe returned HTTP ${response.status}.` };
+  } catch (error) {
+    return {
+      ok: false as const,
+      status: null,
+      detail: `Deployment probe failed: ${getDiagnosticErrorMessage(error)}`,
+    };
+  }
+}
+
 async function measuredCheck(
   check: Omit<DiagnosticCheck, "status" | "detail" | "latencyMs">,
   operation: () => Promise<CheckOutcome>,
@@ -122,9 +176,25 @@ async function checkRealtime(): Promise<CheckOutcome> {
 async function checkEdgeFunctions(): Promise<CheckOutcome> {
   const { data, error } = await supabase.functions.invoke("system-health", { body: {} });
   if (error) {
+    const invokeError = getInvokeErrorDetails(error);
+    const fallbackProbe = await probeSystemHealthEndpoint();
+
+    if (fallbackProbe.ok && (fallbackProbe.status === 200 || fallbackProbe.status === 204)) {
+      return {
+        status: "healthy",
+        detail: `${fallbackProbe.detail} Server-side diagnostics payload was unavailable in this client session (${invokeError.message}).`,
+      };
+    }
+    if (fallbackProbe.ok && (fallbackProbe.status === 401 || fallbackProbe.status === 403)) {
+      return {
+        status: "degraded",
+        detail: `${fallbackProbe.detail} Sign in with an admin account to run full server-side function diagnostics.`,
+      };
+    }
+
     return {
       status: "degraded",
-      detail: "The server-side deployment probe is not available yet. Deploy the system-health Edge Function, then run diagnostics again.",
+      detail: `Could not invoke the server-side function diagnostics (${invokeError.message}). ${fallbackProbe.detail}`,
     };
   }
 

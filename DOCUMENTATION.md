@@ -1,6 +1,6 @@
 # NeoSynapse — Project Documentation
 
-> **Last updated:** 18 June 2026  
+> **Last updated:** 21 June 2026  
 > This file is the single source of truth for the NeoSynapse platform. Update it whenever features, workflows, stack decisions, or database schemas change.
 
 ---
@@ -673,6 +673,7 @@ Notification feed; real-time via Supabase Realtime subscriptions.
 - Read-only operational diagnostics with an overall health score and per-check latency.
 - Checks the authenticated admin session, database/RLS visibility, tenant settings, notification records, private medical-document storage access, Supabase Realtime, browser connectivity, and Capacitor/web runtime.
 - Uses the admin-only `system-health` Edge Function to verify sibling deployments server-side with `OPTIONS`, avoiding browser CORS limitations and without invoking Gemini, ElevenLabs, or consuming AI credits.
+- Mobile fallback: if `supabase.functions.invoke("system-health")` fails in a native shell session, the UI runs a direct `OPTIONS` deployment probe to avoid false "not deployed" alerts while still reporting server-side auth/payload limitations.
 - Available from both desktop and mobile admin navigation.
 
 ### 8.12 Settings (`/admin/settings`)
@@ -1406,6 +1407,7 @@ supabase db push --yes
 
 | Date | Change | Files affected |
 |---|---|---|
+| 2026-06-21 | Fixed mobile-only false degraded status in Admin System Health by adding a direct deployment-probe fallback when `system-health` invoke fails and improving error detail messaging | `src/apps/admin/pages/SystemHealth.tsx`, `DOCUMENTATION.md` |
 | 2026-04-06 | Created `app_settings` table; built `appSettingsService`, `useAppSettings()`, `AppThemeSync` | `healthcare.ts`, `useHealthcare.ts`, `AppThemeSync.tsx`, migration |
 | 2026-04-06 | Fixed `UPDATE requires WHERE clause` — changed `update().limit(1)` to fetch-then-update-by-id | `healthcare.ts` (appSettingsService) |
 | 2026-04-06 | Made hero carousels theme-aware (CSS variable gradients) | `HeroCarousel.tsx`, `ProfessionalHeroCarousel.tsx` |
