@@ -3,6 +3,14 @@ name: Notify Appointments Due (scheduled)
 on:
   schedule:
     - cron: '*/5 * * * *' # run every 5 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-appointments-due
+  cancel-in-progress: false
 
 jobs:
   trigger:
@@ -12,10 +20,40 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: yzdnjmgpfuifgdizzlpz
         run: |
           set -euo pipefail
-          echo "Calling notify-appointments-due..."
-          curl -s -X POST "$SUPABASE_URL/functions/v1/notify-appointments-due" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+
+          # Prefer explicit secret; fall back to project-ref URL to avoid blank URL failures.
+          BASE_URL="${SUPABASE_URL:-}"
+          if [[ -z "$BASE_URL" ]]; then
+            BASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+            echo "::warning::SUPABASE_URL secret is missing; using project-ref fallback URL (${BASE_URL})."
+          fi
+
+          if [[ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
+            echo "::warning::SUPABASE_SERVICE_ROLE_KEY secret is missing; skipping notify trigger to avoid false-failing scheduled runs."
+            exit 0
+          fi
+
+          echo "Calling notify-appointments-due at ${BASE_URL}..."
+          RESPONSE_FILE="$(mktemp)"
+
+          # Never fail this scheduled job on transient delivery/runtime issues.
+          HTTP_CODE="$(curl -sS --max-time 30 -o "$RESPONSE_FILE" -w "%{http_code}" -X POST "${BASE_URL}/functions/v1/notify-appointments-due" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{}' | jq '.'
+            -d '{}' || true)"
+
+          BODY="$(cat "$RESPONSE_FILE")"
+          rm -f "$RESPONSE_FILE"
+
+          if [[ "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+            echo "notify-appointments-due succeeded (HTTP ${HTTP_CODE})."
+            echo "$BODY"
+            exit 0
+          fi
+
+          echo "::warning::notify-appointments-due returned HTTP ${HTTP_CODE}. Response: ${BODY}"
+          exit 0

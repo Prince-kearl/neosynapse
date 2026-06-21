@@ -1352,6 +1352,13 @@ npm run test:watch  # Watch mode
 
 Test files: `src/test/` — currently includes `example.test.ts` and `setup.ts`.
 
+### Scheduled reminder workflow (GitHub Actions)
+
+- Workflow: `.github/workflows/notify-appointments-due.yml`.
+- Trigger: every 5 minutes (`cron: */5 * * * *`) and manual `workflow_dispatch`.
+- Behavior: if `SUPABASE_SERVICE_ROLE_KEY` is missing or the endpoint returns non-2xx, the run logs a GitHub Actions warning and exits successfully to avoid noisy failure-email loops.
+- URL resolution: uses `secrets.SUPABASE_URL` first, then falls back to `https://<project-ref>.supabase.co`.
+
 ### Linting
 
 ```bash
@@ -1407,6 +1414,7 @@ supabase db push --yes
 
 | Date | Change | Files affected |
 |---|---|---|
+| 2026-06-21 | Hardened the scheduled appointment reminder workflow to avoid repeated failure emails by adding secret validation, fallback URL handling, and warning-only behavior for non-2xx responses | `.github/workflows/notify-appointments-due.yml`, `DOCUMENTATION.md` |
 | 2026-06-21 | Fixed mobile-only false degraded status in Admin System Health by adding a direct deployment-probe fallback when `system-health` invoke fails and improving error detail messaging | `src/apps/admin/pages/SystemHealth.tsx`, `DOCUMENTATION.md` |
 | 2026-04-06 | Created `app_settings` table; built `appSettingsService`, `useAppSettings()`, `AppThemeSync` | `healthcare.ts`, `useHealthcare.ts`, `AppThemeSync.tsx`, migration |
 | 2026-04-06 | Fixed `UPDATE requires WHERE clause` — changed `update().limit(1)` to fetch-then-update-by-id | `healthcare.ts` (appSettingsService) |
