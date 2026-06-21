@@ -1,8 +1,8 @@
-import { Mail, Plus, Send, RotateCw, XCircle, Loader2, AlertTriangle, CheckCircle2, Copy, MessageCircle } from "lucide-react";
+import { Mail, Plus, Send, XCircle, Loader2, AlertTriangle, CheckCircle2, Copy, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyStateCard } from "@/components/common/EmptyStateCard";
 import { useTouchedFields } from "@/shared/hooks/useTouchedFields";
-import { buildInvitationLink, buildWhatsAppShareUrl } from "@/shared/lib/invitations";
+import { buildInvitationLink, buildInvitationMailtoUrl, buildWhatsAppShareUrl } from "@/shared/lib/invitations";
 import { getEmailValidationError, normalizeEmail } from "@/shared/lib/inputValidation";
 
 type InvitationRow = {
@@ -28,14 +28,20 @@ type FacilityOption = {
   name: string;
 };
 
-type InvitationResponse = {
-  success: boolean;
-  email_sent: boolean;
-  email_error: string | null;
-  invite_link: string;
+type EmailDraft = {
+  recipient: string;
+  url: string;
 };
 
-const copyText = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
+const openMailtoLink = (url: string) => {
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_self";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
 
 const statusStyles: Record<string, string> = {
   pending: "border-yellow-500/50 text-yellow-500",
@@ -55,6 +61,8 @@ export default function AdminInvitations() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("professional");
   const [facilityId, setFacilityId] = useState<string>("");
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const pendingComposerWindow = useRef<Window | null>(null);
   const touched = useTouchedFields<"email">();
 
   const emailValue = normalizeEmail(email);
@@ -88,80 +96,71 @@ export default function AdminInvitations() {
 
   const createInvite = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("send-invitation", {
-        body: {
+      const normalizedRole = role as InvitationRow["role"];
+      const { data: existing, error: existingError } = await supabase
+        .from("invitations")
+        .select("*")
+        .eq("email", emailValue)
+        .eq("role", normalizedRole)
+        .in("status", ["pending", "sent"])
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+      if (existing) return { invitation: existing as InvitationRow, reused: true };
+
+      const { data, error } = await supabase
+        .from("invitations")
+        .insert({
           email: emailValue,
-          role,
+          role: normalizedRole,
           invited_by: user!.id,
           facility_id: facilityId || null,
-        },
-      });
+          status: "pending",
+        })
+        .select("*")
+        .single();
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      return data as InvitationResponse;
+      return { invitation: data as InvitationRow, reused: false };
     },
-    onSuccess: (data) => {
-      if (data.email_sent) {
-        toast({ title: "Invitation sent", description: `Invite email delivered to ${email}` });
+    onSuccess: ({ invitation, reused }) => {
+      const link = buildInvitationLink(window.location.origin, invitation.token);
+      const mailtoUrl = buildInvitationMailtoUrl(invitation.email, link, invitation.role);
+      const composerWindow = pendingComposerWindow.current;
+
+      setEmailDraft({ recipient: invitation.email, url: mailtoUrl });
+      if (composerWindow && !composerWindow.closed) {
+        composerWindow.location.href = mailtoUrl;
       } else {
-        toast({
-          title: "Invitation created (email not sent)",
-          description: data.email_error || "Email delivery is not configured. The invite link was copied for manual sharing.",
-          variant: "destructive",
-        });
-        if (data.invite_link) {
-          copyText(data.invite_link);
-        }
+        openMailtoLink(mailtoUrl);
       }
+      pendingComposerWindow.current = null;
+      toast({
+        title: reused ? "Existing invitation opened" : "Invitation created",
+        description: `If your mail app did not open, use the Open Email App button.`,
+      });
       resetForm();
       setShowForm(false);
       queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
     },
     onError: (e: any) => {
+      pendingComposerWindow.current?.close();
+      pendingComposerWindow.current = null;
       toast({ title: "Error creating invitation", description: e.message, variant: "destructive" });
     },
   });
 
-  const resendInvite = useMutation({
-    mutationFn: async (inv: InvitationRow) => {
-      const { data, error } = await supabase.functions.invoke("send-invitation", {
-        body: {
-          invitation_id: inv.id,
-          email: inv.email,
-          role: inv.role,
-          invited_by: user!.id,
-          facility_id: inv.facility_id,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      // Update the original invitation status if email was sent
-      if (data?.email_sent) {
-        await supabase.from("invitations").update({ status: "sent" }).eq("id", inv.id);
-      }
-      return data as InvitationResponse;
-    },
-    onSuccess: (data, inv) => {
-      if (data.email_sent) {
-        toast({ title: "Invitation resent", description: `Email delivered to ${inv.email}` });
-      } else {
-        if (data.invite_link) {
-          copyText(data.invite_link);
-        }
-        toast({
-          title: "Email not delivered",
-          description: data.email_error || "The invite link was copied for manual sharing.",
-          variant: "destructive",
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
-    },
-    onError: (e: any) => {
-      toast({ title: "Error resending", description: e.message, variant: "destructive" });
-    },
-  });
+  const createAndOpenEmail = () => {
+    pendingComposerWindow.current = window.open("about:blank", "neo-synapse-invitation-email");
+    if (pendingComposerWindow.current) {
+      pendingComposerWindow.current.document.title = "Preparing Neo Synapse invitation";
+      pendingComposerWindow.current.document.body.textContent = "Preparing invitation email...";
+    }
+    createInvite.mutate();
+  };
 
   const revokeInvite = useMutation({
     mutationFn: async (id: string) => {
@@ -184,6 +183,13 @@ export default function AdminInvitations() {
   const shareViaWhatsApp = (inv: InvitationRow) => {
     const link = buildInvitationLink(window.location.origin, inv.token);
     window.open(buildWhatsAppShareUrl(link, inv.role), "_blank", "noopener,noreferrer");
+  };
+
+  const shareViaEmail = (inv: InvitationRow) => {
+    const link = buildInvitationLink(window.location.origin, inv.token);
+    const mailtoUrl = buildInvitationMailtoUrl(inv.email, link, inv.role);
+    setEmailDraft({ recipient: inv.email, url: mailtoUrl });
+    openMailtoLink(mailtoUrl);
   };
 
   const actionable = invitations.filter((i) => i.status === "pending" || i.status === "sent");
@@ -209,6 +215,21 @@ export default function AdminInvitations() {
             <Plus className="w-4 h-4 mr-2" /> New Invitation
           </Button>
         </div>
+
+        {emailDraft && (
+          <div className="flex flex-col gap-3 border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold">Invitation email ready</p>
+              <p className="break-all text-sm text-muted-foreground">Recipient: {emailDraft.recipient}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button className="min-w-0 flex-1 sm:flex-none" onClick={() => openMailtoLink(emailDraft.url)}>
+                <Mail className="mr-2 h-4 w-4" /> Open Email App
+              </Button>
+              <Button variant="outline" onClick={() => setEmailDraft(null)}>Dismiss</Button>
+            </div>
+          </div>
+        )}
 
         {/* Create Form */}
         {showForm && (
@@ -245,8 +266,8 @@ export default function AdminInvitations() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={() => createInvite.mutate()} disabled={createInvite.isPending || !isInviteFormValid} className="h-12">
-                {createInvite.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" /> Send Invite</>}
+              <Button onClick={createAndOpenEmail} disabled={createInvite.isPending || !isInviteFormValid} className="h-12">
+                {createInvite.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4 mr-2" /> Create &amp; Email</>}
               </Button>
             </div>
           </div>
@@ -283,9 +304,7 @@ export default function AdminInvitations() {
                         </div>
                         <Badge variant="outline" className={`w-fit shrink-0 rounded-full px-3 py-1 text-xs capitalize ${statusClassName}`}>{inv.status}</Badge>
                       </div>
-                      {inv.status === "pending" && (
-                        <p className="mt-1 text-xs font-medium text-yellow-500">Email not delivered</p>
-                      )}
+                      {inv.status === "pending" && <p className="mt-1 text-xs font-medium text-yellow-500">Awaiting acceptance</p>}
                     </div>
                   </div>
 
@@ -302,14 +321,11 @@ export default function AdminInvitations() {
                       variant="ghost"
                       size="sm"
                       className={invitationActionButtonClass}
-                      onClick={() => resendInvite.mutate(inv)}
-                      disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
-                      title="Resend invitation email"
+                      onClick={() => shareViaEmail(inv)}
+                      title="Open invitation in your mail app"
                     >
-                      {resendInvite.isPending && resendInvite.variables?.id === inv.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <RotateCw className="w-4 h-4" />}
-                      Resend
+                      <Mail className="w-4 h-4" />
+                      Email
                     </Button>
                     <Button variant="ghost" size="sm" className={`${invitationActionButtonClass} text-destructive hover:text-destructive`} onClick={() => revokeInvite.mutate(inv.id)}>
                       <XCircle className="w-4 h-4" /> Revoke
@@ -343,31 +359,6 @@ export default function AdminInvitations() {
                       </div>
                     </div>
                   </div>
-                  {inv.status === "expired" && (
-                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 sm:mt-0 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:border-t-0 sm:pt-0">
-                      <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => copyInviteLink(inv.token)} title="Copy invite link">
-                        <Copy className="w-4 h-4" />
-                        Copy
-                      </Button>
-                      <Button variant="ghost" size="sm" className={invitationActionButtonClass} onClick={() => shareViaWhatsApp(inv)} title="Share expired invitation via WhatsApp">
-                        <MessageCircle className="w-4 h-4" />
-                        WhatsApp
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={invitationActionButtonClass}
-                        onClick={() => resendInvite.mutate(inv)}
-                        disabled={resendInvite.isPending && resendInvite.variables?.id === inv.id}
-                        title="Resend expired invitation"
-                      >
-                        {resendInvite.isPending && resendInvite.variables?.id === inv.id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : <RotateCw className="w-4 h-4" />}
-                        Resend
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

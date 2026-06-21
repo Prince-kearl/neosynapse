@@ -668,7 +668,14 @@ Notification feed; real-time via Supabase Realtime subscriptions.
 
 - Manage reusable notification message templates.
 
-### 8.11 Settings (`/admin/settings`)
+### 8.11 System Health (`/admin/system-health`)
+
+- Read-only operational diagnostics with an overall health score and per-check latency.
+- Checks the authenticated admin session, database/RLS visibility, tenant settings, notification records, private medical-document storage access, Supabase Realtime, browser connectivity, and Capacitor/web runtime.
+- Uses the admin-only `system-health` Edge Function to verify sibling deployments server-side with `OPTIONS`, avoiding browser CORS limitations and without invoking Gemini, ElevenLabs, or consuming AI credits.
+- Available from both desktop and mobile admin navigation.
+
+### 8.12 Settings (`/admin/settings`)
 
 **Appearance (tenant-wide, affects all users):**
 

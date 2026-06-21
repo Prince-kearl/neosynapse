@@ -42,6 +42,7 @@ export default function ProfessionalPatients() {
             {filteredPatients.map((patient) => (
               <div
                 key={patient.patient_id}
+                data-testid="patient-list-item"
                 className="bg-card rounded-2xl p-4 border border-border hover:border-primary/50 transition-colors cursor-pointer"
                 onClick={() => navigate(`/professional/patient/${patient.patient_id}`)}
               >

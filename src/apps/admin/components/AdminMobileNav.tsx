@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Users,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +32,7 @@ const moreItems = [
   { title: "Notifications", url: "/admin/notifications", icon: Bell },
   { title: "Msg Templates", url: "/admin/notification-templates", icon: BellDot },
   { title: "Audit Log", url: "/admin/audit", icon: ScrollText },
+  { title: "System Health", url: "/admin/system-health", icon: Activity },
   { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
 

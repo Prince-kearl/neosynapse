@@ -67,6 +67,7 @@ const AdminSettings = lazy(() => import("@/apps/admin/pages/Settings"));
 const AdminQuickActions = lazy(() => import("@/apps/admin/pages/QuickActions"));
 const AdminNotifications = lazy(() => import("@/apps/admin/pages/Notifications"));
 const AdminNotificationTemplates = lazy(() => import("@/apps/admin/pages/NotificationTemplates"));
+const AdminSystemHealth = lazy(() => import("@/apps/admin/pages/SystemHealth"));
 
 // Not Found
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -163,6 +164,7 @@ const App = () => (
                   <Route path="audit" element={<AdminAudit />} />
                   <Route path="notifications" element={<AdminNotifications />} />
                   <Route path="notification-templates" element={<AdminNotificationTemplates />} />
+                  <Route path="system-health" element={<AdminSystemHealth />} />
                   <Route path="settings" element={<AdminSettings />} />
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>

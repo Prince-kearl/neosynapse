@@ -48,6 +48,14 @@ For the mobile wrapper:
 npm run mobile:build
 ```
 
+Mobile Playwright journeys for the patient and professional portals:
+
+```sh
+npm run test:e2e:mobile
+```
+
+See [e2e/README.md](e2e/README.md) for the dedicated test-account environment variables.
+
 This builds the web app and syncs the output into the Android and iOS Capacitor projects.
 
 ## Supabase

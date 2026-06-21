@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, Mail, Building2, ShieldCheck, 
-  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, SlidersHorizontal, BellDot,
+  FileCode, ScrollText, Settings, ChevronLeft, ChevronRight, SlidersHorizontal, BellDot, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ const navItems = [
   { title: "Templates", url: "/admin/templates", icon: FileCode },
   { title: "Msg Templates", url: "/admin/notification-templates", icon: BellDot },
   { title: "Audit Log", url: "/admin/audit", icon: ScrollText },
+  { title: "System Health", url: "/admin/system-health", icon: Activity },
 ];
 
 export function AdminSidebar() {
@@ -38,7 +39,7 @@ export function AdminSidebar() {
           )}
         </div>
       </div>
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 space-y-2 overflow-y-auto p-4">
         {navItems.map((item) => (
           <NavLink key={item.title} to={item.url} className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group", isActive(item.url) ? "bg-sidebar-primary text-sidebar-primary-foreground glow-green" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}>
             <item.icon className={cn("w-5 h-5 flex-shrink-0 transition-transform duration-200", !isActive(item.url) && "group-hover:scale-110")} />
