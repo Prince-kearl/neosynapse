@@ -8,13 +8,26 @@ type BrandMarkProps = {
 export function BrandMark({ className, label = "Neo Synapse" }: BrandMarkProps) {
   return (
     <span
-      aria-label={label}
-      className={cn("block h-10 w-10 shrink-0 bg-current text-primary", className)}
+      className={cn("relative block h-10 w-10 shrink-0 overflow-hidden rounded-md", className)}
       role="img"
-      style={{
-        WebkitMask: "url('/favicon.ico') center / contain no-repeat",
-        mask: "url('/favicon.ico') center / contain no-repeat",
-      }}
-    />
+      aria-label={label}
+    >
+      <img
+        src="/favicon.ico"
+        alt={label}
+        className="h-full w-full object-contain"
+        loading="eager"
+        decoding="sync"
+        onError={(event) => {
+          const target = event.currentTarget;
+          target.style.display = "none";
+          const parent = target.parentElement;
+          if (parent) {
+            parent.classList.add("bg-primary/15", "border", "border-primary/30");
+            parent.setAttribute("aria-label", `${label} logo fallback`);
+          }
+        }}
+      />
+    </span>
   );
 }
