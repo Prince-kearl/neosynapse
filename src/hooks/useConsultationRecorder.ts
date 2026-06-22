@@ -40,10 +40,33 @@ export function useConsultationRecorder({
   const audioContextRef = useRef<AudioContext | null>(null);
   const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const sourceNodesRef = useRef<MediaStreamAudioSourceNode[]>([]);
+  const localStreamRef = useRef<MediaStream | null>(localStream);
+  const remoteStreamRef = useRef<MediaStream | null>(remoteStream);
+  const detachTrackListenersRef = useRef<(() => void)[]>([]);
   const startTimeRef = useRef<number | null>(null);
   const hasSavedRef = useRef(false);
 
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream;
+  }, [remoteStream]);
+
+  const clearTrackListeners = useCallback(() => {
+    detachTrackListenersRef.current.forEach((detach) => {
+      try {
+        detach();
+      } catch {
+        // Ignore listener cleanup errors.
+      }
+    });
+    detachTrackListenersRef.current = [];
+  }, []);
+
   const cleanupAudioGraph = useCallback(() => {
+    clearTrackListeners();
     sourceNodesRef.current.forEach((node) => {
       try {
         node.disconnect();
@@ -57,7 +80,7 @@ export function useConsultationRecorder({
       void audioContextRef.current.close();
       audioContextRef.current = null;
     }
-  }, []);
+  }, [clearTrackListeners]);
 
   const reset = useCallback(() => {
     recorderRef.current = null;
@@ -83,18 +106,36 @@ export function useConsultationRecorder({
 
     const waitForTracks = async () => {
       for (let attempt = 0; attempt < 20; attempt += 1) {
-        const localAudioTracks = localStream?.getAudioTracks().filter((track) => track.readyState === "live") || [];
-        const remoteAudioTracks = remoteStream?.getAudioTracks().filter((track) => track.readyState === "live") || [];
-        if (localAudioTracks.length + remoteAudioTracks.length > 0) {
-          return { localAudioTracks, remoteAudioTracks };
+        const currentLocalStream = localStreamRef.current;
+        const currentRemoteStream = remoteStreamRef.current;
+        const localAudioTracks = currentLocalStream?.getAudioTracks().filter((track) => track.readyState === "live") || [];
+        const remoteAudioTracks = currentRemoteStream?.getAudioTracks().filter((track) => track.readyState === "live") || [];
+        if (localAudioTracks.length + remoteAudioTracks.length > 0 || currentLocalStream || currentRemoteStream) {
+          return {
+            localAudioTracks,
+            remoteAudioTracks,
+            currentLocalStream,
+            currentRemoteStream,
+          };
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      return { localAudioTracks: [], remoteAudioTracks: [] };
+      return {
+        localAudioTracks: [],
+        remoteAudioTracks: [],
+        currentLocalStream: localStreamRef.current,
+        currentRemoteStream: remoteStreamRef.current,
+      };
     };
 
-    const { localAudioTracks, remoteAudioTracks } = await waitForTracks();
-    if (localAudioTracks.length + remoteAudioTracks.length === 0) {
+    const {
+      localAudioTracks,
+      remoteAudioTracks,
+      currentLocalStream,
+      currentRemoteStream,
+    } = await waitForTracks();
+
+    if (!currentLocalStream && !currentRemoteStream && localAudioTracks.length + remoteAudioTracks.length === 0) {
       setState("error");
       setErrorMessage("No consultation audio was available to record.");
       onError?.("No consultation audio was available to record.");
@@ -109,17 +150,42 @@ export function useConsultationRecorder({
       const destination = audioContext.createMediaStreamDestination();
       audioContextRef.current = audioContext;
       destinationRef.current = destination;
+      const connectedTrackIds = new Set<string>();
 
-      const connectStream = (stream: MediaStream | null, tracks: MediaStreamTrack[]) => {
-        if (!stream || tracks.length === 0) return;
-        const audioOnlyStream = new MediaStream(tracks);
+      const connectTrack = (track: MediaStreamTrack) => {
+        if (track.kind !== "audio" || track.readyState !== "live") return;
+        if (connectedTrackIds.has(track.id)) return;
+
+        const audioOnlyStream = new MediaStream([track]);
         const source = audioContext.createMediaStreamSource(audioOnlyStream);
         source.connect(destination);
         sourceNodesRef.current.push(source);
+        connectedTrackIds.add(track.id);
+
+        const handleEnded = () => {
+          connectedTrackIds.delete(track.id);
+          track.removeEventListener("ended", handleEnded);
+        };
+
+        track.addEventListener("ended", handleEnded);
+        detachTrackListenersRef.current.push(() => track.removeEventListener("ended", handleEnded));
       };
 
-      connectStream(localStream, localAudioTracks);
-      connectStream(remoteStream, remoteAudioTracks);
+      const wireStream = (stream: MediaStream | null, tracks: MediaStreamTrack[]) => {
+        if (!stream) return;
+
+        tracks.forEach((track) => connectTrack(track));
+
+        const handleAddTrack = (event: MediaStreamTrackEvent) => {
+          connectTrack(event.track);
+        };
+
+        stream.addEventListener("addtrack", handleAddTrack as EventListener);
+        detachTrackListenersRef.current.push(() => stream.removeEventListener("addtrack", handleAddTrack as EventListener));
+      };
+
+      wireStream(currentLocalStream, localAudioTracks);
+      wireStream(currentRemoteStream, remoteAudioTracks);
 
       const mimeType = pickSupportedMimeType();
       const recorder = new MediaRecorder(destination.stream, mimeType ? { mimeType } : undefined);

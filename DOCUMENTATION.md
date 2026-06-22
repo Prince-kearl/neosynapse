@@ -1453,6 +1453,7 @@ supabase db push --yes
 | 2026-04-14 | Reduced Symptom Checker conversational heading/helper text sizes to improve readability and visual balance across screen sizes | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Reduced only the bold conversational prompt headings by about 30% to improve visual balance on mobile and small screens | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Enabled true multi-input symptom capture in Symptom Checker: users can add several typed symptoms (Enter/comma/semicolon), review them as chips, and combine them with pill selections | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
+| 2026-06-22 | Fixed professional telemedicine transcription reliability by capturing live-updated local/remote audio streams and dynamically attaching late audio tracks during recording startup | `src/hooks/useConsultationRecorder.ts`, `DOCUMENTATION.md` |
 | 2026-04-15 | Updated browser tab icon to use the app favicon from `public/favicon.ico` by adding an explicit favicon link in the HTML head | `index.html`, `DOCUMENTATION.md` |
 | 2026-04-15 | Clarified favicon setup with explicit standard + shortcut icon tags so browsers consistently load `public/favicon.ico` | `index.html`, `DOCUMENTATION.md` |
 | 2026-04-15 | Added favicon cache-busting and Apple touch icon tags so browsers refresh and use `public/favicon.ico` consistently | `index.html`, `DOCUMENTATION.md` |
