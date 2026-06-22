@@ -1417,6 +1417,7 @@ supabase db push --yes
 
 | Date | Change | Files affected |
 |---|---|---|
+| 2026-06-23 | Fixed professional telemedicine transcript retrieval failure by adding fallback direct fetch in Transcripts page and ensuring query refetch before navigation; transcript now loads even if cache hasn't updated | `src/apps/professional/pages/Transcripts.tsx`, `src/apps/professional/pages/Telemedicine.tsx`, `DOCUMENTATION.md` |
 | 2026-06-22 | Fixed mobile app logo rendering by using `window.location.origin` prefix for favicon.ico path to ensure correct resolution in Capacitor file:// context | `src/components/BrandMark.tsx`, `DOCUMENTATION.md` |
 | 2026-06-22 | Fixed missing app logo in mobile WebView by replacing mask-based brand mark rendering with direct image rendering plus fallback behavior | `src/components/BrandMark.tsx`, `DOCUMENTATION.md` |
 | 2026-06-21 | Improved map proximity accuracy for places like Oyarifa by adding live Google Places nearby-hospital lookup around the selected center and natural-language search-term extraction for queries such as "closest hospital in <location>" | `src/legacy/components/NearbyHospitalsSection.tsx`, `src/shared/lib/hospitalProximity.ts`, `src/apps/patient/pages/Dashboard.tsx`, `src/legacy/components/MobileHeader.tsx`, `src/test/hospitalProximity.test.ts`, `DOCUMENTATION.md` |

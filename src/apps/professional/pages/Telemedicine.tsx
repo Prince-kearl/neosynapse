@@ -402,7 +402,10 @@ export default function ProfessionalTelemedicine() {
     remoteStream,
     onTranscriptSaved: (savedTranscriptId) => {
       setLastSavedTranscriptId(savedTranscriptId);
-      void queryClient.invalidateQueries({ queryKey: ["pro-transcripts", user?.id] });
+      // Refetch transcripts to ensure the new transcript is available when user navigates
+      void queryClient.refetchQueries({ queryKey: ["pro-transcripts", user?.id] }).catch(err => {
+        console.error("Failed to refetch transcripts after save:", err);
+      });
       toast({
         title: "Transcript saved",
         description: "The consultation transcript is ready for report and SOAP/SOP drafting.",

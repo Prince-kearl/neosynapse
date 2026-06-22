@@ -1,6 +1,6 @@
 import { ClipboardList, FileText, Loader2, Eye, Sparkles } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,8 @@ export default function ProfessionalTranscripts() {
   const { transcriptId } = useParams<{ transcriptId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: transcripts = [], isLoading } = useProfessionalTranscripts();
+  const [directFetchTranscript, setDirectFetchTranscript] = useState<any>(null);
+  const [directFetchLoading, setDirectFetchLoading] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const { data: ownAuditLogs = [] } = useQuery({
     queryKey: ["own-audit-logs", user?.id],
@@ -47,7 +49,31 @@ export default function ProfessionalTranscripts() {
 
   const patientIds = filteredTranscripts.map((t: any) => t.encounters?.patient_id).filter(Boolean);
   const { data: nameMap = {} } = useProfileNames(patientIds);
-  const selectedTranscript = transcriptId ? transcripts.find((t: any) => t.id === transcriptId) : null;
+  // Try to find transcript in main list first, then fallback to direct fetch
+  const selectedTranscript = transcriptId ? transcripts.find((t: any) => t.id === transcriptId) || directFetchTranscript : null;
+  
+  // Direct fetch fallback when transcript not found in main list
+  useEffect(() => {
+    if (!transcriptId || selectedTranscript || isLoading || directFetchLoading) return;
+    if (directFetchTranscript?.id === transcriptId) return; // Already attempted
+    
+    setDirectFetchLoading(true);
+    supabase
+      .from("transcripts")
+      .select("*, encounters!inner(id, professional_id, patient_id, encounter_type, created_at)")
+      .eq("id", transcriptId)
+      .eq("encounters.professional_id", user?.id || "")
+      .single()
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setDirectFetchTranscript(data);
+        } else {
+          console.error("Failed to fetch transcript directly:", error);
+        }
+        setDirectFetchLoading(false);
+      });
+  }, [transcriptId, selectedTranscript, isLoading, directFetchLoading, user?.id, directFetchTranscript?.id]);
+  
   const selectedTranscriptAuditTimeline = selectedTranscript
     ? ownAuditLogs.filter((log: any) =>
       (log.entity_type === "transcript" && log.entity_id === selectedTranscript.id) ||
@@ -275,8 +301,14 @@ export default function ProfessionalTranscripts() {
               </Button>
             </div>
 
-            {!isLoading && !selectedTranscript && (
+            {!isLoading && !directFetchLoading && !selectedTranscript && (
               <p className="text-sm text-destructive">Transcript not found for this route parameter.</p>
+            )}
+            
+            {directFetchLoading && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
             )}
 
             {selectedTranscript && (
