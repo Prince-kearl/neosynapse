@@ -1417,6 +1417,7 @@ supabase db push --yes
 
 | Date | Change | Files affected |
 |---|---|---|
+| 2026-06-22 | Fixed mobile app logo rendering by using `window.location.origin` prefix for favicon.ico path to ensure correct resolution in Capacitor file:// context | `src/components/BrandMark.tsx`, `DOCUMENTATION.md` |
 | 2026-06-22 | Fixed missing app logo in mobile WebView by replacing mask-based brand mark rendering with direct image rendering plus fallback behavior | `src/components/BrandMark.tsx`, `DOCUMENTATION.md` |
 | 2026-06-21 | Improved map proximity accuracy for places like Oyarifa by adding live Google Places nearby-hospital lookup around the selected center and natural-language search-term extraction for queries such as "closest hospital in <location>" | `src/legacy/components/NearbyHospitalsSection.tsx`, `src/shared/lib/hospitalProximity.ts`, `src/apps/patient/pages/Dashboard.tsx`, `src/legacy/components/MobileHeader.tsx`, `src/test/hospitalProximity.test.ts`, `DOCUMENTATION.md` |
 | 2026-06-21 | Improved location selector accuracy for typed searches by routing quick-list selections through coordinate resolution and preferring geocoded coordinates for location-name searches while preserving exact hospital-centre matching | `src/legacy/components/LocationSelector.tsx`, `src/apps/patient/pages/Dashboard.tsx`, `DOCUMENTATION.md` |
@@ -1447,6 +1448,8 @@ supabase db push --yes
 | 2026-04-14 | Refined Symptom Checker conversational UX to match app theme tokens, improved responsive text sizing across breakpoints, and fixed dynamic grammar in self/other question prompts | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Redesigned patient report detail view for readability: replaced raw JSON-first display with plain-language sections and moved JSON to a collapsible technical block | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Added Professional Reports patient-safe preview mode as a separate non-technical reader view alongside the JSON technical editor | `src/apps/professional/pages/Reports.tsx`, `DOCUMENTATION.md` |
+| 2026-06-22 | Aligned patient medical reports page styling with symptom checker design: added expandable condition details, assessment drivers section, prominent urgency banner with icon, and improved visual hierarchy with section icons and shadows | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
+| 2026-06-22 | Enhanced PDF report exports with professional table formatting: added blue header backgrounds, proper borders, alternating row colors, and improved typography styling for clinical documents | `src/apps/patient/pages/Reports.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Reduced Symptom Checker conversational heading/helper text sizes to improve readability and visual balance across screen sizes | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Reduced only the bold conversational prompt headings by about 30% to improve visual balance on mobile and small screens | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |
 | 2026-04-14 | Enabled true multi-input symptom capture in Symptom Checker: users can add several typed symptoms (Enter/comma/semicolon), review them as chips, and combine them with pill selections | `src/apps/patient/pages/SymptomChecker.tsx`, `DOCUMENTATION.md` |

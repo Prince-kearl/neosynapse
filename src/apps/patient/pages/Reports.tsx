@@ -1,4 +1,7 @@
-import { FileText, Download, Eye, Clock, Loader2, Share2 } from "lucide-react";
+import { 
+  FileText, Download, Eye, Clock, Loader2, Share2, AlertTriangle, CheckCircle,
+  Activity, Stethoscope, Heart, Shield, ChevronRight, Brain
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +95,50 @@ export default function PatientReports() {
     container.style.padding = "24px";
     container.style.maxWidth = "800px";
     container.style.margin = "0 auto";
+    container.style.fontFamily = "system-ui, -apple-system, sans-serif";
+    container.style.fontSize = "14px";
+    container.style.lineHeight = "1.5";
+
+    // Add table styling
+    const style = document.createElement("style");
+    style.textContent = `
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin: 16px 0 !important;
+      }
+      th {
+        background-color: #d1e7f5 !important;
+        border: 1px solid #94b3d9 !important;
+        padding: 10px !important;
+        text-align: left !important;
+        font-weight: 600 !important;
+        color: #001a4d !important;
+      }
+      td {
+        border: 1px solid #d4d4d8 !important;
+        padding: 10px !important;
+      }
+      tr:nth-child(even) {
+        background-color: #f8fafb !important;
+      }
+      h1 {
+        color: #0066cc !important;
+        border-bottom: 2px solid #0066cc !important;
+        padding-bottom: 8px !important;
+        margin-top: 20px !important;
+        margin-bottom: 12px !important;
+      }
+      h2 {
+        color: #0066cc !important;
+        margin-top: 16px !important;
+        margin-bottom: 10px !important;
+      }
+      p {
+        margin: 8px 0 !important;
+      }
+    `;
+    container.appendChild(style);
     document.body.appendChild(container);
 
     try {
@@ -189,15 +236,52 @@ export default function PatientReports() {
       ? reportData.possible_conditions
         .map((item) => asRecord(item))
         .filter((item) => Object.keys(item).length > 0)
-        .map((item) => ({
+        .map((item, index) => ({
+          index,
           name: asText(item?.name) || "Unknown condition",
           likelihood: asText(item?.likelihood) || "unknown",
+          definition: asText(item?.definition) || "",
+          reason: asText(item?.reason) || "",
+          first_aid: asText(item?.first_aid) || "",
+          treatments: asText(item?.treatments) || "",
+          sources: Array.isArray(item?.sources) ? item.sources : [],
+          confidence: typeof item?.confidence === "number" ? item.confidence : null,
         }))
       : [];
     const labResults = normalizeLabResults(reportData);
 
+    // Extract assessment drivers
+    const riskFactors = asStringArray(reportData.risk_factors || []);
+    const medicalHistoryImpact = asStringArray(reportData.medical_history_impact || []);
+    const medicationConsiderations = asStringArray(reportData.medication_considerations || []);
+    const hasAssessmentDrivers = riskFactors.length > 0 || medicalHistoryImpact.length > 0 || medicationConsiderations.length > 0;
+
+    // Urgency config with icons
+    const urgencyIconMap: Record<string, typeof AlertTriangle> = {
+      "non-urgent": CheckCircle,
+      "needs-attention": Activity,
+      "urgent": AlertTriangle,
+      "emergency": AlertTriangle,
+    };
+    const UrgencyIcon = urgencyIconMap[urgencyKey] || AlertTriangle;
+
     return (
-      <div className="mt-4 rounded-2xl border border-border bg-card p-4 space-y-4">
+      <div className="mt-4 space-y-6">
+        {/* Urgency Banner */}
+        {urgency && (
+          <div className={`rounded-2xl p-5 border ${urgency.className}`}>
+            <div className="flex items-center gap-3 mb-2">
+              <UrgencyIcon className="w-6 h-6" />
+              <span className="font-display text-lg font-bold">{urgency.label}</span>
+            </div>
+            <p className="text-sm opacity-90">{summary}</p>
+            <p className="text-xs text-muted-foreground mt-3">
+              This guidance is from your assessment report. Consult your healthcare provider for personalized medical advice.
+            </p>
+          </div>
+        )}
+
+        {/* Report Metadata */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border bg-muted/20 p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Report type</p>
@@ -209,19 +293,10 @@ export default function PatientReports() {
           </div>
         </div>
 
-        {urgency && (
-          <div className={`rounded-xl border px-4 py-3 ${urgency.className}`}>
-            <p className="text-xs uppercase tracking-wide">Urgency level</p>
-            <p className="text-base font-semibold">{urgency.label}</p>
-          </div>
-        )}
-
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Summary</h3>
-              <p className="text-xs text-muted-foreground">Translated into {currentLanguage.nativeName} when available.</p>
-            </div>
+        {/* Summary Section */}
+        <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="font-display font-semibold">Summary</h3>
             {language !== "en" && (
               <Button
                 variant="outline"
@@ -233,20 +308,156 @@ export default function PatientReports() {
               </Button>
             )}
           </div>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedSummary ?? summary}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{translatedSummary ?? summary}</p>
         </div>
 
-        {labResults.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Lab results</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Each lab result shows the reference range, how the value compares, and a short explanation.
-                </p>
-              </div>
+        {/* Assessment Drivers */}
+        {hasAssessmentDrivers && (
+          <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+            <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              Assessment drivers
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {riskFactors.length > 0 && (
+                <div className="rounded-xl border border-border/70 bg-background p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Risk Factors</p>
+                  <ul className="space-y-1.5">
+                    {riskFactors.slice(0, 5).map((item, index) => (
+                      <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                        <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {medicalHistoryImpact.length > 0 && (
+                <div className="rounded-xl border border-primary/15 bg-primary/5 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">Medical History Impact</p>
+                  <ul className="space-y-1.5">
+                    {medicalHistoryImpact.slice(0, 4).map((item, index) => (
+                      <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {medicationConsiderations.length > 0 && (
+                <div className="rounded-xl border border-border/70 bg-background p-3 sm:col-span-2">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Medication Review</p>
+                  <ul className="grid gap-1.5 sm:grid-cols-2">
+                    {medicationConsiderations.slice(0, 4).map((item, index) => (
+                      <li key={index} className="flex gap-2 text-sm text-muted-foreground">
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-            <div className="mt-4 space-y-4">
+          </div>
+        )}
+
+        {/* Possible Conditions */}
+        {possibleConditions.length > 0 && (
+          <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+            <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+              <Stethoscope className="w-5 h-5 text-primary" />
+              Possible causes to discuss with your clinician
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              These are possible explanations based on your reported symptoms. Consult your healthcare provider for confirmation.
+            </p>
+            <div className="space-y-3">
+              {possibleConditions.map((condition) => (
+                <details key={`${condition.name}-${condition.index}`} className="group rounded-2xl border border-border/60 bg-background p-4 shadow-sm">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {condition.index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold leading-5">{condition.name}</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {condition.reason || condition.definition}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <Badge 
+                        variant="outline" 
+                        className={
+                          condition.likelihood === "high" 
+                            ? "border-orange-500/50 text-orange-500" 
+                            : condition.likelihood === "medium" 
+                            ? "border-yellow-500/50 text-yellow-500" 
+                            : "border-muted-foreground/50 text-muted-foreground"
+                        }
+                      >
+                        {condition.likelihood}
+                      </Badge>
+                      {condition.confidence && (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {Math.round(condition.confidence)}% confidence
+                        </span>
+                      )}
+                      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+                    </div>
+                  </summary>
+
+                  <div className="mt-4 space-y-3 border-t border-border pt-4">
+                    {condition.definition && (
+                      <div>
+                        <p className="text-sm leading-6 text-foreground">{condition.definition}</p>
+                      </div>
+                    )}
+                    {condition.reason && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this fits</p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{condition.reason}</p>
+                      </div>
+                    )}
+                    {condition.first_aid && (
+                      <div className="mt-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
+                        <p className="text-sm text-foreground">
+                          <span className="font-medium">First aid now:</span> {condition.first_aid}
+                        </p>
+                      </div>
+                    )}
+                    {condition.treatments && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Treatment context</p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{condition.treatments}</p>
+                      </div>
+                    )}
+                    {condition.sources.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Sources:</span> {condition.sources.slice(0, 3).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Lab Results */}
+        {labResults.length > 0 && (
+          <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+            <h3 className="font-display font-semibold mb-3">Lab Results</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Each lab result shows the reference range, how the value compares, and a short explanation.
+            </p>
+            <div className="space-y-3">
               {labResults.map((result) => (
                 <div key={`${result.label}-${result.rawValue}`} className="rounded-2xl border border-border/80 bg-muted/50 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -273,18 +484,58 @@ export default function PatientReports() {
                       <span className="font-medium text-foreground">Reference range:</span> {result.referenceRange ?? "Not provided"}
                     </div>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.explanation}</p>
+                  {result.explanation && (
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{result.explanation}</p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold text-foreground">Recommended next step</h3>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{translatedAction ?? recommendedAction}</p>
+        {/* Recommended Action */}
+        <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+          <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+            <Heart className="w-5 h-5 text-primary" />
+            Recommended next step
+          </h3>
+          <p className="text-sm leading-6 text-muted-foreground">{translatedAction ?? recommendedAction}</p>
         </div>
 
+        {/* Warning Signs */}
+        {warningSigns.length > 0 && (
+          <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+            <h3 className="font-display font-semibold mb-3 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-destructive" />
+              Warning signs to watch for
+            </h3>
+            <ul className="space-y-2">
+              {warningSigns.map((w, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Follow-up Questions */}
+        {followUpQuestions.length > 0 && (
+          <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-[0_6px_18px_rgba(15,23,42,0.06)] sm:p-5">
+            <h3 className="font-display font-semibold mb-3">Questions to ask during your consultation</h3>
+            <ul className="space-y-2">
+              {followUpQuestions.map((question, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <ChevronRight className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  {question}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Patient Details and Symptoms */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border bg-card p-4">
             <h3 className="text-sm font-semibold text-foreground">Patient details</h3>
@@ -319,49 +570,15 @@ export default function PatientReports() {
           </div>
         </div>
 
-        {possibleConditions.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Possible causes to discuss with your clinician</h3>
-            <div className="mt-3 space-y-2">
-              {possibleConditions.map((condition) => (
-                <div key={`${condition.name}-${condition.likelihood}`} className="flex items-center justify-between gap-3 rounded-lg border border-border/80 p-3">
-                  <p className="text-sm text-foreground">{condition.name}</p>
-                  <Badge variant="outline" className="capitalize">{condition.likelihood}</Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {warningSigns.length > 0 && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-            <h3 className="text-sm font-semibold text-red-700">Warning signs to watch for</h3>
-            <ul className="mt-2 space-y-1 text-sm text-red-700/90">
-              {warningSigns.map((item) => (
-                <li key={item}>• {item}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {followUpQuestions.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Questions to ask during your consultation</h3>
-            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-              {followUpQuestions.map((question) => (
-                <li key={question}>• {question}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
+        {/* Technical JSON Data */}
         <details className="rounded-xl border border-border bg-muted/20 p-4">
           <summary className="cursor-pointer text-sm font-medium text-foreground">Show technical report data (JSON)</summary>
           <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-background p-3 text-xs">
-            {JSON.stringify(reportData.report_json ?? {}, null, 2)}
+            {JSON.stringify(reportData, null, 2)}
           </pre>
         </details>
 
+        {/* Export Actions */}
         <div className="grid grid-cols-1 gap-2 border-t border-border pt-3 min-[420px]:grid-cols-3 sm:flex sm:border-t-0 sm:pt-0">
           <Button size="sm" className={reportActionButtonClass} onClick={() => downloadReportJson(report)}>
             <Download className="w-4 h-4" /> Export JSON
